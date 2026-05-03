@@ -1,10 +1,12 @@
-# Filters vs Folders
+# Folders vs Dialog Filters
 
-Telegram's UI refers to "folders" but the underlying MTProto API and our implementation use the term **dialog filters**.
+Telegram's UI calls them "folders" but the API and our implementation use the term **dialog filters** internally.
 
-## Why "filter" Instead of "folder"?
+## Why the distinction?
 
 In the Telegram UI, users create "folders" to organize their chats. However, these are actually **dialog filters** — smart lists defined by rules (flags) and/or explicit peer lists.
+
+**API note:** Our MCP API uses the parameter `folder` to match the Telegram UI terminology. Internally, this resolves to a dialog filter.
 
 ### Dialog Filters vs Physical Sidebar Folders
 
@@ -43,14 +45,14 @@ Filters can explicitly include or exclude specific chats by their peer (user, ch
 
 Since MTProto doesn't support custom filter IDs with `iter_dialogs`, we use two workarounds:
 
-### For Filters with `include_peers`
+### For Folders with `include_peers`
 
 1. Get the filter definition to retrieve the list of explicitly included peers
 2. Resolve each `InputPeer` to a real entity via `get_entity()`
 3. Use `GetPeerDialogsRequest` in chunks to get last activity dates
 4. Apply any additional flag-based filtering
 
-### For Flag-based Filters (no `include_peers`)
+### For Flag-based Folders (no `include_peers`)
 
 1. Iterate all dialogs via `iter_dialogs()` without a folder parameter
 2. For each dialog, check if it matches the filter's flags
@@ -58,4 +60,4 @@ Since MTProto doesn't support custom filter IDs with `iter_dialogs`, we use two 
 
 ## Date Filtering Limitation
 
-When a filter has `include_peers`, date parameters (`min_date`, `max_date`) are **ignored**. This is because `GetPeerDialogsRequest` does not return dialog date information — only the last message date per peer. Use flag-based filters when date filtering is needed.
+When a folder has `include_peers`, date parameters (`min_date`, `max_date`) are **ignored**. This is because `GetPeerDialogsRequest` does not return dialog date information — only the last message date per peer. Use flag-based folders when date filtering is needed.

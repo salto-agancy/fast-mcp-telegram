@@ -109,13 +109,13 @@ async def run_find_chats_date_filtering_test():
         hour=0, minute=0, second=0, microsecond=0
     )
     min_date_msk = start_today_msk.isoformat()
-    print("\n--- Test 5: find_chats with filter='Без каналов' and min_date (Moscow) ---")
+    print("\n--- Test 5: find_chats with folder='Без каналов' and min_date (Moscow) ---")
     print(
         f"Using min_date={min_date_msk} (start of current calendar day, Europe/Moscow; "
         f"calendar date {start_today_msk.date()})"
     )
     result = await find_chats_impl(
-        query=None, limit=20, filter="Без каналов", min_date=min_date_msk
+        query=None, limit=20, folder="Без каналов", min_date=min_date_msk
     )
     if "error" in result:
         print(f"ERROR: {result['error']}")

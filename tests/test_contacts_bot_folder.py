@@ -376,7 +376,7 @@ class TestFindChatsImplFilter:
                     {"id": 1, "title": "Work", "include_peers": [], "groups": True}
                 ]
 
-                result = await find_chats_impl(filter="Work")
+                result = await find_chats_impl(folder="Work")
 
                 assert "chats" in result
 
@@ -388,7 +388,7 @@ class TestFindChatsImplFilter:
         ) as mock_search:
             mock_search.return_value = [{"id": 1, "title": "Test"}]
 
-            result = await find_chats_impl(query="test", limit=10, filter=None)
+            result = await find_chats_impl(query="test", limit=10, folder=None)
 
             mock_search.assert_called_once()
             assert "chats" in result
@@ -419,7 +419,7 @@ class TestFindChatsImplFilter:
                     {"id": 1, "title": "Work", "include_peers": [], "groups": True}
                 ]
 
-                result = await find_chats_impl(filter="Work")
+                result = await find_chats_impl(folder="Work")
 
                 assert "chats" in result
 
@@ -442,7 +442,7 @@ class TestFindChatsImplFilter:
                     {"id": 2, "title": "Personal"},
                 ]
 
-                result = await find_chats_impl(filter="Unknown")
+                result = await find_chats_impl(folder="Unknown")
 
                 assert "error" in result
                 assert "Unknown" in result["error"]

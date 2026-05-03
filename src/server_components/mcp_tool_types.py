@@ -193,8 +193,10 @@ FilterParam = Annotated[
     str,
     Field(
         description=(
-            "Dialog filter name (case-insensitive exact match after normalization). "
-            "See Filters-vs-Folders.md for filter vs folder distinction."
+            "Telegram folder name (case-insensitive exact match after normalization). "
+            "In Telegram's UI these are called folders; internally they are \"dialog filters\" — "
+            "saved filter presets that group chats by custom criteria (pinned, unread, business, etc.). "
+            "See Filters-vs-Folders.md for the technical distinction."
         )
     ),
 ]

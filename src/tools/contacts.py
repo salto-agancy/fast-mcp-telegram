@@ -303,7 +303,7 @@ async def find_chats_impl(
     public: bool | None = None,
     min_date: str | None = None,
     max_date: str | None = None,
-    filter: str | None = None,
+    folder: str | None = None,
 ) -> dict[str, Any]:
     """
     High-level contacts search with support for comma-separated multi-term queries.
@@ -318,9 +318,10 @@ async def find_chats_impl(
         public: Optional filter for public discoverability
         min_date: Minimum last activity date filter (ISO format, e.g. "2024-01-01" or "2024-01-01T14:30:00")
         max_date: Maximum last activity date filter (ISO format, e.g. "2024-12-31" or "2024-12-31T23:59:59")
-        filter: Filter by dialog filter name (str). For include_peers folders, min_date/max_date
-                apply to last-activity from GetPeerDialogs; for flag-based folders, dialog last
-                activity uses dialog top-message date (early skip) or a history fallback when needed.
+        folder: Filter by Telegram folder name (str). Folders are called "dialog filters" internally.
+                For include_peers folders, min_date/max_date apply to last-activity from GetPeerDialogs;
+                for flag-based folders, dialog last activity uses dialog top-message date (early skip)
+                or a history fallback when needed.
 
     Returns:
         Dict with "chats" key containing list of matches, or standardized error dict
@@ -328,8 +329,8 @@ async def find_chats_impl(
     Raises:
         ValueError: For invalid parameter combinations (e.g., empty query without date/filter)
     """
-    has_date_or_filter = (
-        min_date is not None or max_date is not None or filter is not None
+    has_date_or_folder = (
+        min_date is not None or max_date is not None or folder is not None
     )
 
     params = {
@@ -339,11 +340,11 @@ async def find_chats_impl(
         "public": public,
         "min_date": min_date,
         "max_date": max_date,
-        "filter": filter,
+        "folder": folder,
     }
 
     # Validate: global search requires non-empty query
-    if not has_date_or_filter and (
+    if not has_date_or_folder and (
         not query or (isinstance(query, str) and not query.strip())
     ):
         return log_and_build_error(
@@ -351,12 +352,12 @@ async def find_chats_impl(
             error_message=(
                 "query parameter is required for global Telegram search. "
                 "Telegram's global search requires a non-empty search term (name, username, or phone). "
-                "To browse chats in a specific filter, use filter parameter. "
-                "To find chats active in a date range, use min_date/max_date filters. "
-                f"Received: query={query!r} with no date/filter."
+                "To browse chats in a specific folder, use folder parameter. "
+                "To find chats active in a date range, use min_date/max_date parameters. "
+                f"Received: query={query!r} with no date/folder."
             ),
             params=params,
-            exception=ValueError("Empty query not allowed without date/filter"),
+            exception=ValueError("Empty query not allowed without date/folder"),
         )
 
     # Validate limit
@@ -368,7 +369,7 @@ async def find_chats_impl(
             exception=ValueError(f"Invalid limit: {limit}"),
         )
 
-    if filter is not None:
+    if folder is not None:
         return await _find_chats_by_filter(
             query=query,
             limit=limit,
@@ -376,10 +377,10 @@ async def find_chats_impl(
             public=public,
             min_date=min_date,
             max_date=max_date,
-            filter_name=filter,
+            filter_name=folder,
         )
 
-    if has_date_or_filter:
+    if has_date_or_folder:
         return await _find_chats_by_dialogs(
             query=query,
             limit=limit,

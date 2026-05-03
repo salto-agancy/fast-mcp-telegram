@@ -251,11 +251,11 @@ def register_tools(mcp: FastMCP) -> None:
         public: PublicFilter = None,
         min_date: MinDate = None,
         max_date: MaxDate = None,
-        filter: FilterParam = None,
+        folder: FilterParam = None,
     ) -> dict[str, Any]:
-        """Find chats by query, filter, or activity dates (full doc URL in tool description)."""
+        """Find chats by query, folder, or activity dates (full doc URL in tool description)."""
         return await find_chats_impl(
-            query, limit, chat_type, public, min_date, max_date, filter
+            query, limit, chat_type, public, min_date, max_date, folder
         )
 
     @mcp.tool(
