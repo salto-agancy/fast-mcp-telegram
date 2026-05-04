@@ -1,4 +1,10 @@
 ## Current Work Focus
+**Completed**: README Features table audit + copy fixes (2026-05-04)
+
+- Verified all 18 feature rows against code; adjusted links (Multi-User → `#remote-setup-http-auth`, Dual Transport → `#overview` per user, MTProto Proxy → `#mtproto-proxy`, Bot Chat → Tools Reference `#uniform-entity-schema`), distinct emoji for Secure File Handling, and wording (no unsubstantiated “connection pooling”; “configurable logging” vs “structured”). Dual Transport description now mentions optional `http-no-auth`.
+
+---
+
 **Completed**: Todo list `completed_by` JSON safety (2026-04-14)
 
 - `MessageMediaToDo` stored raw Telethon `Peer` in `media.items[].completed_by`, breaking `pydantic_core.to_jsonable_python` and MCP `structuredContent` when `outputSchema` is set.
