@@ -46,8 +46,7 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 | :file_folder: **[Folder Filtering](docs/Tools-Reference.md#1-discovery)**                           | Filter chats by dialog folder (archived, custom folders) with integer ID or name matching                      |
 | :envelope: **[Advanced Messaging](docs/Tools-Reference.md#3-write)**                                | Send, edit, reply, post to forum topics, formatting, file attachments, and phone number messaging              |
 | :paperclip: **[Secure File Handling](docs/Tools-Reference.md#3-write)**                             | Rich media sharing with SSRF protection, size limits, album support, optional HTTP attachment streaming        |
-| :microphone: **[Voice Transcription](docs/Tools-Reference.md#4-advanced)**                          | Automatic speech-to-text for Premium accounts with parallel processing and polling                             |
-| :robot: **[Bot Chat Detection](docs/Tools-Reference.md#uniform-entity-schema)**                     | Bots identified with `type: "bot"` and filterable via `chat_type="bot"`                                        |
+| :microphone: **[Voice Transcription](docs/Tools-Reference.md#get_messages)**                       | Automatic speech-to-text for Premium accounts with parallel processing and polling                             |
 | :zap: **High Performance**                                                                          | Async operations, parallel queries, and memory-conscious batching                                              |
 | :shield: **Production Reliability**                                                                 | Auto-reconnect, configurable logging, comprehensive error handling                                               |
 
