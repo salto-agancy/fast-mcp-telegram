@@ -109,6 +109,31 @@ async def test_maybe_no_url_when_chat_id_none(http_no_auth_config):
 
 
 @pytest.mark.asyncio
+async def test_maybe_no_url_when_chat_id_empty_or_whitespace(http_no_auth_config):
+    http_no_auth_config.domain = "files.example.test"
+    set_config(http_no_auth_config)
+    msg = _message_with_document([])
+    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+        for chat_id in ("", "   ", "\t"):
+            media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
+            await mf._maybe_set_attachment_download_url(media, msg, chat_id)
+            assert "attachment_download_url" not in media
+    mint_m.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_maybe_no_url_when_chat_id_not_int_convertible(http_no_auth_config):
+    http_no_auth_config.domain = "files.example.test"
+    set_config(http_no_auth_config)
+    media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
+    msg = _message_with_document([])
+    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+        await mf._maybe_set_attachment_download_url(media, msg, "not-a-chat-id")
+    assert "attachment_download_url" not in media
+    mint_m.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_maybe_no_url_for_voice(http_no_auth_config):
     http_no_auth_config.domain = "files.example.test"
     set_config(http_no_auth_config)

@@ -549,3 +549,42 @@ class TestBuildMessageResultExcludeChat:
             )
 
         assert "chat" not in result, f"Expected no 'chat' field by default, got {result.keys()}"
+
+
+class TestBuildMessageResultServicePlaceholder:
+    """Service messages with Telethon MessageAction get a stable text placeholder."""
+
+    @pytest.mark.asyncio
+    async def test_build_message_result_uses_message_action_class_in_text(self):
+        from telethon.tl.types import MessageActionPinMessage
+
+        from src.utils.message_format import build_message_result
+
+        msg = Mock()
+        msg.id = 99
+        msg.text = None
+        msg.message = None
+        msg.caption = None
+        msg.date = datetime.now()
+        msg.media = None
+        msg.reply_to_msg_id = None
+        msg.reply_to = None
+        msg.action = MessageActionPinMessage()
+
+        entity = Mock()
+        entity.id = 456
+        entity.title = "Test Chat"
+        entity.username = "testchat"
+        entity.type = "chat"
+
+        client = AsyncMock()
+
+        with patch(
+            "src.utils.message_format.get_sender_info",
+            new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
+        ):
+            result = await build_message_result(
+                client, msg, entity, link=None, include_chat_entity=False
+            )
+
+        assert result["text"] == "[Service: PinMessage]"

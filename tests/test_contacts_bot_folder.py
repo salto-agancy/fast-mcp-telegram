@@ -5,12 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.tools.contacts import (
-    _normalize_filter_name,
-    _get_filter_by_name,
-    find_chats_impl,
-    search_dialogs_impl,
-)
+from src.tools.chat_discovery.dialog_filters import _get_filter_by_name
+from src.tools.chat_discovery.dialog_search import search_dialogs_impl
+from src.tools.chat_discovery.find_chats import find_chats_impl
+from src.utils.helpers import normalize_whitespace_lower
 from src.utils.entity import (
     _matches_chat_type,
     _matches_public_filter,
@@ -223,28 +221,32 @@ class TestGetDialogFilters:
         _FOLDER_LIST_CACHE.clear()
 
 
-class TestNormalizeFilterName:
-    """Tests for _normalize_filter_name helper."""
+class TestNormalizeWhitespaceLower:
+    """Tests for normalize_whitespace_lower helper (folder title matching)."""
 
     def test_trims_whitespace(self):
         """Should trim leading/trailing whitespace."""
-        assert _normalize_filter_name("  Work  ") == "work"
-        assert _normalize_filter_name("\tPersonal\t") == "personal"
+        assert normalize_whitespace_lower("  Work  ") == "work"
+        assert normalize_whitespace_lower("\tPersonal\t") == "personal"
 
     def test_collapse_internal_whitespace(self):
         """Should collapse internal whitespace to single spaces."""
-        assert _normalize_filter_name("Work  Chat") == "work chat"
-        assert _normalize_filter_name("Personal\tGroup") == "personal group"
+        assert normalize_whitespace_lower("Work  Chat") == "work chat"
+        assert normalize_whitespace_lower("Personal\tGroup") == "personal group"
 
     def test_lowercase_conversion(self):
         """Should convert to lowercase."""
-        assert _normalize_filter_name("WORK") == "work"
-        assert _normalize_filter_name("Personal") == "personal"
+        assert normalize_whitespace_lower("WORK") == "work"
+        assert normalize_whitespace_lower("Personal") == "personal"
 
     def test_combined_normalization(self):
         """Should combine all normalizations."""
-        assert _normalize_filter_name("  Work  Chat  ") == "work chat"
-        assert _normalize_filter_name("  PERSONAL ") == "personal"
+        assert normalize_whitespace_lower("  Work  Chat  ") == "work chat"
+        assert normalize_whitespace_lower("  PERSONAL ") == "personal"
+
+    def test_none_returns_empty_string(self):
+        """None input should return empty string."""
+        assert normalize_whitespace_lower(None) == ""
 
 
 class TestGetFilterByName:
@@ -256,7 +258,7 @@ class TestGetFilterByName:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.contacts.get_dialog_filters", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
         ) as mock_filters:
             mock_filters.return_value = [
                 {"id": 1, "title": "Work", "contacts": True},
@@ -272,7 +274,7 @@ class TestGetFilterByName:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.contacts.get_dialog_filters", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
         ) as mock_filters:
             mock_filters.return_value = [
                 {"id": 1, "title": "Work"},
@@ -291,7 +293,7 @@ class TestGetFilterByName:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.contacts.get_dialog_filters", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
         ) as mock_filters:
             mock_filters.return_value = [{"id": 1, "title": "Work"}]
 
@@ -307,7 +309,7 @@ class TestGetFilterByName:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.contacts.get_dialog_filters", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
         ) as mock_filters:
             mock_filters.return_value = [{"id": 1, "title": "Work"}]
 
@@ -336,7 +338,7 @@ class TestSearchDialogsImplFolder:
         mock_client.iter_dialogs = mock_iter_dialogs
 
         with patch(
-            "src.tools.contacts.get_connected_client", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
         ) as mock_get_client:
             mock_get_client.return_value = mock_client
 
@@ -365,12 +367,12 @@ class TestFindChatsImplFilter:
         mock_client.iter_dialogs = mock_iter_dialogs
 
         with patch(
-            "src.tools.contacts.get_connected_client", new_callable=AsyncMock
+            "src.tools.chat_discovery.find_chats.get_connected_client", new_callable=AsyncMock
         ) as mock_get_client:
             mock_get_client.return_value = mock_client
 
             with patch(
-                "src.tools.contacts.get_dialog_filters", new_callable=AsyncMock
+                "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
             ) as mock_filters:
                 mock_filters.return_value = [
                     {"id": 1, "title": "Work", "include_peers": [], "groups": True}
@@ -384,7 +386,7 @@ class TestFindChatsImplFilter:
     async def test_filter_param_none_uses_global_search(self):
         """When no filter (None), should use global search."""
         with patch(
-            "src.tools.contacts._search_contacts_as_list", new_callable=AsyncMock
+            "src.tools.chat_discovery.find_chats._search_contacts_as_list", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = [{"id": 1, "title": "Test"}]
 
@@ -408,12 +410,12 @@ class TestFindChatsImplFilter:
         mock_client.iter_dialogs = mock_iter_dialogs
 
         with patch(
-            "src.tools.contacts.get_connected_client", new_callable=AsyncMock
+            "src.tools.chat_discovery.find_chats.get_connected_client", new_callable=AsyncMock
         ) as mock_get_client:
             mock_get_client.return_value = mock_client
 
             with patch(
-                "src.tools.contacts.get_dialog_filters", new_callable=AsyncMock
+                "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
             ) as mock_filters:
                 mock_filters.return_value = [
                     {"id": 1, "title": "Work", "include_peers": [], "groups": True}
@@ -430,17 +432,25 @@ class TestFindChatsImplFilter:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.contacts.get_connected_client", new_callable=AsyncMock
+            "src.tools.chat_discovery.find_chats.get_connected_client", new_callable=AsyncMock
         ) as mock_get_client:
             mock_get_client.return_value = mock_client
 
-            with patch(
-                "src.tools.contacts.get_dialog_filters", new_callable=AsyncMock
-            ) as mock_filters:
+            with (
+                patch(
+                    "src.tools.chat_discovery.dialog_filters.get_dialog_filters",
+                    new_callable=AsyncMock,
+                ) as mock_filters,
+                patch(
+                    "src.tools.chat_discovery.find_chats.get_dialog_filters",
+                    new_callable=AsyncMock,
+                ) as mock_filters_fc,
+            ):
                 mock_filters.return_value = [
                     {"id": 1, "title": "Work"},
                     {"id": 2, "title": "Personal"},
                 ]
+                mock_filters_fc.return_value = mock_filters.return_value
 
                 result = await find_chats_impl(folder="Unknown")
 
@@ -448,7 +458,3 @@ class TestFindChatsImplFilter:
                 assert "Unknown" in result["error"]
                 assert "Work" in result["error"]
                 assert "Personal" in result["error"]
-
-    def test_none_returns_empty_string(self):
-        """None input should return empty string."""
-        assert _normalize_filter_name(None) == ""

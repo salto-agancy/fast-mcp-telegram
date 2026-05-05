@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from src.client.connection import get_connected_client
-from src.tools.contacts import find_chats_impl
+from src.tools.chat_discovery.find_chats import find_chats_impl
 
 MSK = ZoneInfo("Europe/Moscow")
 

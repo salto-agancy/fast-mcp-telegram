@@ -14,6 +14,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+# Repo root (`src/config` -> three parents) so .env loads when cwd is wrong (e.g. MCP stdio).
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 # DOMAIN values treated as unset: no public origin for MCP URLs or attachment links.
 _DOMAIN_PLACEHOLDER_VALUES: frozenset[str] = frozenset(
     {"your-domain.com", "your-server.com"}
@@ -67,11 +70,20 @@ class ServerConfig(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        # Load order: .env first, then .env.local overrides (same keys win from .env.local)
-        env_file=(".env", ".env.local"),
+        # Load order: .env first, then .env.local overrides (same keys win from .env.local).
+        # Repo-root files first (MCP stdio often has cwd=$HOME), then cwd `.env` / `.env.local` so
+        # local overrides still win (e.g. tests that chdir into tmp_path).
+        env_file=(
+            str(PROJECT_ROOT / ".env"),
+            str(PROJECT_ROOT / ".env.local"),
+            ".env",
+            ".env.local",
+        ),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        # Empty export API_ID= in the parent shell must not beat non-empty values from .env
+        env_ignore_empty=True,
         # Disable CLI parsing in test environments to avoid conflicts with pytest
         cli_parse_args=not _is_test_environment(),
         cli_kebab_case=True,

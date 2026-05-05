@@ -12,8 +12,8 @@ from telethon import errors as tg_errors
 from telethon.tl import functions
 
 from ..config.logging import format_diagnostic_info
-from ..config.server_config import get_config
-from ..config.settings import API_HASH, API_ID, SESSION_DIR
+from ..config.server_config import PROJECT_ROOT, get_config
+from ..config.settings import SESSION_DIR
 from ..utils.proxy import build_mtproto_client_args
 
 logger = logging.getLogger(__name__)
@@ -211,14 +211,34 @@ async def _evict_lru_if_session_cache_full() -> None:
 async def _build_telegram_client_for_token(
     session_path: Path, token: str
 ) -> TelegramClient:
-    api_id_int = int(API_ID)
+    _cfg = get_config()
+    raw_api = (_cfg.api_id or "").strip()
+    if not raw_api:
+        raise ValueError(
+            "Telegram API_ID is missing or empty. Set API_ID in .env at the project root "
+            f"({PROJECT_ROOT}) and restart the MCP server "
+            f"(process cwd was {Path.cwd()})."
+        )
+    try:
+        api_id_int = int(raw_api)
+    except ValueError as e:
+        raise ValueError(
+            f"Telegram API_ID must be a non-empty integer string; got {_cfg.api_id!r}."
+        ) from e
+    raw_hash = (_cfg.api_hash or "").strip()
+    if not raw_hash:
+        raise ValueError(
+            "Telegram API_HASH is missing or empty. Set API_HASH in .env at the project root "
+            f"({PROJECT_ROOT}) and restart the MCP server "
+            f"(process cwd was {Path.cwd()})."
+        )
     client_kwargs = {
         "session": session_path,
         "api_id": api_id_int,
-        "api_hash": API_HASH,
-        "entity_cache_limit": get_config().entity_cache_limit,
+        "api_hash": raw_hash,
+        "entity_cache_limit": _cfg.entity_cache_limit,
     }
-    client_kwargs |= build_mtproto_client_args(get_config().mtproto_proxy, logger.info)
+    client_kwargs |= build_mtproto_client_args(_cfg.mtproto_proxy, logger.info)
     client = TelegramClient(**client_kwargs)
     await _connect_client_and_verify_or_cleanup(client, token)
     return client

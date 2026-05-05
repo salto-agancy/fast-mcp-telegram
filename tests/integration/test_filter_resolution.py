@@ -6,7 +6,10 @@ Run with: uv run python3 tests/integration/test_filter_resolution.py
 import asyncio
 import sys
 from src.client.connection import get_connected_client
-from src.tools.contacts import _get_filter_by_name, _filter_matches_flags
+from src.tools.chat_discovery.dialog_filters import (
+    _filter_matches_flags,
+    _get_filter_by_name,
+)
 from src.utils.entity import build_entity_dict
 
 

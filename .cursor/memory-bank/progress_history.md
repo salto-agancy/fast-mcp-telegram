@@ -90,7 +90,7 @@
 - **Private Chat Protection**: Private chats (direct messages with users) are automatically excluded from public filtering - they always appear regardless of the `public` parameter value
 - **Core Filtering Logic**: Updated `_matches_public_filter()` in `entity.py` to return `True` for all private chats regardless of username presence
 - **Search Implementation**: Modified `search.py` to use boolean public filtering in all search generators and helper functions
-- **Contact Implementation**: Updated `contacts.py` to apply public filtering to contact searches while protecting private chats
+- **Contact Implementation**: Updated chat discovery / entity search to apply public filtering to contact searches while protecting private chats
 - **Tool Registration**: Added `public` parameter to both search tools with clear documentation and examples
 - **Documentation Updates**: Updated TypeScript signatures, examples, and descriptions to reflect boolean parameter and private chat protection
 - **Version Bump**: Incremented version from 0.8.4 to 0.9.0 to reflect the major architectural change

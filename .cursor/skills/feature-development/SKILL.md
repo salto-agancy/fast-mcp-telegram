@@ -175,7 +175,7 @@ Research -> Plan -> Spike -> Implement -> Test -> Clean Up -> Push
 ## Example: Adding Folder Filtering Feature
 
 ### Research
-- Explored contacts.py for existing dialog iteration
+- Explored `src/tools/chat_discovery/` for existing dialog iteration
 - Used Context7 to verify iter_dialogs folder parameter
 - Used WebSearch to find DialogFilter TL schema
 

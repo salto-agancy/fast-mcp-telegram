@@ -5,88 +5,84 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.tools.contacts import (
-    _dialog_in_date_range,
-    _find_chats_global,
-    _matches_dialog_query,
-    _parse_iso_date,
-    build_dialog_entity_dict,
-    find_chats_impl,
-)
+from src.tools.chat_discovery.date_helpers import _dialog_in_date_range
+from src.tools.chat_discovery.find_chats import _find_chats_global, find_chats_impl
+from src.utils.datetime_parse import parse_iso_datetime_utc
+from src.utils.entity import build_dialog_entity_dict, entity_matches_dialog_query
 from tests.conftest import MockChat, MockDialog, MockUser, make_user
 
 # ============== Helper Function Tests ==============
 
 
 class TestParseIsoDate:
-    """Tests for _parse_iso_date helper."""
+    """Tests for parse_iso_datetime_utc helper."""
 
     def test_valid_date(self):
-        result = _parse_iso_date("2024-01-15")
+        result = parse_iso_datetime_utc("2024-01-15")
         assert result is not None
         assert result.year == 2024
         assert result.month == 1
         assert result.day == 15
 
     def test_valid_date_with_time(self):
-        result = _parse_iso_date("2024-06-15T10:30:00")
+        result = parse_iso_datetime_utc("2024-06-15T10:30:00")
         assert result is not None
         assert result.hour == 10
         assert result.minute == 30
 
     def test_valid_date_with_z_suffix(self):
-        result = _parse_iso_date("2024-01-15T00:00:00Z")
+        result = parse_iso_datetime_utc("2024-01-15T00:00:00Z")
         assert result is not None
 
     def test_invalid_date_returns_none(self):
-        result = _parse_iso_date("not-a-date")
+        result = parse_iso_datetime_utc("not-a-date")
         assert result is None
 
     def test_none_returns_none(self):
-        result = _parse_iso_date(None)
+        result = parse_iso_datetime_utc(None)
         assert result is None
 
     def test_empty_string_returns_none(self):
-        result = _parse_iso_date("")
+        result = parse_iso_datetime_utc("")
         assert result is None
 
 
 class TestMatchesDialogQuery:
-    """Tests for _matches_dialog_query helper."""
+    """Tests for entity_matches_dialog_query helper."""
 
     def test_no_query_matches_all(self):
         user = MockUser(1, first_name="John", last_name="Doe")
-        assert _matches_dialog_query(user, "") is True
+        assert entity_matches_dialog_query(user, "") is True
 
     def test_query_matches_title(self):
         chat = MockChat(1, title="Project Alpha")
-        assert _matches_dialog_query(chat, "project") is True
-        assert _matches_dialog_query(chat, "alpha") is True
+        assert entity_matches_dialog_query(chat, "project") is True
+        assert entity_matches_dialog_query(chat, "alpha") is True
 
     def test_query_matches_username(self):
         chat = MockChat(1, title="Chat", username="project_chat")
-        assert _matches_dialog_query(chat, "project") is True
+        assert entity_matches_dialog_query(chat, "project") is True
 
     def test_query_matches_first_name(self):
         user = MockUser(1, first_name="John", last_name="Doe")
-        assert _matches_dialog_query(user, "john") is True
+        assert entity_matches_dialog_query(user, "john") is True
 
     def test_query_matches_last_name(self):
         user = MockUser(1, first_name="John", last_name="Doe")
-        assert _matches_dialog_query(user, "doe") is True
+        assert entity_matches_dialog_query(user, "doe") is True
 
     def test_query_matches_phone(self):
         user = MockUser(1, phone="+1234567890")
-        assert _matches_dialog_query(user, "+123") is True
+        assert entity_matches_dialog_query(user, "+123") is True
 
     def test_query_case_insensitive(self):
         chat = MockChat(1, title="Project Alpha")
-        assert _matches_dialog_query(chat, "project") is True
-        assert _matches_dialog_query(chat, "alpha") is True
+        assert entity_matches_dialog_query(chat, "project") is True
+        assert entity_matches_dialog_query(chat, "alpha") is True
 
     def test_query_no_match(self):
         chat = MockChat(1, title="Project Alpha")
-        assert _matches_dialog_query(chat, "xyz") is False
+        assert entity_matches_dialog_query(chat, "xyz") is False
 
     def test_query_combined_fields(self):
         """Test that query matches across all fields."""
@@ -97,9 +93,9 @@ class TestMatchesDialogQuery:
             username="johndoe",
             phone="+1234567890",
         )
-        assert _matches_dialog_query(user, "doe") is True
-        assert _matches_dialog_query(user, "johndoe") is True
-        assert _matches_dialog_query(user, "+123") is True
+        assert entity_matches_dialog_query(user, "doe") is True
+        assert entity_matches_dialog_query(user, "johndoe") is True
+        assert entity_matches_dialog_query(user, "+123") is True
 
 
 class TestDialogInDateRange:
@@ -169,7 +165,7 @@ class TestDialogInDateRange:
         dialog = MockDialog(MockUser(1), date=None)
 
         with patch(
-            "src.tools.contacts._get_last_message_date", new_callable=AsyncMock
+            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
         ) as mock_fallback:
             mock_fallback.return_value = "2024-06-15T00:00:00+00:00"
 
@@ -189,7 +185,7 @@ class TestDialogInDateRange:
         dialog = MockDialog(MockUser(1), date=None)
 
         with patch(
-            "src.tools.contacts._get_last_message_date", new_callable=AsyncMock
+            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
         ) as mock_fallback:
             mock_fallback.return_value = "2023-06-15T00:00:00+00:00"
 
@@ -209,7 +205,7 @@ class TestDialogInDateRange:
         dialog = MockDialog(MockUser(1), date=None)
 
         with patch(
-            "src.tools.contacts._get_last_message_date", new_callable=AsyncMock
+            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
         ) as mock_fallback:
             mock_fallback.return_value = "2025-06-15T00:00:00+00:00"
 
@@ -219,6 +215,46 @@ class TestDialogInDateRange:
                 None,
                 min_date_dt=None,
                 max_date_dt=datetime(2024, 12, 31, tzinfo=UTC),
+            )
+
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_no_date_fallback_empty_excluded_with_bounds(self):
+        """When dialog has no date and history fetch returns nothing, exclude if bounds set."""
+        dialog = MockDialog(MockUser(1), date=None)
+
+        with patch(
+            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
+        ) as mock_fallback:
+            mock_fallback.return_value = None
+
+            result = await _dialog_in_date_range(
+                dialog.entity,
+                None,
+                None,
+                min_date_dt=datetime(2024, 1, 1, tzinfo=UTC),
+                max_date_dt=None,
+            )
+
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_no_date_with_fallback_unparseable_excluded_when_bounds_set(self):
+        """Truth-y fallback string that fails ISO parse excludes dialog when min/max bounds apply."""
+        dialog = MockDialog(MockUser(1), date=None)
+
+        with patch(
+            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
+        ) as mock_fallback:
+            mock_fallback.return_value = "not-parseable-as-iso"
+
+            result = await _dialog_in_date_range(
+                dialog.entity,
+                None,
+                None,
+                min_date_dt=datetime(2024, 1, 1, tzinfo=UTC),
+                max_date_dt=None,
             )
 
             assert result is False
@@ -261,7 +297,7 @@ class TestDialogInDateRange:
         """Test that naive dialog_date (like Telethon returns) works against aware bounds.
 
         This is a regression test for the bug where Telethon's iter_dialogs()
-        returns timezone-naive datetimes, but _parse_iso_date() returns timezone-aware
+        returns timezone-naive datetimes, but parse_iso_datetime_utc() returns timezone-aware
         datetimes. Comparing them raised TypeError.
         """
         naive_dialog_date = datetime(2024, 6, 15, 10, 30, 0)
@@ -355,11 +391,11 @@ class TestBuildDialogEntityDict:
 async def test_find_chats_global_single_term_passes_through():
     """_find_chats_global passes through to _search_contacts_as_list."""
     with patch(
-        "src.tools.contacts._search_contacts_as_list", new_callable=AsyncMock
+        "src.tools.chat_discovery.find_chats._search_contacts_as_list", new_callable=AsyncMock
     ) as mock_search:
         mock_search.return_value = [{"id": 1, "title": "Test"}]
 
-        from src.tools.contacts import _find_chats_global
+        from src.tools.chat_discovery.find_chats import _find_chats_global
 
         result = await _find_chats_global("test", 10, None, None)
 
@@ -382,11 +418,11 @@ async def test_search_dialogs_impl_respects_max_date():
     mock_client.iter_dialogs = mock_iter_dialogs
 
     with patch(
-        "src.tools.contacts.get_connected_client", new_callable=AsyncMock
+        "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
     ) as mock_get_client:
         mock_get_client.return_value = mock_client
 
-        from src.tools.contacts import search_dialogs_impl
+        from src.tools.chat_discovery.dialog_search import search_dialogs_impl
 
         results = []
         async for item in search_dialogs_impl(
@@ -425,11 +461,11 @@ async def test_search_dialogs_impl_respects_min_date():
     mock_client.iter_dialogs = mock_iter_dialogs
 
     with patch(
-        "src.tools.contacts.get_connected_client", new_callable=AsyncMock
+        "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
     ) as mock_get_client:
         mock_get_client.return_value = mock_client
 
-        from src.tools.contacts import search_dialogs_impl
+        from src.tools.chat_discovery.dialog_search import search_dialogs_impl
 
         results = []
         async for item in search_dialogs_impl(
@@ -446,7 +482,7 @@ async def test_search_dialogs_impl_respects_min_date():
 async def test_find_chats_impl_without_date_filters_uses_global():
     """When no date filters are provided, find_chats_impl should use _find_chats_global."""
     with patch(
-        "src.tools.contacts._search_contacts_as_list", new_callable=AsyncMock
+        "src.tools.chat_discovery.find_chats._search_contacts_as_list", new_callable=AsyncMock
     ) as mock_search:
         mock_search.return_value = [{"id": 1, "title": "Test"}]
 
@@ -471,7 +507,7 @@ async def test_find_chats_impl_with_date_filters_uses_dialog_search():
     mock_client.iter_dialogs = mock_iter_dialogs
 
     with patch(
-        "src.tools.contacts.get_connected_client", new_callable=AsyncMock
+        "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
     ) as mock_get_client:
         mock_get_client.return_value = mock_client
 
@@ -493,7 +529,7 @@ async def test_find_chats_impl_date_filter_no_results_returns_error():
     mock_client.iter_dialogs = mock_iter_dialogs
 
     with patch(
-        "src.tools.contacts.get_connected_client", new_callable=AsyncMock
+        "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
     ) as mock_get_client:
         mock_get_client.return_value = mock_client
 
@@ -541,7 +577,7 @@ async def test_find_chats_global_multi_term_merges_results():
         yield {"id": 3, "title": "Chat Gamma"}
 
     with patch(
-        "src.tools.contacts.search_contacts_native",
+        "src.tools.chat_discovery.find_chats.search_contacts_native",
         new=MagicMock(side_effect=[mock_gen_1(), mock_gen_2()]),
     ):
         result = await _find_chats_global("alpha,beta", 10, None, None)
@@ -557,10 +593,11 @@ async def test_find_chats_global_multi_term_no_results_returns_error():
     """Multi-term global search with no results should return structured error."""
 
     async def mock_gen_empty():
-        return
+        if False:
+            yield  # async generator that produces no items
 
     with patch(
-        "src.tools.contacts.search_contacts_native",
+        "src.tools.chat_discovery.find_chats.search_contacts_native",
         new=MagicMock(side_effect=[mock_gen_empty(), mock_gen_empty()]),
     ):
         result = await _find_chats_global("nonexistent1,nonexistent2", 10, None, None)
@@ -585,7 +622,7 @@ async def test_find_chats_by_include_peers_respects_min_date():
 
     from telethon.tl.types import InputPeerUser
 
-    from src.tools.contacts import _find_chats_by_include_peers
+    from src.tools.chat_discovery.include_peers import _find_chats_by_include_peers
 
     # Two users with different last_activity dates
     user_new = make_user(1, first_name="NewUser")
@@ -615,12 +652,7 @@ async def test_find_chats_by_include_peers_respects_min_date():
     mock_client.get_entity = mock_get_entity
 
     # Patch GetPeerDialogsRequest at the module level so it's recognized but not called
-    with (
-        patch("src.tools.contacts.GetPeerDialogsRequest", MagicMock()),
-        patch(
-            "src.tools.contacts.get_connected_client", AsyncMock(return_value=mock_client)
-        ),
-    ):
+    with patch("src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()):
         result = await _find_chats_by_include_peers(
             client=mock_client,
             filter_dict={
@@ -653,7 +685,7 @@ async def test_find_chats_by_include_peers_fallback_iter_messages_uses_per_peer_
 
     from telethon.tl.types import InputPeerUser
 
-    from src.tools.contacts import _find_chats_by_include_peers
+    from src.tools.chat_discovery.include_peers import _find_chats_by_include_peers
 
     user_a = make_user(1, first_name="A")
     user_b = make_user(2, first_name="B")
@@ -688,12 +720,7 @@ async def test_find_chats_by_include_peers_fallback_iter_messages_uses_per_peer_
     mock_client.get_entity = mock_get_entity
     mock_client.iter_messages = iter_messages
 
-    with (
-        patch("src.tools.contacts.GetPeerDialogsRequest", MagicMock()),
-        patch(
-            "src.tools.contacts.get_connected_client", AsyncMock(return_value=mock_client)
-        ),
-    ):
+    with patch("src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()):
         result = await _find_chats_by_include_peers(
             client=mock_client,
             filter_dict={
@@ -725,7 +752,7 @@ async def test_find_chats_get_peer_dialogs_mismatch_warns(caplog):
 
     from telethon.tl.types import InputPeerUser
 
-    from src.tools.contacts import _find_chats_by_include_peers
+    from src.tools.chat_discovery.include_peers import _find_chats_by_include_peers
 
     u = make_user(1, first_name="Solo")
     mock_result = MagicMock()
@@ -738,11 +765,8 @@ async def test_find_chats_get_peer_dialogs_mismatch_warns(caplog):
     mock_client.get_entity = AsyncMock(return_value=u)
 
     with (
-        caplog.at_level("WARNING", logger="src.tools.contacts"),
-        patch("src.tools.contacts.GetPeerDialogsRequest", MagicMock()),
-        patch(
-            "src.tools.contacts.get_connected_client", AsyncMock(return_value=mock_client)
-        ),
+        caplog.at_level("WARNING", logger="src.tools.chat_discovery.include_peers"),
+        patch("src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()),
     ):
         await _find_chats_by_include_peers(
             client=mock_client,
@@ -757,4 +781,7 @@ async def test_find_chats_get_peer_dialogs_mismatch_warns(caplog):
             min_date=None,
             max_date=None,
         )
-    assert any("GetPeerDialogs" in r.message and "len(dialogs)" in r.message for r in caplog.records)
+    assert any(
+        "GetPeerDialogs" in r.message and "len(dialogs)" in r.message
+        for r in caplog.records
+    )

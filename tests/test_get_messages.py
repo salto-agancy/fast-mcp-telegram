@@ -430,6 +430,29 @@ class TestGetMessagesDateFiltering:
     """Test min_date/max_date filtering for per-chat search."""
 
     @pytest.mark.asyncio
+    async def test_invalid_min_date_returns_error(self):
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hi",
+            min_date="not-iso",
+            limit=10,
+        )
+        assert "error" in result
+        assert result["operation"] == "get_messages"
+        assert "Invalid min_date format" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_invalid_max_date_returns_error(self):
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hi",
+            max_date="bogus",
+            limit=10,
+        )
+        assert "error" in result
+        assert "Invalid max_date format" in result["error"]
+
+    @pytest.mark.asyncio
     @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
     async def test_search_chat_respects_min_date(self, mock_get_entity, mock_get_client):
@@ -639,3 +662,56 @@ class TestGetMessagesDateFiltering:
         assert "messages" in result
         # Both messages should pass - None date is not filtered
         assert len(result["messages"]) == 2
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
+    async def test_browse_includes_service_message_in_date_window(
+        self, mock_get_entity, mock_get_client
+    ):
+        """Recent Telegram service messages count as dialog activity but had no exportable text."""
+        from tests.conftest import make_mock_message
+
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_get_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+
+        pin_action = MagicMock()
+        pin_action.__class__.__name__ = "MessageActionPinMessage"
+        service_msg = make_mock_message(
+            id=99,
+            text="",
+            date=datetime(2024, 6, 20, tzinfo=timezone.utc),
+            media=None,
+            action=pin_action,
+        )
+        service_msg.message = ""
+        service_msg.caption = None
+        service_msg.forward = None
+
+        old_msg = make_mock_message(
+            id=1, text="old", date=datetime(2020, 1, 1, tzinfo=timezone.utc)
+        )
+
+        async def mock_iter_messages_gen():
+            for msg in [service_msg, old_msg]:
+                yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter_messages_gen())
+        mock_get_client.return_value = mock_client
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query=None,
+            min_date="2024-06-01",
+            limit=10,
+        )
+
+        assert "messages" in result
+        assert len(result["messages"]) == 1
+        assert result["messages"][0]["id"] == 99
+        assert "[Service: PinMessage]" in (result["messages"][0].get("text") or "")

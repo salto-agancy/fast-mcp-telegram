@@ -3,6 +3,11 @@ from importlib import import_module
 from typing import Any
 
 
+def normalize_whitespace_lower(text: str | None) -> str:
+    """Trim, collapse internal whitespace to single spaces, and lowercase."""
+    return " ".join(text.split()).lower() if text else ""
+
+
 def _append_dedup_until_limit(
     collected: list[dict[str, Any]],
     seen_keys: set,

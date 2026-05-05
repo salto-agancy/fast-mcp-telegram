@@ -12,6 +12,7 @@ from telethon.tl.tlobject import TLObject
 from telethon.tl.types import InputMessagesFilterEmpty, PeerChannel, PeerChat, PeerUser
 
 from ..client.connection import get_connected_client
+from .chat_search_text import chat_searchable_text_lower
 
 logger = logging.getLogger(__name__)
 
@@ -484,6 +485,21 @@ def _matches_public_filter(entity, public: bool | None) -> bool:
     has_username = bool(getattr(entity, "username", None))
 
     return has_username if public else not has_username
+
+
+def entity_matches_dialog_query(entity, query_lower: str) -> bool:
+    """Substring match on a lowercased haystack; *query_lower* must already be lowercased."""
+    if not query_lower:
+        return True
+
+    haystack = chat_searchable_text_lower(
+        getattr(entity, "title", None),
+        getattr(entity, "username", None),
+        getattr(entity, "first_name", None),
+        getattr(entity, "last_name", None),
+        getattr(entity, "phone", None),
+    )
+    return query_lower in haystack
 
 
 async def _fetch_enrichment_fields(

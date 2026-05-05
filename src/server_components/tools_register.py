@@ -38,7 +38,8 @@ from src.server_components.mcp_tool_types import (
     ResolveEntities,
     TopicsLimit,
 )
-from src.tools.contacts import find_chats_impl, get_chat_info_impl
+from src.tools.chat_discovery.chat_info import get_chat_info_impl
+from src.tools.chat_discovery.find_chats import find_chats_impl
 from src.tools.messages import (
     edit_message_impl,
     send_message_impl,

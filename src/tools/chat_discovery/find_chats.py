@@ -1,0 +1,324 @@
+"""find_chats tool implementation: global search, dialogs, and folder filters."""
+
+from typing import Any
+
+from src.client.connection import get_connected_client
+from src.utils.datetime_parse import parse_iso_datetime_utc
+from src.utils.entity import get_dialog_filters
+from src.utils.error_handling import log_and_build_error
+
+from .constants import AVAILABLE_FILTERS_MAX_SHOW
+from .contact_search import _search_contacts_as_list, search_contacts_native
+from .dialog_filters import _get_filter_by_name
+from .dialog_search import search_dialogs_impl
+from .filter_flags import _find_chats_by_filter_flags
+from .include_peers import _find_chats_by_include_peers
+
+
+async def find_chats_impl(
+    query: str | None = None,
+    limit: int = 20,
+    chat_type: str | None = None,
+    public: bool | None = None,
+    min_date: str | None = None,
+    max_date: str | None = None,
+    folder: str | None = None,
+) -> dict[str, Any]:
+    """
+    High-level contacts search with support for comma-separated multi-term queries.
+
+    When min_date or max_date is provided, uses dialog-based search with last_activity_date.
+    Otherwise, uses global Telegram search (no last_activity_date).
+
+    Args:
+        query: Single term or comma-separated terms (optional for date-based searches)
+        limit: Maximum number of results to return
+        chat_type: Optional filter ("private"|"group"|"channel")
+        public: Optional filter for public discoverability
+        min_date: Minimum last activity date filter (ISO format, e.g. "2024-01-01" or "2024-01-01T14:30:00")
+        max_date: Maximum last activity date filter (ISO format, e.g. "2024-12-31" or "2024-12-31T23:59:59")
+        folder: Filter by Telegram folder name (str). Folders are called "dialog filters" internally.
+                For include_peers folders, min_date/max_date apply to last-activity from GetPeerDialogs;
+                for flag-based folders, dialog last activity uses dialog top-message date (early skip)
+                or a history fallback when needed.
+
+    Returns:
+        Dict with "chats" key containing list of matches, or standardized error dict
+
+    Raises:
+        ValueError: For invalid parameter combinations (e.g., empty query without date/filter)
+    """
+    has_date_or_folder = (
+        min_date is not None or max_date is not None or folder is not None
+    )
+
+    params = {
+        "query": query,
+        "limit": limit,
+        "chat_type": chat_type,
+        "public": public,
+        "min_date": min_date,
+        "max_date": max_date,
+        "folder": folder,
+    }
+
+    if not has_date_or_folder and (
+        not query or (isinstance(query, str) and not query.strip())
+    ):
+        return log_and_build_error(
+            operation="find_chats",
+            error_message=(
+                "query parameter is required for global Telegram search. "
+                "Telegram's global search requires a non-empty search term (name, username, or phone). "
+                "To browse chats in a specific folder, use folder parameter. "
+                "To find chats active in a date range, use min_date/max_date parameters. "
+                f"Received: query={query!r} with no date/folder."
+            ),
+            params=params,
+            exception=ValueError("Empty query not allowed without date/folder"),
+        )
+
+    if limit <= 0:
+        return log_and_build_error(
+            operation="find_chats",
+            error_message=f"limit must be positive, got {limit}",
+            params=params,
+            exception=ValueError(f"Invalid limit: {limit}"),
+        )
+
+    if folder is not None:
+        return await _find_chats_by_filter(
+            query=query,
+            limit=limit,
+            chat_type=chat_type,
+            public=public,
+            min_date=min_date,
+            max_date=max_date,
+            filter_name=folder,
+        )
+
+    if has_date_or_folder:
+        return await _find_chats_by_dialogs(
+            query=query,
+            limit=limit,
+            chat_type=chat_type,
+            public=public,
+            min_date=min_date,
+            max_date=max_date,
+            folder_id=None,
+        )
+
+    result = await _find_chats_global(
+        query=query,
+        limit=limit,
+        chat_type=chat_type,
+        public=public,
+    )
+    return {"chats": result} if isinstance(result, list) else result
+
+
+async def _find_chats_global(
+    query: str | None,
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    """Global Telegram search without date filtering."""
+    normalized_query = query or ""
+    terms = [t.strip() for t in normalized_query.split(",") if t.strip()]
+
+    if len(terms) <= 1:
+        result = await _search_contacts_as_list(
+            normalized_query, limit, chat_type, public
+        )
+        return {"chats": result} if isinstance(result, list) else result
+
+    try:
+        generators = [
+            search_contacts_native(term, limit, chat_type, public) for term in terms
+        ]
+
+        merged: list[dict[str, Any]] = []
+        seen_ids: set[Any] = set()
+        active_gens = list(enumerate(generators))
+
+        while active_gens and len(merged) < limit:
+            next_active = []
+
+            for i, gen in active_gens:
+                try:
+                    item = await gen.__anext__()
+                    entity_id = item.get("id") if isinstance(item, dict) else None
+                    if entity_id and entity_id not in seen_ids:
+                        seen_ids.add(entity_id)
+                        merged.append(item)
+                        if len(merged) >= limit:
+                            break
+                    next_active.append((i, gen))
+                except Exception:
+                    continue
+            active_gens = next_active
+
+        if not merged:
+            return log_and_build_error(
+                operation="search_contacts_multi",
+                error_message=f"No contacts found matching query '{query}'",
+                params={
+                    "query": query,
+                    "limit": limit,
+                    "chat_type": chat_type,
+                    "public": public,
+                },
+                exception=ValueError(f"No contacts found matching query '{query}'"),
+            )
+        return {"chats": merged[:limit]}
+    except Exception as e:
+        return log_and_build_error(
+            operation="search_contacts_multi",
+            error_message=f"Failed multi-term contact search: {e!s}",
+            params={
+                "query": query,
+                "limit": limit,
+                "chat_type": chat_type,
+                "public": public,
+            },
+            exception=e,
+        )
+
+
+async def _find_chats_by_dialogs(
+    query: str | None,
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+    min_date: str | None,
+    max_date: str | None,
+    folder_id: int | None = None,
+) -> dict[str, Any]:
+    """Dialog-based search with date filtering and last_activity_date."""
+    params = {
+        "query": query,
+        "limit": limit,
+        "chat_type": chat_type,
+        "public": public,
+        "min_date": min_date,
+        "max_date": max_date,
+        "folder_id": folder_id,
+    }
+
+    min_date_dt = parse_iso_datetime_utc(min_date)
+    if min_date is not None and min_date_dt is None:
+        return log_and_build_error(
+            operation="find_chats",
+            error_message=f"Invalid min_date format: '{min_date}'. Use ISO format (e.g., '2024-01-01')",
+            params=params,
+            exception=ValueError(f"Invalid min_date format: '{min_date}'"),
+        )
+
+    max_date_dt = parse_iso_datetime_utc(max_date)
+    if max_date is not None and max_date_dt is None:
+        return log_and_build_error(
+            operation="find_chats",
+            error_message=f"Invalid max_date format: '{max_date}'. Use ISO format (e.g., '2024-12-31')",
+            params=params,
+            exception=ValueError(f"Invalid max_date format: '{max_date}'"),
+        )
+
+    results = []
+    async for item in search_dialogs_impl(
+        query, limit, chat_type, public, min_date_dt, max_date_dt, folder_id
+    ):
+        results.append(item)
+
+    if results:
+        return {"chats": results}
+
+    date_desc = []
+    if min_date:
+        date_desc.append(f"since {min_date}")
+    if max_date:
+        date_desc.append(f"until {max_date}")
+    date_str = " and ".join(date_desc) if date_desc else "with date filter"
+    query_str = f"matching '{query}' " if query else ""
+
+    return log_and_build_error(
+        operation="find_chats",
+        error_message=f"No chats found {query_str}{date_str}",
+        params=params,
+        exception=ValueError(f"No chats found {query_str}{date_str}"),
+    )
+
+
+async def _find_chats_by_filter(
+    query: str | None,
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+    min_date: str | None,
+    max_date: str | None,
+    filter_name: str,
+) -> dict[str, Any]:
+    """Filter-based search using dialog filter definition."""
+    params = {
+        "query": query,
+        "limit": limit,
+        "chat_type": chat_type,
+        "public": public,
+        "min_date": min_date,
+        "max_date": max_date,
+        "filter": filter_name,
+    }
+
+    client = await get_connected_client()
+    filter_dict = await _get_filter_by_name(client, filter_name)
+
+    if not filter_dict:
+        all_filters = await get_dialog_filters(client)
+        available = "; ".join(
+            f'"{f.get("title", "")}"' for f in all_filters[:AVAILABLE_FILTERS_MAX_SHOW]
+        )
+        return log_and_build_error(
+            operation="find_chats",
+            error_message=f"Filter '{filter_name}' not found. Available: [{available}]",
+            params=params,
+            exception=ValueError(f"Filter '{filter_name}' not found"),
+        )
+
+    include_peers = filter_dict.get("include_peers", []) or []
+    has_flags = any(
+        filter_dict.get(flag)
+        for flag in (
+            "contacts",
+            "non_contacts",
+            "groups",
+            "broadcasts",
+            "bots",
+            "exclude_muted",
+            "exclude_read",
+            "exclude_archived",
+        )
+    )
+
+    if include_peers:
+        return await _find_chats_by_include_peers(
+            client,
+            filter_dict,
+            query,
+            limit,
+            chat_type,
+            public,
+            min_date,
+            max_date,
+        )
+    if has_flags:
+        return await _find_chats_by_filter_flags(
+            client,
+            filter_dict,
+            query,
+            limit,
+            chat_type,
+            public,
+            min_date,
+            max_date,
+        )
+    return {"chats": []}

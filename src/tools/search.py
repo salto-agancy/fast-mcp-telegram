@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum, auto
 from typing import Any
 
@@ -9,7 +9,7 @@ from telethon.tl.types import InputMessagesFilterEmpty, InputPeerEmpty
 from src.client.connection import get_connected_client
 from src.tools.links import generate_telegram_links
 from src.tools.messages import read_messages_by_ids
-from src.utils.discussion import get_post_discussion_info
+from src.utils.datetime_parse import parse_iso_datetime_utc
 from src.utils.entity import (
     _get_chat_message_count,
     _matches_chat_type,
@@ -21,6 +21,7 @@ from src.utils.error_handling import log_and_build_error, log_connection_error_r
 from src.utils.helpers import _append_dedup_until_limit
 from src.utils.message_format import (
     _has_any_media,
+    _service_action_placeholder_text,
     build_message_result,
     transcribe_voice_messages,
 )
@@ -102,7 +103,11 @@ async def _build_result_for_message(
     if not message:
         return None
 
-    has_content = (hasattr(message, "text") and message.text) or _has_any_media(message)
+    has_content = (
+        (hasattr(message, "text") and message.text)
+        or _has_any_media(message)
+        or (_service_action_placeholder_text(message) is not None)
+    )
     if not has_content:
         return None
 
@@ -369,14 +374,29 @@ async def _handle_search_mode(
             exception=ValueError("Search query must not be empty for global search"),
         )
 
-    min_datetime = (
-        datetime.fromisoformat(min_date).replace(tzinfo=timezone.utc)
-        if min_date else None
-    )
-    max_datetime = (
-        datetime.fromisoformat(max_date).replace(tzinfo=timezone.utc)
-        if max_date else None
-    )
+    min_datetime = parse_iso_datetime_utc(min_date) if min_date else None
+    if min_date and min_datetime is None:
+        return log_and_build_error(
+            operation="get_messages",
+            error_message=(
+                f"Invalid min_date format: '{min_date}'. "
+                "Use ISO format (e.g., '2024-01-01')"
+            ),
+            params=params,
+            exception=ValueError(f"Invalid min_date format: '{min_date}'"),
+        )
+
+    max_datetime = parse_iso_datetime_utc(max_date) if max_date else None
+    if max_date and max_datetime is None:
+        return log_and_build_error(
+            operation="get_messages",
+            error_message=(
+                f"Invalid max_date format: '{max_date}'. "
+                "Use ISO format (e.g., '2024-12-31')"
+            ),
+            params=params,
+            exception=ValueError(f"Invalid max_date format: '{max_date}'"),
+        )
 
     def _connection_error_or_build(
         exc: Exception, fallback_message: str
@@ -448,11 +468,26 @@ async def _handle_search_mode(
         )
 
         if not window:
+            q_nonempty = bool(query and query.strip())
+            if chat_id and not q_nonempty:
+                if min_date or max_date:
+                    err = (
+                        "No exportable messages found for the requested date range in this chat. "
+                        "If Telegram shows recent dialog activity, it may be service-only "
+                        "(e.g. pins, invites, title changes) now surfaced as [Service: …] rows."
+                    )
+                else:
+                    err = "No exportable messages found in this chat."
+            elif q_nonempty:
+                err = f"No messages found matching query '{query}'"
+            else:
+                err = "No messages found for the given filters."
+
             return log_and_build_error(
                 operation="get_messages",
-                error_message=f"No messages found matching query '{query}'",
+                error_message=err,
                 params=params,
-                exception=ValueError(f"No messages found matching query '{query}'"),
+                exception=ValueError(err),
             )
 
         response: dict[str, Any] = {"messages": window, "has_more": has_more}

@@ -21,6 +21,20 @@ from src.utils.entity import (
 
 logger = logging.getLogger(__name__)
 
+
+def _service_action_placeholder_text(message) -> str | None:
+    """Short English label for Telegram service messages (Message.action set)."""
+    action = getattr(message, "action", None)
+    if action is None:
+        return None
+    cls_name = action.__class__.__name__
+    prefix = "MessageAction"
+    if cls_name.startswith(prefix) and len(cls_name) > len(prefix):
+        tail = cls_name[len(prefix) :]
+        return f"[Service: {tail}]"
+    return f"[Service: {cls_name}]"
+
+
 _KNOWN_MEDIA_CLASSES = frozenset(
     {
         "MessageMediaPhoto",
@@ -80,6 +94,8 @@ async def _maybe_set_attachment_download_url(
     """Set media['attachment_download_url'] when HTTP mode and DOMAIN resolves to a public origin."""
     if chat_id is None:
         return
+    if isinstance(chat_id, str) and not chat_id.strip():
+        return
     cfg = get_config()
     if cfg.transport != "http" or not cfg.public_base_url_normalized:
         return
@@ -92,10 +108,21 @@ async def _maybe_set_attachment_download_url(
 
     filename = media_dict.get("filename")
     mime_type = media_dict.get("mime_type")
+    try:
+        cid = int(chat_id)
+        mid = int(message.id)
+    except (TypeError, ValueError) as _conv_err:
+        logger.warning(
+            "Skipping attachment URL: invalid chat_id=%r or message.id=%r (%s)",
+            chat_id,
+            getattr(message, "id", None),
+            _conv_err,
+        )
+        return
     tid = await mint_attachment_ticket(
         session_token,
-        int(chat_id),
-        int(message.id),
+        cid,
+        mid,
         filename=filename if isinstance(filename, str) else None,
         mime_type=mime_type if isinstance(mime_type, str) else None,
     )
@@ -487,6 +514,8 @@ async def build_message_result(
         or getattr(message, "message", None)
         or getattr(message, "caption", None)
     )
+    if not full_text:
+        full_text = _service_action_placeholder_text(message)
 
     result: dict[str, Any] = {
         "id": message.id,

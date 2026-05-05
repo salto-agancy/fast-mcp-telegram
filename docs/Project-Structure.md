@@ -35,7 +35,7 @@ fast-mcp-telegram/
 │   │       ├── code_form.html    # Verification code form
 │   │       └── config.html       # Configuration generation
 │   ├── tools/                    # MCP tool implementations
-│   │   ├── contacts.py           # Contact search and management
+│   │   ├── chat_discovery/       # Find chats, folders, global search, chat info
 │   │   ├── links.py              # Telegram link generation
 │   │   ├── messages/             # Message operations module
 │   │   │   ├── __init__.py
@@ -153,10 +153,10 @@ fast-mcp-telegram/
   - `reading.py`: Read and retrieve messages
   - `file_handling.py`: File upload and attachment handling
   - `phone.py`: Send messages to phone numbers
-- **`src/tools/contacts.py`**: Contact management
-  - Contact search and resolution
-  - User profile information
-  - Phone number messaging
+- **`src/tools/chat_discovery/`**: Chat discovery and metadata
+  - `find_chats` / folder filters / date-bounded dialog search
+  - Global Telegram entity search
+  - `get_chat_info` implementation (forum topics, enriched profiles)
 - **`src/tools/links.py`**: Link generation
   - Telegram link generation
   - Message link formatting

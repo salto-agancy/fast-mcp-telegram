@@ -1,0 +1,258 @@
+"""Folder filters with explicit include_peers and GetPeerDialogs batching."""
+
+import asyncio
+import logging
+import time
+from datetime import UTC
+from typing import Any
+
+from telethon.tl.functions.messages import GetPeerDialogsRequest
+
+from src.utils.entity import build_entity_dict
+
+from .constants import (
+    FLAG_MATCH_MAX_DIALOGS,
+    GET_ENTITY_CONCURRENCY,
+    GET_PEER_DIALOGS_CHUNK_SIZE,
+)
+from src.utils.datetime_parse import parse_iso_datetime_utc
+
+from .date_helpers import (
+    _dialog_in_date_range,
+    _last_activity_datetime_in_range,
+)
+from .dialog_filters import _filter_matches_flags
+from .views import ChatView, _match_chat_type, _match_public, _match_query
+
+logger = logging.getLogger(__name__)
+
+
+def _extract_peer_id(peer) -> int | None:
+    """Extract numeric peer ID from PeerUser/PeerChannel/PeerChat."""
+    if hasattr(peer, "user_id"):
+        return peer.user_id
+    if hasattr(peer, "channel_id"):
+        return peer.channel_id
+    return peer.chat_id if hasattr(peer, "chat_id") else None
+
+
+async def _find_chats_by_include_peers(
+    client,
+    filter_dict: dict,
+    query: str | None,
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+    min_date: str | None,
+    max_date: str | None,
+) -> dict[str, Any]:
+    """Handle filter with explicit include_peers using GetPeerDialogsRequest."""
+    include_peers = filter_dict.get("include_peers", []) or []
+    exclude_peers = filter_dict.get("exclude_peers", []) or []
+
+    ordered_peer_ids: list[int] = []
+    peer_entity_map: dict[int, dict] = {}
+    peer_objects: dict[int, Any] = {}
+    sem = asyncio.Semaphore(GET_ENTITY_CONCURRENCY)
+
+    async def _get_include(inp_peer) -> tuple[Any | None, dict | None]:
+        async with sem:
+            try:
+                ent = await client.get_entity(inp_peer)
+                eid = getattr(ent, "id", None)
+                if eid is None:
+                    return None, None
+                ed = build_entity_dict(ent)
+                return (ent, ed) if ed else (None, None)
+            except Exception as e:
+                logger.debug("Failed to resolve include_peer %s: %s", inp_peer, e)
+                return None, None
+
+    t_incl = time.monotonic()
+    include_results: list = []
+    if include_peers:
+        include_results = list(
+            await asyncio.gather(*(_get_include(p) for p in include_peers))
+        )
+    if include_peers and logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "find_chats include_peers get_entity: n=%d duration_s=%.3f",
+            len(include_peers),
+            time.monotonic() - t_incl,
+        )
+
+    for ent, ent_dict in include_results:
+        if not ent or not ent_dict:
+            continue
+        eid = getattr(ent, "id", None)
+        if eid is None or eid in ordered_peer_ids:
+            continue
+        ordered_peer_ids.append(eid)
+        peer_entity_map[eid] = ent_dict
+        peer_objects[eid] = ent
+
+    async def _get_exclude_id(inp_peer) -> int | None:
+        async with sem:
+            try:
+                e = await client.get_entity(inp_peer)
+                eid = getattr(e, "id", None)
+                return eid if isinstance(eid, int) else None
+            except Exception as e:
+                logger.debug("Failed to resolve exclude_peer %s: %s", inp_peer, e)
+                return None
+
+    if exclude_peers:
+        for eid in await asyncio.gather(*(_get_exclude_id(p) for p in exclude_peers)):
+            if eid and eid in ordered_peer_ids:
+                ordered_peer_ids.remove(eid)
+                peer_entity_map.pop(eid, None)
+                peer_objects.pop(eid, None)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("find_chats exclude_peers: n=%d", len(exclude_peers))
+
+    has_flags = any(
+        filter_dict.get(flag)
+        for flag in (
+            "contacts",
+            "non_contacts",
+            "groups",
+            "broadcasts",
+            "bots",
+            "exclude_muted",
+            "exclude_read",
+            "exclude_archived",
+        )
+    )
+    if has_flags:
+        async for dialog in client.iter_dialogs(
+            limit=min(limit * 10, FLAG_MATCH_MAX_DIALOGS),
+        ):
+            ent = getattr(dialog, "entity", None)
+            if not ent:
+                continue
+            eid = getattr(ent, "id", None)
+            if (
+                eid
+                and eid not in ordered_peer_ids
+                and _filter_matches_flags(ent, dialog, filter_dict)
+                and (entity_dict := build_entity_dict(ent))
+            ):
+                ordered_peer_ids.append(eid)
+                peer_entity_map[eid] = entity_dict
+                peer_objects[eid] = ent
+
+    if not ordered_peer_ids:
+        return {"chats": []}
+
+    last_activity_by_peer: dict[int, Any] = {}
+    for chunk_start in range(0, len(ordered_peer_ids), GET_PEER_DIALOGS_CHUNK_SIZE):
+        chunk_ids = ordered_peer_ids[
+            chunk_start : chunk_start + GET_PEER_DIALOGS_CHUNK_SIZE
+        ]
+
+        input_peers = []
+        for pid in chunk_ids:
+            ent = peer_entity_map.get(pid)
+            if not ent:
+                continue
+            ent_type = ent.get("type")
+            if ent_type == "channel":
+                from telethon.tl.types import InputPeerChannel
+
+                input_peers.append(
+                    InputPeerChannel(
+                        channel_id=pid, access_hash=ent.get("access_hash", 0) or 0
+                    )
+                )
+            elif ent_type == "group":
+                from telethon.tl.types import InputPeerChat
+
+                input_peers.append(InputPeerChat(chat_id=pid))
+            elif ent_type in ("private", "bot"):
+                from telethon.tl.types import InputPeerUser
+
+                input_peers.append(
+                    InputPeerUser(
+                        user_id=pid, access_hash=ent.get("access_hash", 0) or 0
+                    )
+                )
+
+        if not input_peers:
+            continue
+
+        try:
+            result = await client(GetPeerDialogsRequest(peers=input_peers))
+            dialogs = result.dialogs or []
+            messages = result.messages or []
+            n_d, n_m = len(dialogs), len(messages)
+            if n_d != n_m:
+                logger.warning(
+                    "GetPeerDialogs: len(dialogs)=%s != len(messages)=%s; pairing by min length",
+                    n_d,
+                    n_m,
+                )
+            n_pair = min(n_d, n_m)
+            for i in range(n_pair):
+                d = dialogs[i]
+                m = messages[i]
+                peer_id = _extract_peer_id(d.peer)
+                if not peer_id or m is None:
+                    continue
+                msg_date = getattr(m, "date", None)
+                if not msg_date:
+                    continue
+                act = msg_date
+                if act.tzinfo is None:
+                    act = act.replace(tzinfo=UTC)
+                last_activity_by_peer[peer_id] = act
+        except Exception as e:
+            logger.debug("GetPeerDialogsRequest failed: %s", e)
+
+    min_date_dt = parse_iso_datetime_utc(min_date) if min_date else None
+    max_date_dt = parse_iso_datetime_utc(max_date) if max_date else None
+
+    results = []
+    for pid in ordered_peer_ids:
+        ent_dict = peer_entity_map.get(pid)
+        if not ent_dict:
+            continue
+        ent = peer_objects.get(pid)
+        if ent is None:
+            continue
+
+        view = ChatView.from_entity(ent)
+
+        if not _match_chat_type(view, chat_type):
+            continue
+
+        if not _match_public(view, public):
+            continue
+
+        if min_date_dt is not None or max_date_dt is not None:
+            act_dt = last_activity_by_peer.get(pid)
+            if act_dt is not None:
+                if not _last_activity_datetime_in_range(
+                    act_dt, min_date_dt, max_date_dt
+                ):
+                    continue
+            else:
+                if not await _dialog_in_date_range(
+                    ent, client, None, min_date_dt, max_date_dt
+                ):
+                    continue
+
+        if query:
+            query_lower = query.lower().strip()
+            if query_lower and not _match_query(view, query_lower):
+                continue
+
+        result_dict = dict(ent_dict)
+        result_dict.pop("access_hash", None)
+        if pid in last_activity_by_peer:
+            result_dict["last_activity_date"] = last_activity_by_peer[pid].isoformat()
+
+        results.append(result_dict)
+        if len(results) >= limit:
+            break
+
+    return {"chats": results}
