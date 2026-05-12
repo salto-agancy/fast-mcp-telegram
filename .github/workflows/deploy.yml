@@ -9,6 +9,8 @@ on:
       - "Dockerfile"
       - "docker-compose.yml"
       - ".github/workflows/deploy.yml"
+      - "pyproject.toml"
+      - "uv.lock"
   workflow_dispatch:
 
 permissions:
