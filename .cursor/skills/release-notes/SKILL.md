@@ -117,10 +117,16 @@ This release <briefly describe the primary user-facing value proposition>.
   ```
 
 ### 8. Version Bump Process
-- **First**: Update version in `src/_version.py` (single source of truth)
-- **Then**: Commit, create tag, and push (no `v` prefix on tags):
+- **First**: Bump the project version with uv (writes `[project].version` in `pyproject.toml`):
   ```bash
-  git add src/_version.py && git commit -m "chore: bump version to <version>"
+  uv version <version>
+  # or e.g. `uv version --bump patch`
+  ```
+- **Then**: Refresh the lockfile if needed (`uv version` may have synced already; otherwise run `uv lock` or `uv sync`).
+- **`src/_version.py`**: Do not edit for releases — it resolves `__version__` from installed package metadata or from `pyproject.toml` when uninstalled.
+- **Then**: Commit version files, create tag, and push (no `v` prefix on tags):
+  ```bash
+  git add pyproject.toml uv.lock && git commit -m "chore: bump version to <version>"
   git tag <version>
   git push origin <branch> && git push origin <version>
   ```
@@ -132,7 +138,7 @@ This release <briefly describe the primary user-facing value proposition>.
 
 **Important**:
 - Release notes are for GitHub releases only - do NOT commit release notes files to git repository
-- Version is managed in `src/_version.py` with dynamic reading in `pyproject.toml` - only update `src/_version.py`
+- Version is **`[project].version` in `pyproject.toml`**, maintained with **`uv version`** (not manual edits to `src/_version.py`)
 - There are no release files in this repository. Do not add any `RELEASE_NOTES*` or similar files to git
 - Tags are plain semantic versions without a leading `v` (example: `0.3.0`)
 
