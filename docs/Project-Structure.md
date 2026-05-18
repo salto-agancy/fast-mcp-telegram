@@ -46,7 +46,16 @@ fast-mcp-telegram/
 │   │   │   ├── reading.py
 │   │   │   └── sending.py
 │   │   ├── mtproto.py            # Direct MTProto API access
-│   │   └── search.py             # Message search functionality
+│   │   └── search/               # get_messages (search, browse, IDs, replies)
+│   │       ├── __init__.py
+│   │       ├── core.py
+│   │       ├── types.py
+│   │       ├── results.py
+│   │       ├── replies.py
+│   │       ├── forum_replies.py
+│   │       ├── search_mode.py
+│   │       ├── search_generators.py
+│   │       └── topic_search.py
 │   ├── utils/                    # Utility functions
 │   │   ├── discussion.py         # Discussion group utilities
 │   │   ├── entity.py             # Entity resolution and formatting
@@ -142,10 +151,12 @@ fast-mcp-telegram/
   - Token validation utilities
 
 ### Tool Implementations
-- **`src/tools/search.py`**: Message search functionality
-  - Global and per-chat search
-  - Multi-query support with parallel execution
-  - Result deduplication and formatting
+- **`src/tools/search/`**: `get_messages` implementation
+  - `core.py`: mode dispatch and `search_messages_impl`
+  - `search_mode.py`: per-chat/global query and browse
+  - `replies.py` / `forum_replies.py`: reply_to_id and forum in-topic paths
+  - `topic_search.py`: shared SearchRequest builder for topic-scoped search
+  - `results.py`: message dict building for listed results
 - **`src/tools/messages/`**: Message operations module
   - `core.py`: Core message functionality
   - `sending.py`: Send messages with files and formatting

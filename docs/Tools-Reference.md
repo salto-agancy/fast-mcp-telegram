@@ -197,7 +197,8 @@ get_messages(
   chat_id: str,                  // Target chat ID (required)
   query?: str,                   // Search terms (optional)
   message_ids?: number[],        // Specific message IDs to retrieve
-  reply_to_id?: number,          // Get replies (post comments, forum topics, message replies)
+  reply_to_id?: number,          // Thread anchor: post id, forum topic_id, or message id
+  thread_scope?: "auto" | "full" | "direct" = "auto",  // Only with reply_to_id
   limit?: number = 50,           // Max results
   min_date?: string,             // ISO date filter (search/browse modes only)
   max_date?: string,             // ISO date filter (search/browse modes only)
@@ -213,12 +214,26 @@ get_messages(
 4. **Get replies**: `chat_id` + `reply_to_id` - Get replies to a message *(date filters not supported)*
 5. **Search replies**: `chat_id` + `reply_to_id` + `query` - Search within replies
 
+**`thread_scope` (with `reply_to_id` only):**
+
+| `reply_to_id` points to | `auto` | `full` | `direct` |
+|-------------------------|--------|--------|----------|
+| **Forum topic id** (`get_chat_info` `topic_id`) | Whole topic via GetReplies (nested chains) | Same as `auto` | Direct replies to topic root only |
+| **Message inside a forum topic** | Direct replies to that message | Nested replies in the **branch** under that message (BFS on search window) | Same as `auto` for in-topic |
+| **Channel post** (with discussion) | Full comment thread | Same as `auto` | Direct comments to post only |
+| **Supergroup thread** (non-forum) | Direct replies | Full thread via `SearchRequest(top_msg_id)` | Direct replies only |
+
+- **`auto`** (default): Best default for “what replied to this?” — full topic/comment thread when `reply_to_id` is a topic or post id; otherwise direct replies only.
+- **`full`**: Use on a **message id** when you need nested replies (e.g. replies-to-replies). For forum in-topic anchors this is **not** the entire topic — use the topic’s `topic_id` as `reply_to_id` for that.
+- **`direct`**: Never includes nested replies.
+
 **reply_to_id automatically handles:**
-- 📢 **Channel post comments** - Detects discussion group and fetches comments
-- 📋 **Forum topic messages** - Fetches messages from forum topic
-- 💬 **Message replies** - Fetches direct replies to any message
+- 📢 **Channel post comments** — discussion group; `auto` loads the full comment thread
+- 📋 **Forum topic** — `reply_to_id` = topic id → GetReplies (whole topic)
+- 💬 **Forum in-topic message** — `reply_to_id` = message id → search near anchor (`offset_id ≈ anchor + 100`); use `full` for nested branch, topic id for whole topic
 
 **Parameter Conflicts (will error):**
+- `thread_scope` of `full` or `direct` without `reply_to_id`
 - `message_ids` + `reply_to_id`: Cannot combine
 - `message_ids` + `query`: Cannot combine (specific IDs don't need search)
 
@@ -246,8 +261,12 @@ get_messages(
 - **No query**: Returns latest messages from chat
 - **Multi-term**: Use comma-separated words for broader results
 - **Partial words**: Use shorter forms (e.g., "proj" finds "project", "projects")
-- **reply_to_id**: Works for channel posts, forum topics, and regular message replies
-- **Forum topics**: Use topic root message ID as reply_to_id (get from get_chat_info)
+- **reply_to_id**: Channel post id, forum **`topic_id`** from `get_chat_info`, or a **message id** inside a topic
+- **Forum in-topic message** (e.g. `https://t.me/telemtrs/12799/13204` → `reply_to_id: 13204`): Replies are found via `messages.search` near the anchor, not from the latest topic messages. For the **whole topic** `12799`, use `reply_to_id: 12799`.
+- **`thread_scope=full` on a message id**: Nested replies under that message only (wider id window + BFS). Not the full topic — use the topic id for that.
+- **Search stubs**: Bodies may appear in `.message` instead of `.text`; the server reloads full messages when needed.
+- **Forum General topic** (`topic_id` 1): Browse with `chat_id` only; do not use `thread_scope=full` with id `1`
+- **Supergroup threads**: Use `thread_scope=full` with the thread starter message id
 
 **Examples:**
 ```json
@@ -275,10 +294,24 @@ get_messages(
   "reply_to_id": 123
 }}
 
-// 5. Get forum topic messages (same parameter!)
+// 5. Get forum topic messages (topic_id from get_chat_info)
 {"tool": "get_messages", "params": {
   "chat_id": "-1001234567890",
   "reply_to_id": 52
+}}
+
+// 5b. Replies to a message inside a forum topic (direct)
+{"tool": "get_messages", "params": {
+  "chat_id": "telemtrs",
+  "reply_to_id": 13204,
+  "thread_scope": "auto"
+}}
+
+// 5c. Same anchor, nested branch (replies to replies)
+{"tool": "get_messages", "params": {
+  "chat_id": "telemtrs",
+  "reply_to_id": 13204,
+  "thread_scope": "full"
 }}
 
 // 6. Get replies to any message

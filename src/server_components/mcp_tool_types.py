@@ -173,8 +173,20 @@ ReplyToForThread = Annotated[
     int,
     Field(
         description=(
-            "Get replies in the thread for this message id (comments, forum topic, or replies). "
-            "Optional query filters within that thread."
+            "Anchor message id: channel post id, forum topic_id from get_chat_info, "
+            "or a message id for direct replies. Use with thread_scope."
+        )
+    ),
+]
+
+ThreadScope = Annotated[
+    Literal["auto", "full", "direct"],
+    Field(
+        description=(
+            "Only with reply_to_id. auto: full forum topic (topic_id) or channel "
+            "comment thread via getReplies; else direct replies. full: nested branch "
+            "under a message id (forum in-topic uses search window, not whole topic); "
+            "supergroup threads use search top_msg_id. direct: immediate replies only."
         )
     ),
 ]
@@ -194,7 +206,7 @@ FilterParam = Annotated[
     Field(
         description=(
             "Telegram folder name (case-insensitive exact match after normalization). "
-            "In Telegram's UI these are called folders; internally they are \"dialog filters\" — "
+            'In Telegram\'s UI these are called folders; internally they are "dialog filters" — '
             "saved filter presets that group chats by custom criteria (pinned, unread, business, etc.). "
             "See Filters-vs-Folders.md for the technical distinction."
         )

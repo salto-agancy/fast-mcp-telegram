@@ -1,3 +1,7 @@
+### 2026-05-18
+- **Forum in-topic replies (2026-05-18):** Offset jump + widen + legacy scan; enrich/id-window fallbacks; `_message_has_displayable_content` (search stubs use `.message` not `.text`). Docs: `Tools-Reference.md`, [forum-in-topic-replies.md](forum-in-topic-replies.md). Tests: `tests/test_thread_scope_replies_fetch.py`. Live: `67599`, `telemtrs/13204`.
+- **get_messages thread_scope (#49)**: `thread_scope` (`auto`/`full`/`direct`) on `get_messages`. Forum **topic ids** → GetReplies; in-topic message ids → topic search + filter; supergroup `full` → `SearchRequest(top_msg_id=...)`. Channel posts → discussion group. Docs: `Tools-Reference.md`, `mcp_tool_types.py`.
+
 ### 2026-05-04
 - **README Features audit**: `README.md` Features table aligned with code and docs — Multi-User Authentication → `docs/Installation.md#remote-setup-http-auth`, Dual Transport → `#overview` with stdio / `http-auth` / optional `http-no-auth`, MTProto Proxy → `#mtproto-proxy`, Secure File Handling uses `:paperclip:` (distinct from Folder Filtering), Bot Chat Detection → `docs/Tools-Reference.md#uniform-entity-schema`, High Performance drops unsubstantiated connection pooling, Production Reliability uses “configurable logging”. Summary in `activeContext.md`.
 
@@ -9,7 +13,7 @@
 
 ### 2026-04-13
 - **Agent-friendly MCP tools**: `tools_register.py` — `description=` and `ToolAnnotations(title=...)` on all eight tools; concise docstrings; `mcp_tool_types.py` with `Annotated` + Pydantic `Field` for parameter-level schema text; `find_chats` / `find_chats_impl` return type `dict[str, Any]`. Full examples remain in `docs/Tools-Reference.md`. All 409 tests pass.
-- **Connection error handling DRY**: `find_connection_exception` and `log_connection_error_response` in `error_handling.py`; `with_error_handling` handles `SessionNotAuthorizedError` and `TelegramTransportError` (including `__cause__` unwrap); tools return error dicts caught and re-raised as `ToolError` for proper `isError=True`. `search.py` `_handle_search_mode` and `invoke_mtproto` use the helper directly.
+- **Connection error handling DRY**: `find_connection_exception` and `log_connection_error_response` in `error_handling.py`; `with_error_handling` handles `SessionNotAuthorizedError` and `TelegramTransportError` (including `__cause__` unwrap); tools return error dicts caught and re-raised as `ToolError` for proper `isError=True`. `search/search_mode.py` `_handle_query_mode` and `invoke_mtproto` use the helper directly.
 
 ### 2026-04-01
 - **Bot Chat Type Split**: Added "bot" as separate chat type from "private". Bots detected via `getattr(entity, 'bot', False)`. Bots not filtered by public parameter and get bio enrichment same as private users.

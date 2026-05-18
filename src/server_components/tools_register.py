@@ -34,6 +34,7 @@ from src.server_components.mcp_tool_types import (
     RemoveIfNew,
     ReplyToForThread,
     ReplyToId,
+    ThreadScope,
     ReplyToMsgId,
     ResolveEntities,
     TopicsLimit,
@@ -172,6 +173,7 @@ def register_tools(mcp: FastMCP) -> None:
         query: QueryInChat = None,
         message_ids: MessageIds = None,
         reply_to_id: ReplyToForThread = None,
+        thread_scope: ThreadScope = "auto",
         limit: LimitMessages = 50,
         min_date: MinDate = None,
         max_date: MaxDate = None,
@@ -190,6 +192,7 @@ def register_tools(mcp: FastMCP) -> None:
             chat_type=None,
             auto_expand_batches=auto_expand_batches,
             include_total_count=include_total_count,
+            thread_scope=thread_scope,
         )
 
     @mcp.tool(

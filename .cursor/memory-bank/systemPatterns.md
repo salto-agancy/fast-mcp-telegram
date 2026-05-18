@@ -7,7 +7,7 @@ The project follows a modular architecture with clear separation of concerns:
 - `src/server.py`: Entry point, server initialization, and lifecycle management
 - `src/config/`: Configuration management (server, setup, logging)
 - `src/server_components/`: Core server functionality (auth, routes, tools)
-- `src/tools/`: Implementation of MCP tools (messages, chat_discovery, search). Prefer submodule imports for chat discovery (e.g. `chat_discovery.find_chats`); `chat_discovery/__init__.py` is doc-only (no re-exports)
+- `src/tools/`: Implementation of MCP tools (messages, chat_discovery, search). Prefer submodule imports for chat discovery (e.g. `chat_discovery.find_chats`); `chat_discovery/__init__.py` is doc-only (no re-exports). `get_messages` lives under `src/tools/search/` (`core.py`, `replies.py`, `forum_replies.py`, `search_mode.py`).
 - `src/utils/`: Shared utilities (helpers, logging, error handling, `chat_search_text` for dialog matching)
 - `src/client/`: Telegram client connection management
 
@@ -77,6 +77,16 @@ graph TD
         Tools --> TelegramClient
     end
 ```
+
+## Forum in-topic replies (`get_messages` + `reply_to_id`)
+
+See [forum-in-topic-replies.md](forum-in-topic-replies.md) for substantiated API choices (GetReplies vs `messages.search`, why `min_id`/`max_id` bracket failed, validated `offset_id` jump, stub reload).
+
+Summary:
+
+- **Topic root** → `GetReplies` after `GetForumTopicsByID` confirms real topic (not stub).
+- **In-topic message** → offset jump + filter; enrich/id-window fallbacks; `_message_has_displayable_content` for stubs; `full` = BFS branch only; **topic id** → GetReplies for whole topic.
+- **Replies have id > anchor** — enables jumping forward in id space instead of scanning from latest topic message.
 
 ## Critical Implementation Paths
 

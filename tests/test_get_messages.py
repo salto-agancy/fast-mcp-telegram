@@ -69,7 +69,7 @@ class TestGetMessagesReadByIds:
     """Test read by message IDs mode."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.read_messages_by_ids", new_callable=AsyncMock)
+    @patch("src.tools.search.core.read_messages_by_ids", new_callable=AsyncMock)
     async def test_delegates_to_read_messages_by_ids(self, mock_read):
         """Should delegate to read_messages_by_ids when message_ids provided."""
         mock_read.return_value = [
@@ -90,7 +90,7 @@ class TestGetMessagesReadByIds:
         assert result["has_more"] is False
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.read_messages_by_ids", new_callable=AsyncMock)
+    @patch("src.tools.search.core.read_messages_by_ids", new_callable=AsyncMock)
     async def test_message_ids_rejects_date_filters(self, mock_read):
         """Should reject date filters when using message_ids."""
         mock_read.return_value = [{"id": 1, "text": "Message"}]
@@ -106,7 +106,7 @@ class TestGetMessagesReadByIds:
         assert "not supported for message_ids mode" in result["error"]
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.read_messages_by_ids", new_callable=AsyncMock)
+    @patch("src.tools.search.core.read_messages_by_ids", new_callable=AsyncMock)
     async def test_returns_error_when_read_messages_by_ids_returns_error(
         self, mock_read
     ):
@@ -131,7 +131,7 @@ class TestGetMessagesReplies:
     """Test replies mode (post comments, forum topics, message replies)."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search._handle_replies_mode", new_callable=AsyncMock)
+    @patch("src.tools.search.core._handle_reply_mode", new_callable=AsyncMock)
     async def test_fetches_replies(self, mock_handler):
         """Should delegate to replies handler when reply_to_id provided."""
         mock_handler.return_value = {
@@ -164,7 +164,7 @@ class TestGetMessagesReplies:
         assert len(result["messages"]) == 2
 
     @pytest.mark.asyncio
-    @patch("src.tools.search._handle_replies_mode", new_callable=AsyncMock)
+    @patch("src.tools.search.core._handle_reply_mode", new_callable=AsyncMock)
     async def test_search_in_replies(self, mock_handler):
         """Should pass query to handler when both reply_to_id and query provided."""
         mock_handler.return_value = {
@@ -186,7 +186,7 @@ class TestGetMessagesReplies:
         assert len(result["messages"]) == 1
 
     @pytest.mark.asyncio
-    @patch("src.tools.search._handle_replies_mode", new_callable=AsyncMock)
+    @patch("src.tools.search.core._handle_reply_mode", new_callable=AsyncMock)
     async def test_no_replies_error(self, mock_handler):
         """Should return error when no replies found."""
         mock_handler.return_value = {
@@ -216,9 +216,9 @@ class TestGetMessagesRepliesErrors:
     """Error paths for replies mode."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
-    @patch("src.tools.search._fetch_replies", new_callable=AsyncMock)
+    @patch("src.tools.search.replies.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.replies.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.replies._fetch_replies", new_callable=AsyncMock)
     async def test_fetch_replies_failure_returns_error(
         self, mock_fetch_replies, mock_get_entity, mock_get_client
     ):
@@ -238,8 +238,8 @@ class TestGetMessagesRepliesErrors:
         assert "Failed to fetch replies" in result["error"]
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.replies.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.replies.get_entity_by_id", new_callable=AsyncMock)
     async def test_invalid_entity_for_replies(self, mock_get_entity, mock_get_client):
         """Should return error when entity not found."""
         mock_get_client.return_value = AsyncMock()
@@ -259,7 +259,7 @@ class TestGetMessagesSuccessPaths:
     """Test successful execution paths for different modes."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.read_messages_by_ids", new_callable=AsyncMock)
+    @patch("src.tools.search.core.read_messages_by_ids", new_callable=AsyncMock)
     async def test_message_ids_mode_success(self, mock_read):
         """message_ids mode should return unified dict format."""
         mock_read.return_value = [{"id": 1, "text": "Message"}]
@@ -288,7 +288,7 @@ class TestGetMessagesChatFieldExclusion:
     """Test that chat field is excluded when chat_id is provided."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
     async def test_global_search_includes_chat_field(self, mock_get_client):
         """Global search (no chat_id) should include chat in each message."""
         from telethon.tl.types import PeerUser
@@ -317,7 +317,10 @@ class TestGetMessagesChatFieldExclusion:
 
         mock_get_client.return_value = mock_client
 
-        with patch("src.tools.search.get_entity_by_id", side_effect=mock_get_entity):
+        with patch(
+            "src.tools.search.search_generators.get_entity_by_id",
+            side_effect=mock_get_entity,
+        ):
             result = await search_messages_impl(
                 chat_id=None,
                 query="hello",
@@ -326,16 +329,18 @@ class TestGetMessagesChatFieldExclusion:
 
         if "messages" in result:
             for msg in result["messages"]:
-                assert "chat" in msg, f"Expected chat field in global search result, got {msg.keys()}"
+                assert "chat" in msg, (
+                    f"Expected chat field in global search result, got {msg.keys()}"
+                )
 
 
 class TestGetMessagesRepliesChatExclusion:
     """Test that replies mode excludes chat field."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
-    @patch("src.tools.search._fetch_replies", new_callable=AsyncMock)
+    @patch("src.tools.search.replies.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.replies.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.replies._fetch_replies", new_callable=AsyncMock)
     async def test_replies_mode_excludes_chat_field(
         self, mock_fetch_replies, mock_get_entity, mock_get_client
     ):
@@ -401,14 +406,16 @@ class TestReadMessagesByIdsChatExclusion:
             result = await read_messages_by_ids("testchat", [1])
 
         assert len(result) == 1
-        assert "chat" not in result[0], f"Expected no chat field, got {result[0].keys()}"
+        assert "chat" not in result[0], (
+            f"Expected no chat field, got {result[0].keys()}"
+        )
 
 
 class TestGetMessagesChatFieldIntegration:
     """Integration tests for chat field exclusion behavior."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.read_messages_by_ids", new_callable=AsyncMock)
+    @patch("src.tools.search.core.read_messages_by_ids", new_callable=AsyncMock)
     async def test_message_ids_mode_excludes_chat_field(self, mock_read):
         """message_ids mode should exclude chat from results."""
         mock_read.return_value = [
@@ -423,7 +430,9 @@ class TestGetMessagesChatFieldIntegration:
 
         assert "messages" in result
         for msg in result["messages"]:
-            assert "chat" not in msg, f"Expected no chat in message_ids mode, got {msg.get('chat')}"
+            assert "chat" not in msg, (
+                f"Expected no chat in message_ids mode, got {msg.get('chat')}"
+            )
 
 
 class TestGetMessagesDateFiltering:
@@ -453,9 +462,11 @@ class TestGetMessagesDateFiltering:
         assert "Invalid max_date format" in result["error"]
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
-    async def test_search_chat_respects_min_date(self, mock_get_entity, mock_get_client):
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_search_chat_respects_min_date(
+        self, mock_get_entity, mock_get_client
+    ):
         """Should filter out messages older than min_date."""
         from tests.conftest import make_mock_message
 
@@ -470,9 +481,15 @@ class TestGetMessagesDateFiltering:
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
 
         # Create messages with different dates
-        old_msg = make_mock_message(id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc))
-        recent_msg = make_mock_message(id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc))
-        future_msg = make_mock_message(id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc))
+        old_msg = make_mock_message(
+            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc)
+        )
+        recent_msg = make_mock_message(
+            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc)
+        )
+        future_msg = make_mock_message(
+            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc)
+        )
 
         # Return messages in order (newest to oldest when iterated)
         # iter_messages is an async iterator, so we need to return an async iterator
@@ -499,9 +516,11 @@ class TestGetMessagesDateFiltering:
         assert 3 in msg_ids  # Future message should be included
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
-    async def test_search_chat_respects_max_date(self, mock_get_entity, mock_get_client):
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_search_chat_respects_max_date(
+        self, mock_get_entity, mock_get_client
+    ):
         """Should filter out messages newer than max_date."""
         from tests.conftest import make_mock_message
 
@@ -513,9 +532,15 @@ class TestGetMessagesDateFiltering:
         mock_client = MagicMock()
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
 
-        old_msg = make_mock_message(id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc))
-        recent_msg = make_mock_message(id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc))
-        future_msg = make_mock_message(id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc))
+        old_msg = make_mock_message(
+            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc)
+        )
+        recent_msg = make_mock_message(
+            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc)
+        )
+        future_msg = make_mock_message(
+            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc)
+        )
 
         async def mock_iter_messages_gen():
             for msg in [future_msg, recent_msg, old_msg]:
@@ -540,9 +565,11 @@ class TestGetMessagesDateFiltering:
         assert 1 in msg_ids  # Old message should be included
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
-    async def test_search_chat_respects_date_range(self, mock_get_entity, mock_get_client):
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_search_chat_respects_date_range(
+        self, mock_get_entity, mock_get_client
+    ):
         """Should filter to only messages within min_date and max_date range."""
         from tests.conftest import make_mock_message
 
@@ -554,9 +581,15 @@ class TestGetMessagesDateFiltering:
         mock_client = MagicMock()
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
 
-        old_msg = make_mock_message(id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc))
-        recent_msg = make_mock_message(id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc))
-        future_msg = make_mock_message(id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc))
+        old_msg = make_mock_message(
+            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc)
+        )
+        recent_msg = make_mock_message(
+            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc)
+        )
+        future_msg = make_mock_message(
+            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc)
+        )
 
         async def mock_iter_messages_gen():
             for msg in [future_msg, recent_msg, old_msg]:
@@ -579,8 +612,8 @@ class TestGetMessagesDateFiltering:
         assert result["messages"][0]["id"] == 2
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     async def test_search_chat_stops_at_min_date_boundary(
         self, mock_get_entity, mock_get_client
     ):
@@ -597,11 +630,27 @@ class TestGetMessagesDateFiltering:
 
         # Create 5 messages - only 2 should be returned after min_date filter
         msgs = [
-            make_mock_message(id=5, text="Msg 2025", date=datetime(2025, 1, 1, tzinfo=timezone.utc)),
-            make_mock_message(id=4, text="Msg mid 2024", date=datetime(2024, 6, 15, tzinfo=timezone.utc)),
-            make_mock_message(id=3, text="Msg early 2024", date=datetime(2024, 1, 15, tzinfo=timezone.utc)),  # min boundary
-            make_mock_message(id=2, text="Msg late 2023", date=datetime(2023, 12, 1, tzinfo=timezone.utc)),
-            make_mock_message(id=1, text="Msg 2022", date=datetime(2022, 1, 1, tzinfo=timezone.utc)),
+            make_mock_message(
+                id=5, text="Msg 2025", date=datetime(2025, 1, 1, tzinfo=timezone.utc)
+            ),
+            make_mock_message(
+                id=4,
+                text="Msg mid 2024",
+                date=datetime(2024, 6, 15, tzinfo=timezone.utc),
+            ),
+            make_mock_message(
+                id=3,
+                text="Msg early 2024",
+                date=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            ),  # min boundary
+            make_mock_message(
+                id=2,
+                text="Msg late 2023",
+                date=datetime(2023, 12, 1, tzinfo=timezone.utc),
+            ),
+            make_mock_message(
+                id=1, text="Msg 2022", date=datetime(2022, 1, 1, tzinfo=timezone.utc)
+            ),
         ]
 
         async def mock_iter_messages_gen():
@@ -628,9 +677,11 @@ class TestGetMessagesDateFiltering:
         assert 1 not in msg_ids
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
-    async def test_search_chat_handles_none_date(self, mock_get_entity, mock_get_client):
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_search_chat_handles_none_date(
+        self, mock_get_entity, mock_get_client
+    ):
         """Should pass through messages with None date (unknown date = don't filter)."""
         from tests.conftest import make_mock_message
 
@@ -642,7 +693,9 @@ class TestGetMessagesDateFiltering:
         mock_client = MagicMock()
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
 
-        msg_with_date = make_mock_message(id=1, text="Dated message", date=datetime(2024, 6, 15, tzinfo=timezone.utc))
+        msg_with_date = make_mock_message(
+            id=1, text="Dated message", date=datetime(2024, 6, 15, tzinfo=timezone.utc)
+        )
         msg_no_date = make_mock_message(id=2, text="Unknown date", date=None)
 
         async def mock_iter_messages_gen():
@@ -664,8 +717,8 @@ class TestGetMessagesDateFiltering:
         assert len(result["messages"]) == 2
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     async def test_browse_includes_service_message_in_date_window(
         self, mock_get_entity, mock_get_client
     ):

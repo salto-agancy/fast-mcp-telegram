@@ -1,4 +1,12 @@
 ## Current Work Focus
+**Completed (2026-05-18):** Forum in-topic replies (#49) — shipped and documented
+
+- **Design doc:** [forum-in-topic-replies.md](forum-in-topic-replies.md) — routing, offset jump, stubs, `thread_scope` vs whole topic
+- **User docs:** `docs/Tools-Reference.md` — table for `thread_scope`, in-topic vs topic id, examples (`13204` / `12799`)
+- **Code:** [`src/tools/search/`](src/tools/search/) (`core.py`, `replies.py`, `forum_replies.py`, `search_mode.py`); tests: [`tests/test_thread_scope_replies_fetch.py`](tests/test_thread_scope_replies_fetch.py)
+
+---
+
 **Completed**: README Features table audit + copy fixes (2026-05-04)
 
 - Verified all 18 feature rows against code; adjusted links (Multi-User → `#remote-setup-http-auth`, Dual Transport → `#overview` per user, MTProto Proxy → `#mtproto-proxy`, Bot Chat → Tools Reference `#uniform-entity-schema`), distinct emoji for Secure File Handling, and wording (no unsubstantiated “connection pooling”; “configurable logging” vs “structured”). Dual Transport description now mentions optional `http-no-auth`.

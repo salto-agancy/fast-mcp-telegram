@@ -143,6 +143,21 @@ def _has_any_media(message) -> bool:
     return message.media.__class__.__name__ in _KNOWN_MEDIA_CLASSES
 
 
+def message_has_displayable_content(message: Any) -> bool:
+    """True when a Telethon message has text, media, or a service placeholder."""
+    if not message:
+        return False
+    if (
+        getattr(message, "text", None)
+        or getattr(message, "message", None)
+        or getattr(message, "caption", None)
+    ):
+        return True
+    if _has_any_media(message):
+        return True
+    return _service_action_placeholder_text(message) is not None
+
+
 def _decode_callback_data(button) -> str:
     data = getattr(button, "data", None)
     return data.decode("utf-8", errors="replace") if data else ""
@@ -513,9 +528,7 @@ async def build_message_result(
         getattr(message, "text", None)
         or getattr(message, "message", None)
         or getattr(message, "caption", None)
-    )
-    if not full_text:
-        full_text = _service_action_placeholder_text(message)
+    ) or _service_action_placeholder_text(message)
 
     result: dict[str, Any] = {
         "id": message.id,

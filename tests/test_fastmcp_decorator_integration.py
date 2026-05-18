@@ -195,6 +195,8 @@ class TestFastMCPToolIntegration:
             reply_to_id_schema.get("type", reply_to_id_schema.get("anyOf", []))
         )
 
+        assert "thread_scope" in properties
+
         # Existing parameters remain
         assert "chat_id" in properties
         assert "query" in properties
