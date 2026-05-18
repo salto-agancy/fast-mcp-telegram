@@ -46,9 +46,12 @@ def _normalized_reply_query(query: str | None) -> str | None:
 def _belongs_to_forum_thread(message: Any, thread_root_msg_id: int) -> bool:
     """Return whether a message belongs to a forum thread rooted at ``thread_root_msg_id``.
 
-    Forum threads are keyed by the topic starter / service message id. Thread
-    messages usually set ``reply_to.reply_to_top_id`` to that id, or reference
-    it via ``reply_to_msg_id``.
+    In Telegram, each forum message belongs to exactly one topic (one thread
+    root id). This helper does not imply otherwise: it matches reply metadata
+    against the requested thread root so we can drop rows that should not have
+    been returned for that thread (for example when a text ``search`` was not
+    scoped to ``top_msg_id`` and Telethon's ``iter_messages`` mixed in
+    chat-wide matches).
     """
     if getattr(message, "id", None) == thread_root_msg_id:
         return True
@@ -230,6 +233,10 @@ async def _fetch_replies(
     - Channel posts with discussion (detects and uses discussion group)
     - Forum topics (uses reply_to directly)
     - Regular message replies (uses reply_to directly)
+
+    For forum supergroups with a non-empty text query, uses ``messages.search``
+    with ``top_msg_id`` so results stay in the topic; plain ``iter_messages``
+    with ``reply_to`` plus ``search`` is not reliably topic-scoped in Telethon.
 
     Returns tuple of (messages, discussion_metadata_or_none):
     - messages: List of reply message dicts
