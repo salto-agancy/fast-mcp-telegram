@@ -116,25 +116,34 @@ This release <briefly describe the primary user-facing value proposition>.
   **Full Changelog**: https://github.com/leshchenko1979/fast-mcp-telegram/compare/<previous-major-tag>...<current-tag>
   ```
 
-### 8. Version Bump Process
-- **First**: Bump the project version with uv (writes `[project].version` in `pyproject.toml`):
+### 8. Version Bump and GitHub Release
+- **Never** edit `[project].version` in `pyproject.toml` by hand — use **`uv version`** only.
+- **First**: Bump version (writes `pyproject.toml`; may update `uv.lock`):
   ```bash
   uv version <version>
-  # or e.g. `uv version --bump patch`
+  # or: uv version --bump patch | minor | major
   ```
-- **Then**: Refresh the lockfile if needed (`uv version` may have synced already; otherwise run `uv lock` or `uv sync`).
-- **`src/_version.py`**: Do not edit for releases — it resolves `__version__` from installed package metadata or from `pyproject.toml` when uninstalled.
-- **Then**: Commit version files, create tag, and push (no `v` prefix on tags):
+- **Then**: If `uv.lock` changed, include it; otherwise `uv lock` only when dependencies changed.
+- **`src/_version.py`**: Do not edit for releases — it reads version from package metadata or `pyproject.toml`.
+- **Commit, tag, push** (no `v` prefix on tags):
   ```bash
-  git add pyproject.toml uv.lock && git commit -m "chore: bump version to <version>"
+  git add pyproject.toml uv.lock
+  git commit -m "chore: bump version to <version>"
   git tag <version>
   git push origin <branch> && git push origin <version>
   ```
-- **Then**: Create GitHub release with generated notes
-- **Title format**: Use a short descriptive title WITHOUT the version number (e.g., "MTProto Proxy Support with Fake TLS" not "0.15.0 - MTProto Proxy Support")
-- **Prefilled release URL** (optional): GitHub accepts query params on the new-release form (`tag`, `target`, `title`, `body`). Build the query with `urllib.parse.urlencode`, then open `https://github.com/leshchenko1979/fast-mcp-telegram/releases/new?` + that string. Push the tag first so the form can resolve it.
-- **Wait for confirmation**: Do not proceed until user confirms GitHub release is published
-- **Finally**: Send community announcement to Telegram (only after user confirmation)
+- **Create GitHub release with `gh`** (after tag is pushed). Title: short user-facing headline **without** the version number. Body: notes from section 5 (HEREDOC avoids shell escaping issues):
+  ```bash
+  gh release create <version> \
+    --title "<short headline without version>" \
+    --notes-file - <<'EOF'
+  <paste release notes body here — no duplicate title line>
+  EOF
+  ```
+  Or write body to a temp file and use `--notes-file /path/to/notes.md` (do not commit that file).
+- **Verify**: `gh release view <version>` — confirm title, body, and compare URL.
+- **Wait for confirmation**: Do not send Telegram announcements until the user confirms the GitHub release is published.
+- **Finally**: Send community announcement to Telegram (section 9).
 
 **Important**:
 - Release notes are for GitHub releases only - do NOT commit release notes files to git repository
@@ -142,7 +151,7 @@ This release <briefly describe the primary user-facing value proposition>.
 - There are no release files in this repository. Do not add any `RELEASE_NOTES*` or similar files to git
 - Tags are plain semantic versions without a leading `v` (example: `0.3.0`)
 
-**Typical workflow**: Identify last major version → Analyze all changes since → Focus on user-facing features → Prepare release notes → Quality checks → Update version → Create tag → Push → Create GitHub release → **Wait for user confirmation** → Send community message
+**Typical workflow**: Identify last tag → Analyze user-facing changes → Prepare release notes (section 5) → `uv version` → commit → tag → push → `gh release create` → **Wait for user confirmation** → Send community message
 
 ### 9. Community Announcement Process
 - **Prerequisite**: Only proceed after user confirms GitHub release is published
