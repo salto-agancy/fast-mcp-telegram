@@ -1,15 +1,18 @@
+import itertools
 import logging
 from datetime import datetime
 from enum import Enum, auto
 from typing import Any
 
-from telethon.tl.functions.messages import SearchGlobalRequest
-from telethon.tl.types import InputMessagesFilterEmpty, InputPeerEmpty
+from telethon import utils as tg_utils
+from telethon.tl.functions.messages import SearchGlobalRequest, SearchRequest
+from telethon.tl.types import InputMessagesFilterEmpty, InputPeerEmpty, MessageEmpty
 
 from src.client.connection import get_connected_client
 from src.tools.links import generate_telegram_links
 from src.tools.messages import read_messages_by_ids
 from src.utils.datetime_parse import parse_iso_datetime_utc
+from src.utils.discussion import get_post_discussion_info
 from src.utils.entity import (
     _get_chat_message_count,
     _matches_chat_type,
@@ -27,6 +30,91 @@ from src.utils.message_format import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Match Telethon's message iterator chunk size for getReplies / search slices.
+_REPLIES_FETCH_CHUNK = 100
+
+
+def _normalized_reply_query(query: str | None) -> str | None:
+    """Strip per-chat query for reply mode; whitespace-only becomes None."""
+    if not query:
+        return None
+    stripped = query.strip()
+    return stripped or None
+
+
+def _belongs_to_forum_thread(message: Any, thread_root_msg_id: int) -> bool:
+    """Return whether a message belongs to a forum thread rooted at ``thread_root_msg_id``.
+
+    Forum threads are keyed by the topic starter / service message id. Thread
+    messages usually set ``reply_to.reply_to_top_id`` to that id, or reference
+    it via ``reply_to_msg_id``.
+    """
+    if getattr(message, "id", None) == thread_root_msg_id:
+        return True
+    reply_to = getattr(message, "reply_to", None)
+    top = getattr(reply_to, "reply_to_top_id", None) if reply_to else None
+    if top is not None and top == thread_root_msg_id:
+        return True
+    rmid = getattr(reply_to, "reply_to_msg_id", None) if reply_to else None
+    if rmid is not None and rmid == thread_root_msg_id:
+        return True
+    outer = getattr(message, "reply_to_msg_id", None)
+    if outer is not None and outer == thread_root_msg_id:
+        return True
+    return False
+
+
+async def _iter_forum_topic_search_messages(
+    client,
+    entity,
+    top_msg_id: int,
+    q: str,
+    limit: int,
+):
+    """Yield messages from ``messages.search`` scoped to one forum topic (``top_msg_id``)."""
+    input_peer = await client.get_input_entity(entity)
+    offset_id = 0
+    yielded = 0
+    want = limit + 1
+
+    while yielded < want:
+        batch = min(_REPLIES_FETCH_CHUNK, want - yielded)
+        r = await client(
+            SearchRequest(
+                peer=input_peer,
+                q=q,
+                filter=InputMessagesFilterEmpty(),
+                min_date=None,
+                max_date=None,
+                offset_id=offset_id,
+                add_offset=0,
+                limit=batch,
+                max_id=0,
+                min_id=0,
+                hash=0,
+                from_id=None,
+                saved_peer_id=None,
+                saved_reaction=None,
+                top_msg_id=top_msg_id,
+            )
+        )
+        if not r.messages:
+            break
+        entities = {
+            tg_utils.get_peer_id(x): x for x in itertools.chain(r.users, r.chats)
+        }
+        for message in r.messages:
+            if isinstance(message, MessageEmpty):
+                continue
+            message._finish_init(client, entities, input_peer)
+            yielded += 1
+            yield message
+            if yielded >= want:
+                return
+        offset_id = r.messages[-1].id
+        if len(r.messages) < batch:
+            break
 
 
 class MessageRetrievalMode(Enum):
@@ -167,22 +255,46 @@ async def _fetch_replies(
         except ValueError:
             logger.debug(f"Channel post {reply_to_id} has no discussion enabled")
 
-    collected = []
-    async for message in client.iter_messages(
-        effective_entity,
-        reply_to=effective_reply_to,
-        search=query or None,
-        limit=limit + 1,
-    ):
-        result = await _build_result_for_message(
-            client, message, effective_entity, include_chat_entity
-        )
-        if not result:
-            continue
+    normalized_query = _normalized_reply_query(query)
+    is_forum = bool(getattr(effective_entity, "forum", False))
 
-        collected.append(result)
-        if len(collected) >= limit + 1:
-            break
+    collected = []
+    if normalized_query and is_forum:
+        async for message in _iter_forum_topic_search_messages(
+            client,
+            effective_entity,
+            effective_reply_to,
+            normalized_query,
+            limit,
+        ):
+            if not _belongs_to_forum_thread(message, effective_reply_to):
+                continue
+            result = await _build_result_for_message(
+                client, message, effective_entity, include_chat_entity
+            )
+            if not result:
+                continue
+            collected.append(result)
+            if len(collected) >= limit + 1:
+                break
+    else:
+        async for message in client.iter_messages(
+            effective_entity,
+            reply_to=effective_reply_to,
+            search=normalized_query,
+            limit=limit + 1,
+        ):
+            if is_forum and not _belongs_to_forum_thread(message, effective_reply_to):
+                continue
+            result = await _build_result_for_message(
+                client, message, effective_entity, include_chat_entity
+            )
+            if not result:
+                continue
+
+            collected.append(result)
+            if len(collected) >= limit + 1:
+                break
 
     await transcribe_voice_messages(collected[:limit], effective_entity)
 
@@ -525,8 +637,10 @@ async def search_messages_impl(
         message_ids: List of specific message IDs to retrieve. Conflicts with query and reply_to_id.
         reply_to_id: Message ID to get replies from. Works for:
             - Channel posts (fetches discussion comments automatically)
-            - Forum topics (fetches topic messages)
+            - Forum topics (fetches topic messages; results are filtered to that topic)
             - Regular messages (fetches direct replies)
+            For forum supergroups, a non-empty ``query`` uses ``messages.search`` with
+            ``top_msg_id`` set to ``reply_to_id`` so search stays inside the topic.
         limit: Maximum number of results to return
         min_date: Minimum date filter (ISO format)
         max_date: Maximum date filter (ISO format)
