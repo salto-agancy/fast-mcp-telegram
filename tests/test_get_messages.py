@@ -9,6 +9,7 @@ Tests cover:
 """
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -715,3 +716,50 @@ class TestGetMessagesDateFiltering:
         assert len(result["messages"]) == 1
         assert result["messages"][0]["id"] == 99
         assert "[Service: PinMessage]" in (result["messages"][0].get("text") or "")
+
+
+class TestForumThreadReplyHelpers:
+    """Forum thread metadata used to filter get_messages reply_to_id results."""
+
+    def test_belongs_to_forum_thread_matches_reply_to_top_id(self):
+        from src.tools.search import _belongs_to_forum_thread
+
+        msg = SimpleNamespace(
+            id=999,
+            reply_to=SimpleNamespace(reply_to_top_id=16160, reply_to_msg_id=50),
+            reply_to_msg_id=None,
+        )
+        assert _belongs_to_forum_thread(msg, 16160) is True
+
+    def test_belongs_to_forum_thread_rejects_other_topic(self):
+        from src.tools.search import _belongs_to_forum_thread
+
+        msg = SimpleNamespace(
+            id=1,
+            reply_to=SimpleNamespace(reply_to_top_id=84412, reply_to_msg_id=None),
+            reply_to_msg_id=None,
+        )
+        assert _belongs_to_forum_thread(msg, 16160) is False
+
+    def test_belongs_to_forum_thread_matches_starter_id(self):
+        from src.tools.search import _belongs_to_forum_thread
+
+        msg = SimpleNamespace(id=16160, reply_to=None, reply_to_msg_id=None)
+        assert _belongs_to_forum_thread(msg, 16160) is True
+
+    def test_belongs_to_forum_thread_matches_outer_reply_to_msg_id(self):
+        from src.tools.search import _belongs_to_forum_thread
+
+        msg = SimpleNamespace(
+            id=500,
+            reply_to=None,
+            reply_to_msg_id=16160,
+        )
+        assert _belongs_to_forum_thread(msg, 16160) is True
+
+    def test_normalized_reply_query_strips_and_empty(self):
+        from src.tools.search import _normalized_reply_query
+
+        assert _normalized_reply_query("  hi  ") == "hi"
+        assert _normalized_reply_query("   ") is None
+        assert _normalized_reply_query(None) is None
