@@ -155,8 +155,10 @@ This release <briefly describe the primary user-facing value proposition>.
 
 ### 9. Community Announcement Process
 - **Prerequisite**: Only proceed after user confirms GitHub release is published
-- **Targets**: English group [invite link](https://t.me/+U_3CpNWhXa9jZDcy); Russian `@mcp_telegram` ([t.me/mcp_telegram](https://t.me/mcp_telegram))
-- **Language**: English for the English group; Russian for the Russian group
+- **Targets** (use these `chat_id` values with `send_message`; do not rely on `find_chats` for the English group):
+  - **English**: `5131784155` — “Telegram MCP and MTProto-HTTP Bridge” ([invite](https://t.me/+U_3CpNWhXa9jZDcy))
+  - **Russian**: `mcp_telegram` (or `2537965832`) — [t.me/mcp_telegram](https://t.me/mcp_telegram)
+- **Language**: English for `5131784155`; Russian for `mcp_telegram`
 - **Content**: Include version number, short header line, and key features aligned with the GitHub release
 - **Telegram formatting (required for `send_message`)**: Use **HTML**, not Markdown. Telegram Markdown modes often mangle mixed punctuation and code; HTML is reliable. Call `send_message` with `parse_mode="html"`. Allowed tags include `<b>`, `<i>`, `<code>`, `<a href="https://...">text</a>`. Escape `&`, `<`, `>` in literal text if needed (`&amp;`, `&lt;`, `&gt;`).
 - **Presentation**: Emojis and checkmark lines are fine; use `<b>` for the version line and emphasis, `<code>` for parameter and field names
@@ -166,6 +168,11 @@ This release <briefly describe the primary user-facing value proposition>.
   - GitHub release link via `<a href="https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.x.y">…</a>`
 - **Timing**: Send only after user confirms GitHub release is published
 - **Using MCP for sending**:
-  - Try `find_chats` to discover chat IDs first, then `send_message` with `parse_mode="html"`
-  - **Private English group**: If not discoverable via `find_chats`, give the user the HTML message to paste manually
-  - **Group posting**: Bot must be an admin/member of the group to post; if `ChatWriteForbiddenError`, give user message to paste manually
+  ```bash
+  # English
+  send_message chat_id=5131784155 parse_mode=html message="..."
+  # Russian
+  send_message chat_id=mcp_telegram parse_mode=html message="..."
+  ```
+  - Use the fixed `chat_id` values above; only fall back to `find_chats` if a target moves or posting fails with “chat not found”
+  - If `ChatWriteForbiddenError`, give the user the HTML message to paste manually
