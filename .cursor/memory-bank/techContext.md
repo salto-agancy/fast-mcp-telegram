@@ -25,7 +25,7 @@ python-dotenv    # Environment variable management
 
 **Dependency Management**: setuptools with pyproject.toml for package management; MCP framework pinned as `fastmcp-slim[server]>=3.3` (same `from fastmcp import ...` imports)
 
-**GHCR image size (linux/amd64 compressed manifest, 2026-05-19)**: `main` before 0.18.1 deploy — 41,228,888 bytes (~39.3 MiB); compare `:sha-*` after deploy for delta
+**GHCR image size (linux/amd64 compressed manifest, 2026-05-19)**: before 0.18.1 `main` — 41,228,888 bytes (~39.3 MiB); after `sha-8703410` — 41,188,795 bytes (~39.28 MiB); delta −40,093 bytes (−0.10%)
 **Version Management**: Single source of truth in `src/_version.py` with direct import approach
 **Session Management**: Session files stored in persistent user config directory (~/.config/fast-mcp-telegram/)
 **Cross-Platform Support**: Automatic handling of macOS resource forks and permission differences
