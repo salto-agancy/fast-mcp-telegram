@@ -9,7 +9,7 @@
 ### Key Dependencies
 ```python
 # Core dependencies from pyproject.toml (managed by setuptools)
-fastmcp          # MCP server framework (uses httpx for HTTP transport)
+fastmcp-slim[server]  # FastMCP 3.3+ server stack; import namespace remains fastmcp
 telethon         # Telegram API client (iter_download for attachment streaming)
 # Logging handled by Python stdlib
 asyncio          # Async/await support (built-in)
@@ -23,7 +23,9 @@ python-dotenv    # Environment variable management
 - **URLs in JSON**: `src/utils/message_format.py` — `_maybe_set_attachment_download_url` after `_build_media_placeholder`
 - **Config**: `domain` / `DOMAIN`, `public_base_url_normalized` (derived for attachments), `attachment_ticket_ttl_seconds`
 
-**Dependency Management**: setuptools with pyproject.toml for package management
+**Dependency Management**: setuptools with pyproject.toml for package management; MCP framework pinned as `fastmcp-slim[server]>=3.3` (same `from fastmcp import ...` imports)
+
+**GHCR image size (linux/amd64 compressed manifest, 2026-05-19)**: `main` before 0.18.1 deploy — 41,228,888 bytes (~39.3 MiB); compare `:sha-*` after deploy for delta
 **Version Management**: Single source of truth in `src/_version.py` with direct import approach
 **Session Management**: Session files stored in persistent user config directory (~/.config/fast-mcp-telegram/)
 **Cross-Platform Support**: Automatic handling of macOS resource forks and permission differences
