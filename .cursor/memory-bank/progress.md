@@ -1,5 +1,5 @@
 ### 2026-05-19
-- **0.18.1 / FastMCP 3.3 slim**: Production dependency `fastmcp-slim[server]>=3.3` replaces `fastmcp` metapackage (3.2.4). Lock upgraded with `uv lock --upgrade`. 482 tests pass. GitHub release `0.18.1` published. GHCR compressed image (linux/amd64): 41.23 MiB → 39.28 MiB manifest (−40 KB, −0.10%).
+- **0.18.1 / FastMCP 3.3 slim**: Production dependency `fastmcp-slim[server]>=3.3` replaces `fastmcp` metapackage (3.2.4). Lock upgraded with `uv lock --upgrade`. 482 tests pass. GitHub release `0.18.1` published. GHCR compressed image (linux/amd64): ~39.31 MiB → ~39.28 MiB (−40 KB, −0.10%).
 
 ### 2026-05-18
 - **Forum in-topic replies (2026-05-18):** Offset jump + widen + legacy scan; enrich/id-window fallbacks; `_message_has_displayable_content` (search stubs use `.message` not `.text`). Docs: `Tools-Reference.md`, [forum-in-topic-replies.md](forum-in-topic-replies.md). Tests: `tests/test_thread_scope_replies_fetch.py`. Live: `67599`, `telemtrs/13204`.
