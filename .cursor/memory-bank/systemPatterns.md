@@ -6,7 +6,7 @@
 The project follows a modular architecture with clear separation of concerns:
 - `src/server.py`: Entry point, server initialization, and lifecycle management
 - `src/config/`: Configuration management (server, setup, logging)
-- `src/server_components/`: Core server functionality (auth, routes, tools)
+- `src/server_components/`: Core server functionality (auth, routes, tools, optional FastMCP middleware via `middleware_register.py`)
 - `src/tools/`: Implementation of MCP tools (messages, chat_discovery, search). Prefer submodule imports for chat discovery (e.g. `chat_discovery.find_chats`); `chat_discovery/__init__.py` is doc-only (no re-exports). `get_messages` lives under `src/tools/search/` (`core.py`, `replies.py`, `forum_replies.py`, `search_mode.py`).
 - `src/utils/`: Shared utilities (helpers, logging, error handling, `chat_search_text` for dialog matching)
 - `src/client/`: Telegram client connection management
@@ -99,7 +99,8 @@ Summary:
 
 ### Tool Execution Flow
 1. MCP tool request received
-2. Parameters validated against type hints
+2. Optional `AccountPrefixedToolsMiddleware` strips account prefix from tool name when `PREFIX_MCP_TOOLS_WITH_ACCOUNT` is enabled
+3. Parameters validated against type hints
 3. `@mcp_tool_with_restrictions` (containing `@with_error_handling`) wraps execution
 4. Tool implementation calls Telegram API
 5. Result formatted (JSON-friendly) and returned
