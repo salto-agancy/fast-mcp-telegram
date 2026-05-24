@@ -4,6 +4,8 @@
 
 This MCP server provides comprehensive Telegram integration tools optimized for AI assistants. The design philosophy is to **save context space for LLMs** by keeping tools general-purpose: fewer tools with broader capabilities (e.g. `get_messages` covers 5 modes, `invoke_mtproto` covers raw API access) consume less context than many narrow-purpose tools. We accept more parameters per tool in exchange for fewer tools. Uniform schemas across tools (entity, message, error) enable automatic processing of responses when possible. All tools support consistent error handling and MCP ToolAnnotations for better AI agent decision-making.
 
+**Multi-account HTTP setups:** With `PREFIX_MCP_TOOLS_WITH_ACCOUNT=true`, `tools/list` returns names prefixed by session account (`alice_send_message`, etc.); `call_tool` must use the prefixed name for that token. Tool parameters and return shapes below are unchanged. See [Installation — multi-account MCP tool prefix](Installation.md#multi-account-mcp-tool-prefix).
+
 ## Supported Chat ID Formats
 
 All tools that accept a `chat_id` parameter support these formats:

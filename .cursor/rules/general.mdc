@@ -18,3 +18,7 @@ Always check today's date with shell command `date` when inserting current date.
 This project has a `telegram-dev` MCP server configured in `.cursor/mcp.json`.
 When you modify code, ask the user to restart the server in Cursor's MCP panel.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions.
+
+## Releases
+
+For release, version bump, tag, `gh release`, or publish requests, read and follow [`.cursor/skills/release-notes/SKILL.md`](../skills/release-notes/SKILL.md) in full before changing versions or publishing.
