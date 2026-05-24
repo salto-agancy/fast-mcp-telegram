@@ -6,7 +6,8 @@ Each authenticated HTTP session sees tool names like ``alice_send_message`` (Tel
 connect to one server with different Bearer tokens.
 """
 
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 
 import mcp.types as mt
 from fastmcp.exceptions import ToolError
@@ -19,12 +20,12 @@ from src.client.connection import (
     get_request_token,
     set_request_token,
 )
-from src.config.server_config import get_config
+from src.server_components.account_prefix_cache import (
+    _account_prefix_cache,
+    clear_account_prefix_cache,
+)
 
-# token -> account label (username or str(user id))
-_account_prefix_cache: dict[str, str] = {}
-# tokens where get_me() returned None — skip repeated Telegram lookups
-_unresolved_prefix_tokens: set[str] = set()
+__all__ = ["AccountPrefixedToolsMiddleware", "clear_account_prefix_cache"]
 
 
 def _prefixed_tool_name(label: str, internal: str) -> str:
@@ -38,56 +39,37 @@ def _strip_account_prefix(label: str, external: str) -> str | None:
     return None
 
 
-def _get_cached_account_prefix(token: str) -> str | None:
-    label = _account_prefix_cache.get(token)
-    if label is None:
-        return None
-    del _account_prefix_cache[token]
-    _account_prefix_cache[token] = label
-    return label
-
-
-def _cache_account_prefix(token: str, label: str) -> None:
-    max_size = max(1, get_config().max_active_sessions)
-    _unresolved_prefix_tokens.discard(token)
-    if token in _account_prefix_cache:
-        del _account_prefix_cache[token]
-    elif len(_account_prefix_cache) >= max_size:
-        oldest = next(iter(_account_prefix_cache))
-        del _account_prefix_cache[oldest]
-        _unresolved_prefix_tokens.discard(oldest)
-    _account_prefix_cache[token] = label
-
-
-def clear_account_prefix_cache() -> None:
-    """Clear the account-prefix cache (for tests)."""
-    _account_prefix_cache.clear()
-    _unresolved_prefix_tokens.clear()
+@contextmanager
+def _session_request_token(session_token: str) -> Generator[None]:
+    saved = get_request_token()
+    set_request_token(session_token)
+    try:
+        yield
+    finally:
+        set_request_token(saved)
 
 
 async def _resolve_account_prefix(session_token: str) -> str | None:
     """Return the tool-name prefix label for *session_token*, fetching and caching it."""
-    if session_token in _unresolved_prefix_tokens:
+    if _account_prefix_cache.is_unresolved(session_token):
         return None
 
-    cached = _get_cached_account_prefix(session_token)
+    cached = _account_prefix_cache.get(session_token)
     if cached is not None:
         return cached
 
-    saved = get_request_token()
-    set_request_token(session_token)
-    try:
+    with _session_request_token(session_token):
         client = await get_connected_client()
         me = await client.get_me()
-        if me is None:
-            _unresolved_prefix_tokens.add(session_token)
-            return None
-        username = getattr(me, "username", None)
-        label = (username or "").strip() or str(me.id)
-        _cache_account_prefix(session_token, label)
-        return label
-    finally:
-        set_request_token(saved)
+
+    if me is None:
+        _account_prefix_cache.remember_unresolved(session_token)
+        return None
+
+    username = getattr(me, "username", None)
+    label = (username or "").strip() or str(me.id)
+    _account_prefix_cache.put(session_token, label)
+    return label
 
 
 class AccountPrefixedToolsMiddleware(Middleware):

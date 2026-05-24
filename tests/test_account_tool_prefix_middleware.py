@@ -10,13 +10,15 @@ from fastmcp.tools.base import Tool, ToolResult
 
 from src.client.connection import SessionNotAuthorizedError
 from src.config.server_config import ServerConfig, ServerMode
+from src.server_components.account_prefix_cache import (
+    _account_prefix_cache,
+    clear_account_prefix_cache,
+)
 from src.server_components.account_tool_prefix_middleware import (
     AccountPrefixedToolsMiddleware,
-    _cache_account_prefix,
     _prefixed_tool_name,
     _resolve_account_prefix,
     _strip_account_prefix,
-    clear_account_prefix_cache,
 )
 from src.server_components.middleware_register import register_mcp_middleware
 
@@ -42,12 +44,12 @@ class TestAccountPrefixCache:
     @pytest.mark.asyncio
     async def test_lru_eviction(self, monkeypatch):
         monkeypatch.setattr(
-            "src.server_components.account_tool_prefix_middleware.get_config",
+            "src.server_components.account_prefix_cache.get_config",
             lambda: SimpleNamespace(max_active_sessions=2),
         )
-        _cache_account_prefix("token-a", "alice")
-        _cache_account_prefix("token-b", "bob")
-        _cache_account_prefix("token-c", "carol")
+        _account_prefix_cache.put("token-a", "alice")
+        _account_prefix_cache.put("token-b", "bob")
+        _account_prefix_cache.put("token-c", "carol")
 
         mock_client = AsyncMock()
         mock_client.get_me.return_value = SimpleNamespace(username="alice", id=1)
@@ -112,16 +114,14 @@ class TestResolveAccountPrefix:
 class TestAccountPrefixCacheMaxSize:
     def test_handles_max_sessions_one(self, monkeypatch):
         monkeypatch.setattr(
-            "src.server_components.account_tool_prefix_middleware.get_config",
+            "src.server_components.account_prefix_cache.get_config",
             lambda: SimpleNamespace(max_active_sessions=1),
         )
-        _cache_account_prefix("token-a", "alice")
-        _cache_account_prefix("token-b", "bob")
+        _account_prefix_cache.put("token-a", "alice")
+        _account_prefix_cache.put("token-b", "bob")
 
-        from src.server_components import account_tool_prefix_middleware as mod
-
-        assert "token-a" not in mod._account_prefix_cache
-        assert mod._account_prefix_cache["token-b"] == "bob"
+        assert "token-a" not in _account_prefix_cache._cache
+        assert _account_prefix_cache._cache["token-b"] == "bob"
 
 
 def _sample_tools() -> list[Tool]:

@@ -1,5 +1,5 @@
 ### 2026-05-24
-- **Account-prefixed MCP tools (PR #52):** Optional `PREFIX_MCP_TOOLS_WITH_USERNAME` prefixes listed MCP tool names per Bearer session (`username_` or `{user_id}_`). FastMCP `AccountPrefixedToolsMiddleware` via `register_mcp_middleware()`. Unprefixed/wrong-prefix calls raise `ToolError`; `get_me()` None cached via sentinel; `CallToolRequestParams.model_copy` preserves fields. 498 tests pass.
+- **Account-prefixed MCP tools (PR #52):** Optional `PREFIX_MCP_TOOLS_WITH_USERNAME` prefixes listed MCP tool names per Bearer session (`username_` or `{user_id}_`). `AccountPrefixedToolsMiddleware` + `AccountPrefixCache` (OrderedDict LRU). 498 tests pass.
 
 ### 2026-05-19
 - **0.18.1 / FastMCP 3.3 slim**: Production dependency `fastmcp-slim[server]>=3.3` replaces `fastmcp` metapackage (3.2.4). Lock upgraded with `uv lock --upgrade`. 482 tests pass. GitHub release `0.18.1` published. GHCR compressed image (linux/amd64): ~39.31 MiB → ~39.28 MiB (−40 KB, −0.10%).
