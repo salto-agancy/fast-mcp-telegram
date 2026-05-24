@@ -9,6 +9,7 @@ connect to one server with different Bearer tokens.
 from collections.abc import Sequence
 
 import mcp.types as mt
+from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools.base import Tool, ToolResult
@@ -22,6 +23,8 @@ from src.config.server_config import get_config
 
 # token -> account label (username or str(user id))
 _account_prefix_cache: dict[str, str] = {}
+# tokens where get_me() returned None — skip repeated Telegram lookups
+_unresolved_prefix_tokens: set[str] = set()
 
 
 def _prefixed_tool_name(label: str, internal: str) -> str:
@@ -45,22 +48,28 @@ def _get_cached_account_prefix(token: str) -> str | None:
 
 
 def _cache_account_prefix(token: str, label: str) -> None:
-    max_size = get_config().max_active_sessions
+    max_size = max(1, get_config().max_active_sessions)
+    _unresolved_prefix_tokens.discard(token)
     if token in _account_prefix_cache:
         del _account_prefix_cache[token]
     elif len(_account_prefix_cache) >= max_size:
         oldest = next(iter(_account_prefix_cache))
         del _account_prefix_cache[oldest]
+        _unresolved_prefix_tokens.discard(oldest)
     _account_prefix_cache[token] = label
 
 
 def clear_account_prefix_cache() -> None:
     """Clear the account-prefix cache (for tests)."""
     _account_prefix_cache.clear()
+    _unresolved_prefix_tokens.clear()
 
 
 async def _resolve_account_prefix(session_token: str) -> str | None:
     """Return the tool-name prefix label for *session_token*, fetching and caching it."""
+    if session_token in _unresolved_prefix_tokens:
+        return None
+
     cached = _get_cached_account_prefix(session_token)
     if cached is not None:
         return cached
@@ -71,6 +80,7 @@ async def _resolve_account_prefix(session_token: str) -> str | None:
         client = await get_connected_client()
         me = await client.get_me()
         if me is None:
+            _unresolved_prefix_tokens.add(session_token)
             return None
         username = getattr(me, "username", None)
         label = (username or "").strip() or str(me.id)
@@ -118,12 +128,12 @@ class AccountPrefixedToolsMiddleware(Middleware):
 
         internal_name = _strip_account_prefix(label, context.message.name)
         if internal_name is None:
-            return await call_next(context)
+            raise ToolError(
+                f"Tool name must use account prefix '{label}_' "
+                f"(got {context.message.name!r})"
+            )
 
         modified = context.copy(
-            message=mt.CallToolRequestParams(
-                name=internal_name,
-                arguments=context.message.arguments,
-            )
+            message=context.message.model_copy(update={"name": internal_name})
         )
         return await call_next(modified)

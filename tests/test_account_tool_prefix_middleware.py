@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import mcp.types as mt
 import pytest
+from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import Tool, ToolResult
 
 from src.client.connection import SessionNotAuthorizedError
@@ -93,6 +94,35 @@ class TestResolveAccountPrefix:
             with pytest.raises(SessionNotAuthorizedError):
                 await _resolve_account_prefix("tok123")
 
+    @pytest.mark.asyncio
+    async def test_resolve_skips_api_when_me_none_cached(self):
+        mock_client = AsyncMock()
+        mock_client.get_me.return_value = None
+
+        with patch(
+            "src.server_components.account_tool_prefix_middleware.get_connected_client",
+            return_value=mock_client,
+        ):
+            assert await _resolve_account_prefix("tok123") is None
+            assert await _resolve_account_prefix("tok123") is None
+
+        assert mock_client.get_me.await_count == 1
+
+
+class TestAccountPrefixCacheMaxSize:
+    def test_handles_max_sessions_one(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.server_components.account_tool_prefix_middleware.get_config",
+            lambda: SimpleNamespace(max_active_sessions=1),
+        )
+        _cache_account_prefix("token-a", "alice")
+        _cache_account_prefix("token-b", "bob")
+
+        from src.server_components import account_tool_prefix_middleware as mod
+
+        assert "token-a" not in mod._account_prefix_cache
+        assert mod._account_prefix_cache["token-b"] == "bob"
+
 
 def _sample_tools() -> list[Tool]:
     return [Tool.from_function(lambda: None, name="send_message")]
@@ -173,7 +203,7 @@ class TestAccountPrefixedToolsMiddleware:
         call_next.assert_awaited_once_with(modified_ctx)
 
     @pytest.mark.asyncio
-    async def test_call_tool_wrong_prefix_passes_through(self):
+    async def test_call_tool_wrong_prefix_raises(self):
         middleware = AccountPrefixedToolsMiddleware()
         ctx = _call_context("bob_send_message")
         call_next = AsyncMock(return_value=ToolResult(content=[]))
@@ -190,10 +220,33 @@ class TestAccountPrefixedToolsMiddleware:
                 return_value="alice",
             ),
         ):
-            await middleware.on_call_tool(ctx, call_next)
+            with pytest.raises(ToolError, match="account prefix 'alice_'"):
+                await middleware.on_call_tool(ctx, call_next)
 
-        ctx.copy.assert_not_called()
-        call_next.assert_awaited_once_with(ctx)
+        call_next.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_call_tool_unprefixed_raises(self):
+        middleware = AccountPrefixedToolsMiddleware()
+        ctx = _call_context("send_message")
+        call_next = AsyncMock(return_value=ToolResult(content=[]))
+        token = SimpleNamespace(token="tok123")
+
+        with (
+            patch(
+                "src.server_components.account_tool_prefix_middleware.get_access_token",
+                return_value=token,
+            ),
+            patch(
+                "src.server_components.account_tool_prefix_middleware._resolve_account_prefix",
+                new_callable=AsyncMock,
+                return_value="alice",
+            ),
+        ):
+            with pytest.raises(ToolError, match="account prefix 'alice_'"):
+                await middleware.on_call_tool(ctx, call_next)
+
+        call_next.assert_not_called()
 
 
 class TestRegisterMcpMiddleware:
