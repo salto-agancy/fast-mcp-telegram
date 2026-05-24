@@ -1,7 +1,8 @@
 ## Current Work Focus
 **Shipped (2026-05-24):** Account-prefixed MCP tools — PR #52 merged; release `0.19.0` on GitHub/PyPI; GHCR deploy via push to `master`.
 
-- Opt-in `PREFIX_MCP_TOOLS_WITH_ACCOUNT` only (no legacy env aliases)
+- Opt-in `PREFIX_MCP_TOOLS_WITH_ACCOUNT` for **one agent, multiple MCP connections** (same server, different tokens) — not for standard **multi-user server** (one token per user per connection)
+- Docs clarified: Installation `#http-auth-two-deployment-patterns`, README Features, Tools-Reference, GitHub release + Telegram posts edited (2026-05-24)
 - Middleware: [`account_tool_prefix_middleware.py`](../src/server_components/account_tool_prefix_middleware.py) + [`account_prefix_cache.py`](../src/server_components/account_prefix_cache.py)
 
 ---

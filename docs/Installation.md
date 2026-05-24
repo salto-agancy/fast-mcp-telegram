@@ -129,11 +129,26 @@ See [Web Setup Interface](#web-setup-interface) for detailed instructions.
 
 **Health check:** `curl https://your-domain.com/health`
 
+### HTTP auth: two deployment patterns
+
+Remote `http-auth` supports two different setups. Do not confuse them when reading docs or choosing env vars.
+
+| Pattern | Who | MCP wiring | `PREFIX_MCP_TOOLS_WITH_ACCOUNT` |
+|---------|-----|------------|--------------------------------|
+| **Multi-user server** | Many users on one hosted server | Each user: **one** MCP connection, **one** Bearer token → **one** Telegram account | **Off** (default). Each connection already sees only that account's tools. |
+| **One agent, multiple accounts** | One operator / one agent session | **Several** MCP entries to the **same** server URL, **different** tokens (see [below](#multi-account-mcp-tool-prefix)) | **On** when the client merges tool lists and names collide (`send_message` × N). |
+
+**Multi-user server** is the usual production model: authenticate at [web setup](#web-setup-interface), use your token in a single MCP client entry. **Do not enable** `PREFIX_MCP_TOOLS_WITH_ACCOUNT` for that case.
+
+**One agent, multiple accounts** is for a single agent that must talk to several Telegram identities via one server in one session — enable the prefix only then.
+
 ---
 
-## Multi-account MCP tool prefix
+## One agent, multiple accounts (tool name prefix)
 
-For one AI agent managing **multiple Telegram accounts** on the same server, enable per-session tool name prefixes so each MCP connection exposes distinct tool names (e.g. `alice_send_message` vs `bob_send_message` instead of three identical `send_message` entries).
+This section applies only to **one agent, multiple accounts** (second row above), not to ordinary multi-user hosting.
+
+When one agent's MCP config lists **multiple connections** to the same server URL (each with its own Bearer token from [web setup](#web-setup-interface)), tool names would otherwise be identical across connections (`send_message`, `find_chats`, …). Enable per-session prefixes so each connection exposes distinct names (e.g. `alice_send_message` vs `bob_send_message`).
 
 **Enable in `.env` or docker-compose:**
 
@@ -143,11 +158,12 @@ PREFIX_MCP_TOOLS_WITH_ACCOUNT=true
 
 **How it works:**
 
-1. Add **separate MCP client connections** to the same server URL — one per Telegram account, each with its own Bearer token from [web setup](#web-setup-interface).
-2. On `tools/list`, the server prefixes each tool name with that session's account label.
+1. In **one agent's** MCP config, add multiple server entries pointing at the same URL — one entry per Telegram account, each with its own Bearer token.
+2. On `tools/list`, the server prefixes each tool name with that connection's account label.
 3. Prefix label: Telegram **@username** when set, otherwise **numeric user ID** (e.g. `123456789_send_message`). Setting a @username is recommended for readable tool names in the agent.
+4. On `call_tool`, use the prefixed name that matches the connection's token.
 
-**Trade-off:** The agent sees `N × num_tools` entries (typically manageable for 2–3 accounts). Default is off — single-account deployments are unchanged.
+**Trade-off:** The agent may see `N × num_tools` entries (typically manageable for 2–3 accounts). Default is off — single-connection and multi-user-server deployments are unchanged.
 
 ---
 
