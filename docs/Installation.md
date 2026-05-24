@@ -138,14 +138,16 @@ For one AI agent managing **multiple Telegram accounts** on the same server, ena
 **Enable in `.env` or docker-compose:**
 
 ```bash
-PREFIX_MCP_TOOLS_WITH_USERNAME=true
+PREFIX_MCP_TOOLS_WITH_ACCOUNT=true
 ```
+
+(`PREFIX_MCP_TOOLS_WITH_USERNAME` is accepted as an alias for the same setting.)
 
 **How it works:**
 
 1. Add **separate MCP client connections** to the same server URL — one per Telegram account, each with its own Bearer token from [web setup](#web-setup-interface).
 2. On `tools/list`, the server prefixes each tool name with that session's account label.
-3. Prefix label: Telegram **@username** when set, otherwise **numeric user id** (e.g. `123456789_send_message`). Setting a @username is recommended for readable tool names in the agent.
+3. Prefix label: Telegram **@username** when set, otherwise **numeric user ID** (e.g. `123456789_send_message`). Setting a @username is recommended for readable tool names in the agent.
 
 **Trade-off:** The agent sees `N × num_tools` entries (typically manageable for 2–3 accounts). Default is off — single-account deployments are unchanged.
 

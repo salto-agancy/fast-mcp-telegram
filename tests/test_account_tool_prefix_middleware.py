@@ -110,6 +110,30 @@ class TestResolveAccountPrefix:
 
         assert mock_client.get_me.await_count == 1
 
+    @pytest.mark.asyncio
+    async def test_resolve_retries_after_unresolved_ttl(self, monkeypatch):
+        import time
+
+        monkeypatch.setattr(
+            "src.server_components.account_prefix_cache._UNRESOLVED_TTL_SECONDS",
+            0.01,
+        )
+        mock_client = AsyncMock()
+        mock_client.get_me.side_effect = [
+            None,
+            SimpleNamespace(username="alice", id=1),
+        ]
+
+        with patch(
+            "src.server_components.account_tool_prefix_middleware.get_connected_client",
+            return_value=mock_client,
+        ):
+            assert await _resolve_account_prefix("tok123") is None
+            time.sleep(0.02)
+            assert await _resolve_account_prefix("tok123") == "alice"
+
+        assert mock_client.get_me.await_count == 2
+
 
 class TestAccountPrefixCacheMaxSize:
     def test_handles_max_sessions_one(self, monkeypatch):
@@ -255,7 +279,7 @@ class TestRegisterMcpMiddleware:
         config = ServerConfig(
             _cli_parse_args=[],
             server_mode=ServerMode.HTTP_AUTH,
-            prefix_mcp_tools_with_username=False,
+            prefix_mcp_tools_with_account=False,
         )
         register_mcp_middleware(mcp, config)
         mcp.add_middleware.assert_not_called()
@@ -265,7 +289,7 @@ class TestRegisterMcpMiddleware:
         config = ServerConfig(
             _cli_parse_args=[],
             server_mode=ServerMode.HTTP_AUTH,
-            prefix_mcp_tools_with_username=True,
+            prefix_mcp_tools_with_account=True,
         )
         register_mcp_middleware(mcp, config)
         mcp.add_middleware.assert_called_once()
@@ -276,6 +300,11 @@ class TestRegisterMcpMiddleware:
 
 class TestPrefixConfigParsing:
     def test_env_flag_parses_true(self, monkeypatch):
+        monkeypatch.setenv("PREFIX_MCP_TOOLS_WITH_ACCOUNT", "true")
+        config = ServerConfig(_cli_parse_args=[])
+        assert config.prefix_mcp_tools_with_account is True
+
+    def test_legacy_username_env_alias(self, monkeypatch):
         monkeypatch.setenv("PREFIX_MCP_TOOLS_WITH_USERNAME", "true")
         config = ServerConfig(_cli_parse_args=[])
-        assert config.prefix_mcp_tools_with_username is True
+        assert config.prefix_mcp_tools_with_account is True

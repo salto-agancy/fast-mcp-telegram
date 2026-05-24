@@ -10,5 +10,5 @@ from src.server_components.account_tool_prefix_middleware import (
 
 def register_mcp_middleware(mcp: FastMCP, config: ServerConfig) -> None:
     """Attach optional FastMCP middleware when enabled in config."""
-    if config.prefix_mcp_tools_with_username:
+    if config.prefix_mcp_tools_with_account:
         mcp.add_middleware(AccountPrefixedToolsMiddleware())

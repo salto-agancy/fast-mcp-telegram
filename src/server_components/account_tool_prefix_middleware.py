@@ -40,7 +40,7 @@ def _strip_account_prefix(label: str, external: str) -> str | None:
 
 
 @contextmanager
-def _session_request_token(session_token: str) -> Generator[None]:
+def _session_request_token(session_token: str) -> Generator[None, None, None]:
     saved = get_request_token()
     set_request_token(session_token)
     try:

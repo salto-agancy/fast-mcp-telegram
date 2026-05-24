@@ -178,15 +178,17 @@ class ServerConfig(BaseSettings):
         default=True, description="Block access to private IP ranges"
     )
 
-    prefix_mcp_tools_with_username: bool = Field(
+    prefix_mcp_tools_with_account: bool = Field(
         default=False,
         validation_alias=AliasChoices(
+            "prefix_mcp_tools_with_account",
+            "PREFIX_MCP_TOOLS_WITH_ACCOUNT",
             "prefix_mcp_tools_with_username",
             "PREFIX_MCP_TOOLS_WITH_USERNAME",
         ),
         description=(
             "Prefix MCP tool names per Bearer session with Telegram username "
-            "or numeric user id (multi-account agents)"
+            "or numeric user ID (multi-account agents)"
         ),
     )
 
@@ -302,7 +304,7 @@ class ServerConfig(BaseSettings):
         if self.mtproto_proxy:
             logger.info("🔌 MTProto proxy: enabled")
 
-        if self.prefix_mcp_tools_with_username:
+        if self.prefix_mcp_tools_with_account:
             logger.info("🏷️ Account-prefixed MCP tool names enabled")
 
         # Mark as logged to prevent repeated messages
