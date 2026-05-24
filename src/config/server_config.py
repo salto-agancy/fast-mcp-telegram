@@ -183,8 +183,6 @@ class ServerConfig(BaseSettings):
         validation_alias=AliasChoices(
             "prefix_mcp_tools_with_account",
             "PREFIX_MCP_TOOLS_WITH_ACCOUNT",
-            "prefix_mcp_tools_with_username",
-            "PREFIX_MCP_TOOLS_WITH_USERNAME",
         ),
         description=(
             "Prefix MCP tool names per Bearer session with Telegram username "

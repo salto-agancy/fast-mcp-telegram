@@ -1,7 +1,7 @@
 ## Current Work Focus
 **Completed (2026-05-24):** Account-prefixed MCP tools (PR #52)
 
-- Opt-in `PREFIX_MCP_TOOLS_WITH_USERNAME`; `register_mcp_middleware()` in [`middleware_register.py`](../src/server_components/middleware_register.py)
+- Opt-in `PREFIX_MCP_TOOLS_WITH_ACCOUNT`; `register_mcp_middleware()` in [`middleware_register.py`](../src/server_components/middleware_register.py)
 - [`account_tool_prefix_middleware.py`](../src/server_components/account_tool_prefix_middleware.py): prefix `@username` or numeric user id; LRU cache; no exception swallowing
 - Tests: [`tests/test_account_tool_prefix_middleware.py`](../../tests/test_account_tool_prefix_middleware.py); docs: Installation `#multi-account-mcp-tool-prefix`, README Features row
 

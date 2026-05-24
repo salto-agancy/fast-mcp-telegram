@@ -99,7 +99,7 @@ Summary:
 
 ### Tool Execution Flow
 1. MCP tool request received
-2. Optional `AccountPrefixedToolsMiddleware` strips account prefix from tool name when `PREFIX_MCP_TOOLS_WITH_USERNAME` is enabled
+2. Optional `AccountPrefixedToolsMiddleware` strips account prefix from tool name when `PREFIX_MCP_TOOLS_WITH_ACCOUNT` is enabled
 3. Parameters validated against type hints
 3. `@mcp_tool_with_restrictions` (containing `@with_error_handling`) wraps execution
 4. Tool implementation calls Telegram API

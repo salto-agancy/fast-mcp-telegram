@@ -141,8 +141,6 @@ For one AI agent managing **multiple Telegram accounts** on the same server, ena
 PREFIX_MCP_TOOLS_WITH_ACCOUNT=true
 ```
 
-(`PREFIX_MCP_TOOLS_WITH_USERNAME` is accepted as an alias for the same setting.)
-
 **How it works:**
 
 1. Add **separate MCP client connections** to the same server URL — one per Telegram account, each with its own Bearer token from [web setup](#web-setup-interface).

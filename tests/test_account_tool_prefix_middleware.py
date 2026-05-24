@@ -32,9 +32,9 @@ def _clear_prefix_cache():
 
 class TestPrefixHelpers:
     def test_round_trip(self):
-        assert _strip_account_prefix("alice", _prefixed_tool_name("alice", "send_message")) == (
-            "send_message"
-        )
+        assert _strip_account_prefix(
+            "alice", _prefixed_tool_name("alice", "send_message")
+        ) == ("send_message")
 
     def test_wrong_prefix_returns_none(self):
         assert _strip_account_prefix("alice", "bob_send_message") is None
@@ -301,10 +301,5 @@ class TestRegisterMcpMiddleware:
 class TestPrefixConfigParsing:
     def test_env_flag_parses_true(self, monkeypatch):
         monkeypatch.setenv("PREFIX_MCP_TOOLS_WITH_ACCOUNT", "true")
-        config = ServerConfig(_cli_parse_args=[])
-        assert config.prefix_mcp_tools_with_account is True
-
-    def test_legacy_username_env_alias(self, monkeypatch):
-        monkeypatch.setenv("PREFIX_MCP_TOOLS_WITH_USERNAME", "true")
         config = ServerConfig(_cli_parse_args=[])
         assert config.prefix_mcp_tools_with_account is True
