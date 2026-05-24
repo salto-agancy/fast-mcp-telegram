@@ -1,5 +1,5 @@
 ### 2026-05-24
-- **Account-prefixed MCP tools (PR #52):** Optional `PREFIX_MCP_TOOLS_WITH_ACCOUNT` prefixes listed MCP tool names per Bearer session (`username_` or `{user_id}_`). `AccountPrefixedToolsMiddleware` + `AccountPrefixCache` (OrderedDict LRU). 500 tests pass.
+- **0.19.0 — account-prefixed MCP tools:** PR #52 merged. Optional `PREFIX_MCP_TOOLS_WITH_ACCOUNT` prefixes tools per Bearer session (`username_` or `{user_id}_`). GitHub release `0.19.0`; PyPI publish on release; GHCR rebuild on `master` push. 499 tests pass on `master`.
 
 ### 2026-05-19
 - **0.18.1 / FastMCP 3.3 slim**: Production dependency `fastmcp-slim[server]>=3.3` replaces `fastmcp` metapackage (3.2.4). Lock upgraded with `uv lock --upgrade`. 482 tests pass. GitHub release `0.18.1` published. GHCR compressed image (linux/amd64): ~39.31 MiB → ~39.28 MiB (−40 KB, −0.10%).

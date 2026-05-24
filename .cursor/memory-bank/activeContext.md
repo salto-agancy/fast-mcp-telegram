@@ -1,9 +1,8 @@
 ## Current Work Focus
-**Completed (2026-05-24):** Account-prefixed MCP tools (PR #52)
+**Shipped (2026-05-24):** Account-prefixed MCP tools — PR #52 merged; release `0.19.0` on GitHub/PyPI; GHCR deploy via push to `master`.
 
-- Opt-in `PREFIX_MCP_TOOLS_WITH_ACCOUNT`; `register_mcp_middleware()` in [`middleware_register.py`](../src/server_components/middleware_register.py)
-- [`account_tool_prefix_middleware.py`](../src/server_components/account_tool_prefix_middleware.py): prefix `@username` or numeric user id; LRU cache; no exception swallowing
-- Tests: [`tests/test_account_tool_prefix_middleware.py`](../../tests/test_account_tool_prefix_middleware.py); docs: Installation `#multi-account-mcp-tool-prefix`, README Features row
+- Opt-in `PREFIX_MCP_TOOLS_WITH_ACCOUNT` only (no legacy env aliases)
+- Middleware: [`account_tool_prefix_middleware.py`](../src/server_components/account_tool_prefix_middleware.py) + [`account_prefix_cache.py`](../src/server_components/account_prefix_cache.py)
 
 ---
 
