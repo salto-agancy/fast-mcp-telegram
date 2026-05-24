@@ -22,8 +22,8 @@ from src.server_components.attachment_routes import register_attachment_routes
 from src.server_components.auth_middleware import UrlTokenMiddleware
 from src.server_components.health import register_health_routes
 from src.server_components.mtproto_api import register_mtproto_api_routes
+from src.server_components.middleware_register import register_mcp_middleware
 from src.server_components.tools_register import register_tools
-from src.server_components.username_middleware import UsernameToolMiddleware
 from src.server_components.web_setup import register_web_setup_routes
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ register_web_setup_routes(mcp)
 register_mtproto_api_routes(mcp)
 register_attachment_routes(mcp)
 register_tools(mcp)
-mcp.add_middleware(UsernameToolMiddleware())
+register_mcp_middleware(mcp, config)
 
 
 def main():

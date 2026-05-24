@@ -131,6 +131,26 @@ See [Web Setup Interface](#web-setup-interface) for detailed instructions.
 
 ---
 
+## Multi-account MCP tool prefix
+
+For one AI agent managing **multiple Telegram accounts** on the same server, enable per-session tool name prefixes so each MCP connection exposes distinct tool names (e.g. `alice_send_message` vs `bob_send_message` instead of three identical `send_message` entries).
+
+**Enable in `.env` or docker-compose:**
+
+```bash
+PREFIX_MCP_TOOLS_WITH_USERNAME=true
+```
+
+**How it works:**
+
+1. Add **separate MCP client connections** to the same server URL — one per Telegram account, each with its own Bearer token from [web setup](#web-setup-interface).
+2. On `tools/list`, the server prefixes each tool name with that session's account label.
+3. Prefix label: Telegram **@username** when set, otherwise **numeric user id** (e.g. `123456789_send_message`). Setting a @username is recommended for readable tool names in the agent.
+
+**Trade-off:** The agent sees `N × num_tools` entries (typically manageable for 2–3 accounts). Default is off — single-account deployments are unchanged.
+
+---
+
 ## Web Setup Interface
 
 The web setup interface manages Telegram sessions directly from your browser. Access it at `https://your-domain.com/setup` when running in `http-auth` mode.

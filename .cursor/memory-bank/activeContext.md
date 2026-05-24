@@ -1,9 +1,9 @@
 ## Current Work Focus
-**Completed (2026-05-18):** Forum in-topic replies (#49) — shipped and documented
+**Completed (2026-05-24):** Account-prefixed MCP tools (PR #52)
 
-- **Design doc:** [forum-in-topic-replies.md](forum-in-topic-replies.md) — routing, offset jump, stubs, `thread_scope` vs whole topic
-- **User docs:** `docs/Tools-Reference.md` — table for `thread_scope`, in-topic vs topic id, examples (`13204` / `12799`)
-- **Code:** [`src/tools/search/`](src/tools/search/) (`core.py`, `replies.py`, `forum_replies.py`, `search_mode.py`); tests: [`tests/test_thread_scope_replies_fetch.py`](tests/test_thread_scope_replies_fetch.py)
+- Opt-in `PREFIX_MCP_TOOLS_WITH_USERNAME`; `register_mcp_middleware()` in [`middleware_register.py`](../src/server_components/middleware_register.py)
+- [`account_tool_prefix_middleware.py`](../src/server_components/account_tool_prefix_middleware.py): prefix `@username` or numeric user id; LRU cache; no exception swallowing
+- Tests: [`tests/test_account_tool_prefix_middleware.py`](../../tests/test_account_tool_prefix_middleware.py); docs: Installation `#multi-account-mcp-tool-prefix`, README Features row
 
 ---
 
