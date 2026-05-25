@@ -28,7 +28,7 @@ from src.server_components.auth import (
 )
 from src.server_components.session_token_validation import (
     InvalidSessionTokenError,
-    validate_session_token as validate_session_token_strict,
+    validate_session_token,
 )
 from tests.conftest import VALID_TEST_BEARER_TOKEN, make_access_token
 
@@ -628,7 +628,7 @@ class TestErrorHandling:
 
     def test_validate_session_token_raises_on_invalid(self):
         with pytest.raises(InvalidSessionTokenError):
-            validate_session_token_strict("not-a-valid-token")
+            validate_session_token("not-a-valid-token")
 
     def test_extract_bearer_token_from_request_reserved_names_rejected(
         self, http_auth_config

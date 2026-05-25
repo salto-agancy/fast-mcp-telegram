@@ -126,6 +126,29 @@ async def test_setup_reauthorize_phone_invalid_setup_returns_token_form(
 
 
 @pytest.mark.asyncio
+async def test_setup_delete_session_path_os_error_returns_access_message(
+    monkeypatch, setup_routes, tmp_path
+):
+    web_setup._setup_sessions.clear()
+    cfg = ServerConfig()
+    cfg.session_dir = str(tmp_path)
+    set_config(cfg)
+
+    def _raise_os_error(_session_dir, _raw_token):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(web_setup, "_bearer_token_and_session_path", _raise_os_error)
+
+    _patch_template_response(monkeypatch)
+
+    handler = setup_routes[("/setup/delete", ("POST",))]
+    response = await handler(_FakeRequest({"token": VALID_TEST_BEARER_TOKEN}))
+
+    assert response.template == "fragments/delete_session_form.html"
+    assert web_setup.SESSION_PATH_ACCESS_ERROR_MESSAGE in response.context["error"]
+
+
+@pytest.mark.asyncio
 async def test_setup_delete_rejects_path_traversal_token(
     monkeypatch, setup_routes, tmp_path
 ):

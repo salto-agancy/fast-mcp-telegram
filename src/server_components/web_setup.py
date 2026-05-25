@@ -22,7 +22,6 @@ from src.server_components.session_token_validation import (
     InvalidSessionTokenError,
     session_file_path,
     validate_session_token,
-    validated_session_file_path,
 )
 from src.server_components.auth_middleware import generate_url_based_config
 from src.utils.mcp_config import generate_mcp_config_json
@@ -64,6 +63,9 @@ BEARER_TOKEN_REQUIRED_MESSAGE = "Bearer token is required."
 INVALID_TOKEN_MESSAGE = "Invalid token."
 INVALID_BEARER_TOKEN_FORMAT_MESSAGE = (
     "Invalid bearer token. Use the token from setup or a URL-safe token from the CLI."
+)
+SESSION_PATH_ACCESS_ERROR_MESSAGE = (
+    "Unable to access the session directory. Please contact the administrator."
 )
 SESSION_NOT_FOUND_MESSAGE = "Session not found. Please check your bearer token."
 REAUTH_COMPLETE_FAILED_MESSAGE = (
@@ -131,6 +133,26 @@ def _fragment(request: Request, template: str, context: dict[str, Any] | None = 
 def _setup_error_fragment(request: Request, error: str):
     """Return HTML error fragment for setup flow."""
     return _fragment(request, "fragments/error.html", {"error": error})
+
+
+def _bearer_token_and_session_path(session_dir: Path, raw_token: str) -> tuple[str, Path]:
+    """Validate bearer token and return confined session file path."""
+    token = validate_session_token(raw_token)
+    return token, session_file_path(session_dir, token)
+
+
+def _setup_token_path_error_fragment(
+    request: Request,
+    template: str,
+    exc: BaseException,
+) -> Any:
+    """Map token/path resolution errors to setup HTML fragments."""
+    if isinstance(exc, InvalidSessionTokenError):
+        return _fragment(request, template, {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE})
+    if isinstance(exc, OSError):
+        logger.warning("Session path access failed: %s", exc)
+        return _fragment(request, template, {"error": SESSION_PATH_ACCESS_ERROR_MESSAGE})
+    raise exc
 
 
 def _2fa_form_context(
@@ -271,13 +293,14 @@ async def setup_generate(request: Request):
 
     try:
         if desired_token:
-            token = validate_session_token(str(desired_token))
-            dst = session_file_path(session_dir, token)
+            token, dst = _bearer_token_and_session_path(session_dir, str(desired_token))
         else:
             token = generate_bearer_token()
             dst = session_file_path(session_dir, token)
-    except InvalidSessionTokenError:
-        return _setup_error_fragment(request, INVALID_BEARER_TOKEN_FORMAT_MESSAGE)
+    except (InvalidSessionTokenError, OSError) as e:
+        return _setup_token_path_error_fragment(
+            request, "fragments/error.html", e
+        )
 
     # Check if session already exists (only when using desired token)
     if desired_token and dst.exists():
@@ -496,14 +519,12 @@ def register_web_setup_routes(mcp_app):
             )
 
         try:
-            session_path = validated_session_file_path(
+            _, session_path = _bearer_token_and_session_path(
                 get_config().session_directory, existing_token
             )
-        except InvalidSessionTokenError:
-            return _fragment(
-                request,
-                "fragments/reauthorize_token_form.html",
-                {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
+        except (InvalidSessionTokenError, OSError) as e:
+            return _setup_token_path_error_fragment(
+                request, "fragments/reauthorize_token_form.html", e
             )
         if not session_path.exists():
             return _fragment(
@@ -642,15 +663,12 @@ def register_web_setup_routes(mcp_app):
             )
 
         try:
-            token = validate_session_token(token)
-            session_path = session_file_path(
+            token, session_path = _bearer_token_and_session_path(
                 get_config().session_directory, token
             )
-        except InvalidSessionTokenError:
-            return _fragment(
-                request,
-                "fragments/delete_session_form.html",
-                {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
+        except (InvalidSessionTokenError, OSError) as e:
+            return _setup_token_path_error_fragment(
+                request, "fragments/delete_session_form.html", e
             )
         if not session_path.exists():
             return _fragment(
