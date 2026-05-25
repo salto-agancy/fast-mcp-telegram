@@ -7,6 +7,7 @@ from src.client.connection import set_request_token
 from src.config.server_config import get_config
 from src.server_components.session_token_validation import (
     RESERVED_SESSION_NAMES,
+    InvalidSessionTokenError,
     validate_session_token,
 )
 
@@ -34,7 +35,10 @@ def _extract_bearer_token_from_headers(headers: dict[str, str]) -> str | None:
     if not token:
         return None
 
-    return validate_session_token(token)
+    try:
+        return validate_session_token(token)
+    except InvalidSessionTokenError:
+        return None
 
 
 def extract_bearer_token() -> str | None:

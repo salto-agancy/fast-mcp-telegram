@@ -28,7 +28,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from src.server_components.session_token_validation import validate_session_token
+from src.server_components.session_token_validation import (
+    InvalidSessionTokenError,
+    validate_session_token,
+)
 
 if TYPE_CHECKING:
     from src.config.server_config import ServerConfig
@@ -85,8 +88,9 @@ class UrlTokenMiddleware(BaseHTTPMiddleware):
 
         token = match.group(1)
 
-        validated = validate_session_token(token)
-        if validated is None:
+        try:
+            token = validate_session_token(token)
+        except InvalidSessionTokenError:
             logger.warning("Rejected invalid bearer token from URL path")
             return JSONResponse(
                 {
@@ -94,7 +98,6 @@ class UrlTokenMiddleware(BaseHTTPMiddleware):
                 },
                 status_code=401,
             )
-        token = validated
 
         # Rewrite path: /v1/url_auth/{token}/mcp/{method} -> /v1/mcp/{method}
         # This makes FastMCP receive the request at its normal mount point

@@ -26,6 +26,10 @@ from src.server_components.auth import (
     extract_bearer_token_from_request,
     with_auth_context,
 )
+from src.server_components.session_token_validation import (
+    InvalidSessionTokenError,
+    validate_session_token,
+)
 from tests.conftest import VALID_TEST_BEARER_TOKEN, make_access_token
 
 
@@ -621,6 +625,10 @@ class TestErrorHandling:
                 return_value=mock_headers,
             ):
                 assert extract_bearer_token() is None
+
+    def test_validate_session_token_raises_on_invalid(self):
+        with pytest.raises(InvalidSessionTokenError):
+            validate_session_token("not-a-valid-token")
 
     def test_extract_bearer_token_from_request_reserved_names_rejected(
         self, http_auth_config

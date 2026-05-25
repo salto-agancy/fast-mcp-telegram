@@ -16,7 +16,7 @@ from ..config.server_config import PROJECT_ROOT, get_config
 from ..config.settings import SESSION_DIR
 from ..server_components.session_token_validation import (
     InvalidSessionTokenError,
-    session_file_path,
+    validated_session_file_path,
 )
 from ..utils.proxy import build_mtproto_client_args
 
@@ -293,7 +293,7 @@ async def _get_client_by_token(token: str) -> TelegramClient:
             return client
 
         try:
-            session_path = session_file_path(SESSION_DIR, token)
+            session_path = validated_session_file_path(SESSION_DIR, token)
         except InvalidSessionTokenError as e:
             raise SessionNotAuthorizedError("Invalid bearer token") from e
 
@@ -403,7 +403,7 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
             )
             # Remove session file immediately to prevent loop
             try:
-                session_path = session_file_path(SESSION_DIR, token)
+                session_path = validated_session_file_path(SESSION_DIR, token)
             except InvalidSessionTokenError:
                 session_path = None
             if session_path is not None and session_path.exists():
@@ -493,7 +493,7 @@ async def cleanup_failed_sessions():
 
             # Remove session file
             try:
-                session_path = session_file_path(SESSION_DIR, token)
+                session_path = validated_session_file_path(SESSION_DIR, token)
             except InvalidSessionTokenError:
                 continue
             if session_path.exists():
