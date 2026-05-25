@@ -105,7 +105,9 @@ class TestFastMCPDecoratorOrder:
         """Test that extract_bearer_token works in FastMCP HTTP context."""
 
         with patch("fastmcp.server.dependencies.get_http_headers") as mock_headers:
-            test_token = "ExtractTestToken123"
+            from tests.conftest import VALID_TEST_BEARER_TOKEN
+
+            test_token = VALID_TEST_BEARER_TOKEN
             mock_headers.return_value = {"authorization": f"Bearer {test_token}"}
 
             # Test extract_bearer_token directly
@@ -325,7 +327,9 @@ class TestRealIssueVerification:
         """Test that token extraction and context setting work correctly."""
 
         with patch("fastmcp.server.dependencies.get_http_headers") as mock_headers:
-            test_token = "ContextTestToken123"
+            from tests.conftest import VALID_TEST_BEARER_TOKEN
+
+            test_token = VALID_TEST_BEARER_TOKEN
             mock_headers.return_value = {"authorization": f"Bearer {test_token}"}
 
             # Test token extraction

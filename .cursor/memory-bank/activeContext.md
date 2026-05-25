@@ -1,4 +1,8 @@
 ## Current Work Focus
+**In progress (2026-05-25):** GHSA path traversal fix (Option A) — strict bearer token format + `session_file_path` containment in [`session_token_validation.py`](../src/server_components/session_token_validation.py); patch `0.19.1`.
+
+---
+
 **Shipped (2026-05-24):** Account-prefixed MCP tools — PR #52 merged; release `0.19.0` on GitHub/PyPI; GHCR deploy via push to `master`.
 
 - Opt-in `PREFIX_MCP_TOOLS_WITH_ACCOUNT` for **one agent, multiple MCP connections** (same server, different tokens) — not for standard **multi-user server** (one token per user per connection)

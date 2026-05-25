@@ -1,3 +1,6 @@
+### 2026-05-25
+- **0.19.1 — bearer token path traversal fix:** Reject non–URL-safe bearer tokens; resolve session files under `session_directory` only (`session_token_validation.py`). Wired through auth, verifier, connection, web setup delete/reauth, URL auth middleware. `SECURITY.md` updated. Tests: `test_session_token_path_security.py`, web setup traversal case.
+
 ### 2026-05-24
 - **0.19.0 — account-prefixed MCP tools:** PR #52 merged. Optional `PREFIX_MCP_TOOLS_WITH_ACCOUNT` prefixes tools per Bearer session (`username_` or `{user_id}_`). GitHub release `0.19.0`; PyPI publish on release; GHCR rebuild on `master` push. 499 tests pass on `master`.
 

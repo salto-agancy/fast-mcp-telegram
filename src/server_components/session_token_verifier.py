@@ -11,7 +11,10 @@ from typing import TYPE_CHECKING
 
 from fastmcp.server.auth import AccessToken, TokenVerifier
 
-from src.server_components.auth import RESERVED_SESSION_NAMES
+from src.server_components.session_token_validation import (
+    session_file_path,
+    validate_session_token,
+)
 
 if TYPE_CHECKING:
     from src.config.server_config import ServerConfig
@@ -59,19 +62,20 @@ class SessionFileTokenVerifier(TokenVerifier):
 
         token = token.strip()
 
-        if token.lower() in RESERVED_SESSION_NAMES:
-            logger.warning(
-                "Rejected reserved session name '%s' as bearer token",
-                token,
-            )
+        validated = validate_session_token(token)
+        if validated is None:
             return None
 
-        session_path = self._session_directory / f"{token}.session"
+        try:
+            session_path = session_file_path(self._session_directory, validated)
+        except Exception:
+            return None
+
         if not session_path.is_file():
             return None
 
         return AccessToken(
-            token=token,
+            token=validated,
             client_id="telegram-session",
             scopes=[],
             expires_at=None,

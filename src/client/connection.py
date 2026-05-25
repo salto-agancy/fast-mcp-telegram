@@ -14,6 +14,10 @@ from telethon.tl import functions
 from ..config.logging import format_diagnostic_info
 from ..config.server_config import PROJECT_ROOT, get_config
 from ..config.settings import SESSION_DIR
+from ..server_components.session_token_validation import (
+    InvalidSessionTokenError,
+    session_file_path,
+)
 from ..utils.proxy import build_mtproto_client_args
 
 logger = logging.getLogger(__name__)
@@ -288,7 +292,11 @@ async def _get_client_by_token(token: str) -> TelegramClient:
             _session_cache[token] = (client, current_time)
             return client
 
-        session_path = SESSION_DIR / f"{token}.session"
+        try:
+            session_path = session_file_path(SESSION_DIR, token)
+        except InvalidSessionTokenError as e:
+            raise SessionNotAuthorizedError("Invalid bearer token") from e
+
         try:
             client = await _build_telegram_client_for_token(session_path, token)
             await _evict_lru_if_session_cache_full()
@@ -394,8 +402,11 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
                 f"Fatal session error for token {token[:8]}...: {e}. Removing session and stopping retries."
             )
             # Remove session file immediately to prevent loop
-            session_path = SESSION_DIR / f"{token}.session"
-            if session_path.exists():
+            try:
+                session_path = session_file_path(SESSION_DIR, token)
+            except InvalidSessionTokenError:
+                session_path = None
+            if session_path is not None and session_path.exists():
                 try:
                     session_path.unlink()
                     logger.info(f"Removed fatal session file for token {token[:8]}...")
@@ -481,7 +492,10 @@ async def cleanup_failed_sessions():
                     )
 
             # Remove session file
-            session_path = SESSION_DIR / f"{token}.session"
+            try:
+                session_path = session_file_path(SESSION_DIR, token)
+            except InvalidSessionTokenError:
+                continue
             if session_path.exists():
                 try:
                     session_path.unlink()

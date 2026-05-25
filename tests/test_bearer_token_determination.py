@@ -26,7 +26,7 @@ from src.server_components.auth import (
     extract_bearer_token_from_request,
     with_auth_context,
 )
-from tests.conftest import make_access_token
+from tests.conftest import VALID_TEST_BEARER_TOKEN, make_access_token
 
 
 class TestBearerTokenExtraction:
@@ -35,7 +35,7 @@ class TestBearerTokenExtraction:
     def test_extract_bearer_token_http_mode_valid_token(self, http_auth_config):
         """Test extracting a valid bearer token in HTTP mode."""
         # Mock HTTP headers with valid bearer token
-        mock_headers = {"authorization": "Bearer AbCdEfGh123456789KLmnOpQr"}
+        mock_headers = {"authorization": f"Bearer {VALID_TEST_BEARER_TOKEN}"}
 
         with patch(
             "fastmcp.server.dependencies.get_http_headers",
@@ -43,17 +43,17 @@ class TestBearerTokenExtraction:
         ):
             token = extract_bearer_token()
 
-            assert token == "AbCdEfGh123456789KLmnOpQr"
+            assert token == VALID_TEST_BEARER_TOKEN
 
     def test_extract_bearer_token_http_mode_invalid_format(self, http_auth_config):
         """Test extracting token with invalid authorization header format."""
         # Test various invalid formats
         invalid_headers = [
-            {"authorization": "Basic AbCdEfGh123456789KLmnOpQr"},  # Wrong scheme
+            {"authorization": f"Basic {VALID_TEST_BEARER_TOKEN}"},  # Wrong scheme
             {"authorization": "Bearer"},  # No token
             {"authorization": "Bearer "},  # Empty token
-            {"authorization": "bearer AbCdEfGh123456789KLmnOpQr"},  # Wrong case
-            {"authorization": "AbCdEfGh123456789KLmnOpQr"},  # No Bearer prefix
+            {"authorization": f"bearer {VALID_TEST_BEARER_TOKEN}"},  # Wrong case
+            {"authorization": VALID_TEST_BEARER_TOKEN},  # No Bearer prefix
         ]
 
         for headers in invalid_headers:
@@ -90,18 +90,9 @@ class TestBearerTokenExtraction:
     def test_extract_bearer_token_http_mode_whitespace_handling(self, http_auth_config):
         """Test that token extraction handles whitespace correctly."""
         test_cases = [
-            (
-                "Bearer AbCdEfGh123456789KLmnOpQr  ",
-                "AbCdEfGh123456789KLmnOpQr",
-            ),  # Extra spaces after token
-            (
-                "Bearer AbCdEfGh123456789KLmnOpQr\t",
-                "AbCdEfGh123456789KLmnOpQr",
-            ),  # Tabs after token
-            (
-                "Bearer AbCdEfGh123456789KLmnOpQr\n",
-                "AbCdEfGh123456789KLmnOpQr",
-            ),  # Newlines after token
+            (f"Bearer {VALID_TEST_BEARER_TOKEN}  ", VALID_TEST_BEARER_TOKEN),
+            (f"Bearer {VALID_TEST_BEARER_TOKEN}\t", VALID_TEST_BEARER_TOKEN),
+            (f"Bearer {VALID_TEST_BEARER_TOKEN}\n", VALID_TEST_BEARER_TOKEN),
         ]
 
         for auth_header, expected_token in test_cases:
@@ -406,7 +397,7 @@ class TestBearerTokenIntegration:
 
         with patch(
             "fastmcp.server.dependencies.get_access_token",
-            return_value=make_access_token("AbCdEfGh123456789KLmnOpQr"),
+            return_value=make_access_token(VALID_TEST_BEARER_TOKEN),
         ):
             decorated_func = with_auth_context(async_success_func)
             result = asyncio.run(decorated_func())
@@ -472,7 +463,7 @@ class TestBearerTokenIntegration:
         """Test that valid tokens with surrounding whitespace are properly trimmed."""
         with patch(
             "fastmcp.server.dependencies.get_access_token",
-            return_value=make_access_token("AbCdEfGh123456789KLmnOpQr"),
+            return_value=make_access_token(VALID_TEST_BEARER_TOKEN),
         ):
             decorated_func = with_auth_context(async_success_func)
             result = asyncio.run(decorated_func())
@@ -562,7 +553,9 @@ class TestErrorHandling:
                     "fastmcp.server.dependencies.get_http_headers",
                     return_value=mock_headers,
                 ),
-                patch("src.server_components.auth.logger") as mock_logger,
+                patch(
+                    "src.server_components.session_token_validation.logger"
+                ) as mock_logger,
             ):
                 token = extract_bearer_token()
 
@@ -570,10 +563,7 @@ class TestErrorHandling:
                     f"Reserved name '{reserved_name}' should be rejected"
                 )
                 mock_logger.warning.assert_called_once()
-                # Check that the warning mentions the rejected token and lists reserved names
-                warning_call = mock_logger.warning.call_args[0][0]
-                assert reserved_name in warning_call
-                assert "Reserved names:" in warning_call
+                assert reserved_name in str(mock_logger.warning.call_args)
 
                 mock_logger.reset_mock()
 
@@ -609,16 +599,9 @@ class TestErrorHandling:
                     f"Mixed case reserved name '{mixed_name}' should be rejected"
                 )
 
-    def test_extract_bearer_token_non_reserved_names_allowed(self, http_auth_config):
-        """Test that non-reserved names are still allowed as bearer tokens."""
-        valid_tokens = [
-            "AbCdEfGh123456789KLmnOpQr",  # Random token
-            "my-custom-session",  # Custom name
-            "user123",  # Another custom name
-            "randomtoken",  # Generic token
-        ]
-
-        for token in valid_tokens:
+    def test_extract_bearer_token_valid_format_allowed(self, http_auth_config):
+        """Test that properly formatted bearer tokens are accepted."""
+        for token in (VALID_TEST_BEARER_TOKEN, generate_bearer_token()):
             mock_headers = {"authorization": f"Bearer {token}"}
 
             with patch(
@@ -627,9 +610,17 @@ class TestErrorHandling:
             ):
                 extracted_token = extract_bearer_token()
 
-                assert extracted_token == token, (
-                    f"Valid token '{token}' should be accepted"
-                )
+                assert extracted_token == token
+
+    def test_extract_bearer_token_invalid_format_rejected(self, http_auth_config):
+        """Test that legacy short or path-like tokens are rejected."""
+        for token in ("my-custom-session", "../victim", "short"):
+            mock_headers = {"authorization": f"Bearer {token}"}
+            with patch(
+                "fastmcp.server.dependencies.get_http_headers",
+                return_value=mock_headers,
+            ):
+                assert extract_bearer_token() is None
 
     def test_extract_bearer_token_from_request_reserved_names_rejected(
         self, http_auth_config
@@ -645,7 +636,9 @@ class TestErrorHandling:
         for reserved_name in RESERVED_SESSION_NAMES:
             mock_request = MockRequest(f"Bearer {reserved_name}")
 
-            with patch("src.server_components.auth.logger") as mock_logger:
+            with patch(
+                "src.server_components.session_token_validation.logger"
+            ) as mock_logger:
                 token = extract_bearer_token_from_request(mock_request)
 
                 assert token is None, (

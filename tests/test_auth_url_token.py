@@ -23,7 +23,7 @@ from src.server_components.auth_middleware import (
     UrlTokenMiddleware,
     generate_url_based_config,
 )
-from tests.conftest import make_mock_request
+from tests.conftest import VALID_TEST_BEARER_TOKEN, make_mock_request
 
 
 class TestPathPattern:
@@ -108,7 +108,9 @@ class TestUrlTokenMiddleware:
     @pytest.mark.asyncio
     async def test_injects_header_for_valid_token(self, middleware, mock_app):
         """Test that valid token in URL injects Authorization header."""
-        request = make_mock_request("/v1/url_auth/MyToken123/mcp/tools/call")
+        request = make_mock_request(
+            f"/v1/url_auth/{VALID_TEST_BEARER_TOKEN}/mcp/tools/call"
+        )
 
         mock_app.return_value = JSONResponse({"status": "ok"})
         await middleware.dispatch(request, mock_app)
@@ -117,7 +119,10 @@ class TestUrlTokenMiddleware:
         headers_list = request.scope.get("headers", [])
         auth_headers = [h for h in headers_list if h[0] == b"authorization"]
         assert len(auth_headers) == 1
-        assert auth_headers[0] == (b"authorization", b"Bearer MyToken123")
+        assert auth_headers[0] == (
+            b"authorization",
+            f"Bearer {VALID_TEST_BEARER_TOKEN}".encode(),
+        )
 
     @pytest.mark.asyncio
     async def test_passes_through_non_matching_path(self, middleware, mock_app):

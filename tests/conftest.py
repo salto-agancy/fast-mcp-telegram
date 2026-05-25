@@ -16,6 +16,9 @@ from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 
 from src.config.server_config import ServerConfig, ServerMode, set_config
 
+# 43-char URL-safe token (same shape as generate_bearer_token) for auth tests.
+VALID_TEST_BEARER_TOKEN = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFg"
+
 
 def make_access_token(token: str) -> AccessToken:
     """Create AccessToken for tests (used when mocking get_access_token)."""
@@ -217,25 +220,25 @@ def stdio_config():
 @pytest.fixture
 def test_token():
     """Common test token used across tests."""
-    return "TestToken123456789"
+    return VALID_TEST_BEARER_TOKEN
 
 
 @pytest.fixture
 def valid_token():
     """Valid token for testing."""
-    return "ValidTestToken123"
+    return VALID_TEST_BEARER_TOKEN
 
 
 @pytest.fixture
 def extraction_token():
     """Token used for extraction tests."""
-    return "ExtractionTestToken123"
+    return VALID_TEST_BEARER_TOKEN
 
 
 @pytest.fixture
 def context_token():
     """Token used for context testing."""
-    return "ContextTestToken123"
+    return VALID_TEST_BEARER_TOKEN
 
 
 @pytest.fixture
