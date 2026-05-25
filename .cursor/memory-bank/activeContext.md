@@ -1,4 +1,6 @@
 ## Current Work Focus
+**Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release). Raising API, `_bearer_token_and_session_path`, OSError handling in web setup.
+
 **Shipped (2026-05-25):** GHSA bearer token path traversal fix — PR #53 merged; release [`0.19.1`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.19.1). Credit: [DavidCarliez](https://github.com/DavidCarliez). `session_token_validation.py` enforces URL-safe tokens + session dir containment.
 
 ---
