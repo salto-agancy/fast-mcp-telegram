@@ -1,5 +1,5 @@
 ## Current Work Focus
-**In progress (2026-05-25):** GHSA path traversal fix (Option A) — strict bearer token format + `session_file_path` containment in [`session_token_validation.py`](../src/server_components/session_token_validation.py); patch `0.19.1`.
+**Shipped (2026-05-25):** GHSA bearer token path traversal fix — PR #53 merged; release [`0.19.1`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.19.1). Credit: [DavidCarliez](https://github.com/DavidCarliez). `session_token_validation.py` enforces URL-safe tokens + session dir containment.
 
 ---
 
