@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from fastmcp.server.auth import AccessToken, TokenVerifier
 
 from src.server_components.session_token_validation import (
+    InvalidSessionTokenError,
     session_file_path,
     validate_session_token,
 )
@@ -62,13 +63,10 @@ class SessionFileTokenVerifier(TokenVerifier):
 
         token = token.strip()
 
-        validated = validate_session_token(token)
-        if validated is None:
-            return None
-
         try:
+            validated = validate_session_token(token)
             session_path = session_file_path(self._session_directory, validated)
-        except Exception:
+        except InvalidSessionTokenError:
             return None
 
         if not session_path.is_file():

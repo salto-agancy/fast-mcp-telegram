@@ -19,8 +19,10 @@ from src.client.connection import _cache_lock, _session_cache, generate_bearer_t
 from src.config.server_config import ServerMode, get_config
 from src.config.settings import API_HASH, API_ID
 from src.server_components.session_token_validation import (
+    InvalidSessionTokenError,
     session_file_path,
     validate_session_token,
+    validated_session_file_path,
 )
 from src.server_components.auth_middleware import generate_url_based_config
 from src.utils.mcp_config import generate_mcp_config_json
@@ -264,20 +266,17 @@ async def setup_generate(request: Request):
         return _setup_error_fragment(request, INVALID_SETUP_STATE_MESSAGE)
 
     desired_token = state.get("desired_token")
-    if desired_token:
-        token = validate_session_token(str(desired_token))
-        if token is None:
-            return _setup_error_fragment(
-                request, INVALID_BEARER_TOKEN_FORMAT_MESSAGE
-            )
-    else:
-        token = generate_bearer_token()
-
-    src = Path(temp_session_path)
     session_dir = get_config().session_directory
+    src = Path(temp_session_path)
+
     try:
-        dst = session_file_path(session_dir, token)
-    except Exception:
+        if desired_token:
+            token = validate_session_token(str(desired_token))
+            dst = session_file_path(session_dir, token)
+        else:
+            token = generate_bearer_token()
+            dst = session_file_path(session_dir, token)
+    except InvalidSessionTokenError:
         return _setup_error_fragment(request, INVALID_BEARER_TOKEN_FORMAT_MESSAGE)
 
     # Check if session already exists (only when using desired token)
@@ -496,18 +495,11 @@ def register_web_setup_routes(mcp_app):
                 {"error": BEARER_TOKEN_REQUIRED_MESSAGE},
             )
 
-        if validate_session_token(existing_token) is None:
-            return _fragment(
-                request,
-                "fragments/reauthorize_token_form.html",
-                {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
-            )
-
         try:
-            session_path = session_file_path(
+            session_path = validated_session_file_path(
                 get_config().session_directory, existing_token
             )
-        except Exception:
+        except InvalidSessionTokenError:
             return _fragment(
                 request,
                 "fragments/reauthorize_token_form.html",
@@ -649,26 +641,17 @@ def register_web_setup_routes(mcp_app):
                 {"error": BEARER_TOKEN_REQUIRED_MESSAGE},
             )
 
-        validated_token = validate_session_token(token)
-        if validated_token is None:
-            return _fragment(
-                request,
-                "fragments/delete_session_form.html",
-                {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
-            )
-
         try:
+            token = validate_session_token(token)
             session_path = session_file_path(
-                get_config().session_directory, validated_token
+                get_config().session_directory, token
             )
-        except Exception:
+        except InvalidSessionTokenError:
             return _fragment(
                 request,
                 "fragments/delete_session_form.html",
                 {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
             )
-
-        token = validated_token
         if not session_path.exists():
             return _fragment(
                 request,
