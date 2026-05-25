@@ -5,30 +5,16 @@ from functools import wraps
 
 from src.client.connection import set_request_token
 from src.config.server_config import get_config
+from src.server_components.session_token_validation import (
+    RESERVED_SESSION_NAMES,
+    validate_session_token,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class AuthenticationError(Exception):
     """Exception raised when authentication fails."""
-
-
-# Reserved session names that cannot be used as bearer tokens
-# These are common default names that could conflict with STDIO/HTTP_NO_AUTH sessions
-RESERVED_SESSION_NAMES = frozenset(
-    {
-        "telegram",  # Default session name
-        "default",  # Common default name
-        "session",  # Generic session name
-        "bot",  # Bot session name
-        "user",  # User session name
-        "main",  # Main session name
-        "primary",  # Primary session name
-        "test",  # Test session name
-        "dev",  # Development session name
-        "prod",  # Production session name
-    }
-)
 
 
 def _extract_bearer_token_from_headers(headers: dict[str, str]) -> str | None:
@@ -48,15 +34,7 @@ def _extract_bearer_token_from_headers(headers: dict[str, str]) -> str | None:
     if not token:
         return None
 
-    # Security validation: prevent reserved session names as bearer tokens
-    if token.lower() in RESERVED_SESSION_NAMES:
-        logger.warning(
-            f"Rejected reserved session name '{token}' as bearer token to prevent session conflicts. "
-            f"Reserved names: {sorted(RESERVED_SESSION_NAMES)}"
-        )
-        return None
-
-    return token
+    return validate_session_token(token)
 
 
 def extract_bearer_token() -> str | None:

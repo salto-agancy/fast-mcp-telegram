@@ -62,9 +62,11 @@ When **`DOMAIN`** is set to a non-placeholder public host and the server runs ov
 
 ## Token Validation Security
 
+- **Format**: HTTP_AUTH bearer tokens must be 43-character URL-safe base64 strings (same as setup/CLI generation: `[A-Za-z0-9_-]{43}`). Tokens containing `/`, `\`, or path segments are rejected.
+- **Path containment**: Session files are resolved as `{session_directory}/{token}.session` and must stay under `session_directory` after `resolve()`.
 - **Reserved Name Blocking**: Prevents common session names from being used as bearer tokens
 - **Blocked Names**: `telegram`, `default`, `session`, `bot`, `user`, `main`, `primary`, `test`, `dev`, `prod`
-- **Case Insensitive**: Validation ignores case differences
+- **Case Insensitive**: Reserved-name checks ignore case differences
 - **Session Conflict Prevention**: Blocks tokens that could create file conflicts with STDIO/HTTP_NO_AUTH sessions
 - **Logging**: Rejected tokens are logged with warning messages for security monitoring
 

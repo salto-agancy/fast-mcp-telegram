@@ -18,7 +18,10 @@ from telethon.tl.functions.account import GetPasswordRequest
 from src.client.connection import _cache_lock, _session_cache, generate_bearer_token
 from src.config.server_config import ServerMode, get_config
 from src.config.settings import API_HASH, API_ID
-from src.server_components.auth import RESERVED_SESSION_NAMES
+from src.server_components.session_token_validation import (
+    session_file_path,
+    validate_session_token,
+)
 from src.server_components.auth_middleware import generate_url_based_config
 from src.utils.mcp_config import generate_mcp_config_json
 from src.utils.proxy import build_mtproto_client_args
@@ -57,7 +60,9 @@ PHONE_INVALID_MESSAGE = (
 PHONE_FLOOD_MESSAGE = "Too many attempts. Please wait before retrying."
 BEARER_TOKEN_REQUIRED_MESSAGE = "Bearer token is required."
 INVALID_TOKEN_MESSAGE = "Invalid token."
-TOKEN_WITH_SLASH_MESSAGE = "Token cannot contain '/' character."
+INVALID_BEARER_TOKEN_FORMAT_MESSAGE = (
+    "Invalid bearer token. Use the token from setup or a URL-safe token from the CLI."
+)
 SESSION_NOT_FOUND_MESSAGE = "Session not found. Please check your bearer token."
 REAUTH_COMPLETE_FAILED_MESSAGE = (
     "Failed to complete reauthorization. Please try again from setup."
@@ -258,13 +263,22 @@ async def setup_generate(request: Request):
     if not client or not temp_session_path:
         return _setup_error_fragment(request, INVALID_SETUP_STATE_MESSAGE)
 
-    # Use desired token if specified, otherwise generate random one
     desired_token = state.get("desired_token")
-    token = desired_token or generate_bearer_token()
+    if desired_token:
+        token = validate_session_token(str(desired_token))
+        if token is None:
+            return _setup_error_fragment(
+                request, INVALID_BEARER_TOKEN_FORMAT_MESSAGE
+            )
+    else:
+        token = generate_bearer_token()
 
     src = Path(temp_session_path)
     session_dir = get_config().session_directory
-    dst = session_dir / f"{token}.session"
+    try:
+        dst = session_file_path(session_dir, token)
+    except Exception:
+        return _setup_error_fragment(request, INVALID_BEARER_TOKEN_FORMAT_MESSAGE)
 
     # Check if session already exists (only when using desired token)
     if desired_token and dst.exists():
@@ -482,23 +496,23 @@ def register_web_setup_routes(mcp_app):
                 {"error": BEARER_TOKEN_REQUIRED_MESSAGE},
             )
 
-        # Security: Prevent reserved session names
-        if existing_token.lower() in RESERVED_SESSION_NAMES:
+        if validate_session_token(existing_token) is None:
             return _fragment(
                 request,
                 "fragments/reauthorize_token_form.html",
-                {"error": INVALID_TOKEN_MESSAGE},
+                {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
             )
 
-        # Security: reject tokens containing slashes
-        if "/" in existing_token:
+        try:
+            session_path = session_file_path(
+                get_config().session_directory, existing_token
+            )
+        except Exception:
             return _fragment(
                 request,
                 "fragments/reauthorize_token_form.html",
-                {"error": TOKEN_WITH_SLASH_MESSAGE},
+                {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
             )
-
-        session_path = get_config().session_directory / f"{existing_token}.session"
         if not session_path.exists():
             return _fragment(
                 request,
@@ -635,23 +649,26 @@ def register_web_setup_routes(mcp_app):
                 {"error": BEARER_TOKEN_REQUIRED_MESSAGE},
             )
 
-        # Security: Prevent reserved session names
-        if token.lower() in RESERVED_SESSION_NAMES:
+        validated_token = validate_session_token(token)
+        if validated_token is None:
             return _fragment(
                 request,
                 "fragments/delete_session_form.html",
-                {"error": INVALID_TOKEN_MESSAGE},
+                {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
             )
 
-        # Security: reject tokens containing slashes
-        if "/" in token:
+        try:
+            session_path = session_file_path(
+                get_config().session_directory, validated_token
+            )
+        except Exception:
             return _fragment(
                 request,
                 "fragments/delete_session_form.html",
-                {"error": TOKEN_WITH_SLASH_MESSAGE},
+                {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE},
             )
 
-        session_path = get_config().session_directory / f"{token}.session"
+        token = validated_token
         if not session_path.exists():
             return _fragment(
                 request,

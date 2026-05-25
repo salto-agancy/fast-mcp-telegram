@@ -8,6 +8,7 @@ from telethon.errors.rpcerrorlist import PhoneNumberFloodError
 
 from src.config.server_config import ServerConfig, set_config
 from src.server_components import web_setup
+from tests.conftest import VALID_TEST_BEARER_TOKEN
 
 
 class _FakeMcpApp:
@@ -125,6 +126,28 @@ async def test_setup_reauthorize_phone_invalid_setup_returns_token_form(
 
 
 @pytest.mark.asyncio
+async def test_setup_delete_rejects_path_traversal_token(
+    monkeypatch, setup_routes, tmp_path
+):
+    web_setup._setup_sessions.clear()
+    cfg = ServerConfig()
+    cfg.session_dir = str(tmp_path)
+    set_config(cfg)
+
+    victim = tmp_path.parent / "victim.session"
+    victim.write_text("secret")
+
+    _patch_template_response(monkeypatch)
+
+    handler = setup_routes[("/setup/delete", ("POST",))]
+    response = await handler(_FakeRequest({"token": "../victim"}))
+
+    assert response.template == "fragments/delete_session_form.html"
+    assert web_setup.INVALID_BEARER_TOKEN_FORMAT_MESSAGE in response.context["error"]
+    assert victim.exists()
+
+
+@pytest.mark.asyncio
 async def test_setup_delete_missing_token_returns_delete_form(
     monkeypatch, setup_routes, tmp_path
 ):
@@ -154,7 +177,7 @@ async def test_setup_delete_session_not_found_returns_delete_form(
     _patch_template_response(monkeypatch)
 
     handler = setup_routes[("/setup/delete", ("POST",))]
-    response = await handler(_FakeRequest({"token": "no-such-session-file"}))
+    response = await handler(_FakeRequest({"token": VALID_TEST_BEARER_TOKEN}))
 
     assert response.template == "fragments/delete_session_form.html"
     assert "not found" in response.context["error"].lower()
@@ -172,7 +195,7 @@ async def test_setup_reauthorize_missing_session_returns_token_form(
     _patch_template_response(monkeypatch)
 
     handler = setup_routes[("/setup/reauthorize", ("POST",))]
-    response = await handler(_FakeRequest({"token": "nonexistent-token"}))
+    response = await handler(_FakeRequest({"token": VALID_TEST_BEARER_TOKEN}))
 
     assert response.template == "fragments/reauthorize_token_form.html"
     assert "not registered on this server" in response.context["error"]
