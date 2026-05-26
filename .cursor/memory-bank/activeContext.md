@@ -1,12 +1,12 @@
 ## Current Work Focus
 
-**Roadmap on `master` (2026-05-27):** product docs and Gemini research — [docs/Roadmap.md](../docs/Roadmap.md).
+**Roadmap lanes (2026-05-27):** Trust (`feature/acl`), **Telemetry** (`feature/telemetry` planned), **QA / Gategrid** (`feature/evals`) — see [docs/Roadmap.md](../docs/Roadmap.md).
 
-- **Strategic positioning:** [Strategic-Market-Positioning.md](../docs/Strategic-Market-Positioning.md), [docs/research/](../docs/research/) (Gemini)
-- **Session ACL:** branch `feature/acl` (not merged)
-- **Gategrid evals:** branch `feature/evals` (not merged)
+- **Telemetry lane:** production signals → QA triage → informs GG case design *(planned)*
+- **QA lane:** GG benchmark matrices + GG gating on PR *(WIP on `feature/evals`)*
+- **Trust lane:** opt-in session ACL *(WIP on `feature/acl`)*
 
-**Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release). Raising API, `_bearer_token_and_session_path`, OSError handling in web setup.
+**Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release).
 
 **Shipped (2026-05-25):** GHSA bearer token path traversal fix — PR #53 merged; release [`0.19.1`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.19.1). Credit: [DavidCarliez](https://github.com/DavidCarliez). `session_token_validation.py` enforces URL-safe tokens + session dir containment.
 
