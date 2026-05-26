@@ -1,11 +1,10 @@
 ## Current Work Focus
 
-**Branch `feature/acl` (2026-05-27):** opt-in session ACL for http-auth.
+**Branch `feature/acl` — Trust lane (2026-05-27):** opt-in session ACL for http-auth. Full lane model: [docs/Roadmap.md](../docs/Roadmap.md).
 
 - **Implementation:** [session_acl.py](../src/server_components/session_acl.py), `ACL_ENABLED`, [acl.yaml.example](../acl.yaml.example)
 - **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md), [acl-operator-research.md](../docs/research/acl-operator-research.md)
-- **Docs:** [SECURITY.md](../SECURITY.md) ACL section
-- **Base:** `master` roadmap docs; merge via PR when ready
+- **Other lanes:** Telemetry `feature/telemetry` *(planned)*; QA / Gategrid `feature/evals`
 
 **Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release).
 

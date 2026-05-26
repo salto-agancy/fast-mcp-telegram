@@ -1,5 +1,6 @@
 ### 2026-05-27
-- **Session ACL (`feature/acl`):** Opt-in `ACL_ENABLED`, static `acl.yaml`, enforcement in MCP tools and MTProto bridge; design docs and 9 tests. Merge to `master` via PR.
+- **Roadmap lanes (`master`):** Trust / Telemetry / QA-Gategrid — telemetry informs QA triage, GG benchmark validates, GG gating enforces on PR.
+- **Session ACL (`feature/acl`):** Opt-in `ACL_ENABLED`, static `acl.yaml`, MCP + MTProto enforcement; 9 tests.
 
 ### 2026-05-25
 - **0.19.1 — bearer token path traversal fix:** PR #53 merged. Reject non–URL-safe bearer tokens; resolve session files under `session_directory` only (`session_token_validation.py`). GitHub release `0.19.1`; PyPI via publish workflow. Reporter credit: [DavidCarliez](https://github.com/DavidCarliez). 514 tests pass.
