@@ -67,6 +67,13 @@ def register_mtproto_api_routes(mcp_app) -> None:
         resolve = bool(body.get("resolve", True))  # Default to True
         allow_dangerous = bool(body.get("allow_dangerous", False))
 
+        if config.require_auth:
+            from src.server_components.session_acl import check_mtproto_api_access
+
+            token = extract_bearer_token_from_request(request)
+            if acl_denial := check_mtproto_api_access(token, allow_dangerous=allow_dangerous):
+                return JSONResponse(acl_denial, status_code=403)
+
         # Deny dangerous methods unless explicitly allowed
         if (normalized_method in DANGEROUS_METHODS) and not allow_dangerous:
             error = log_and_build_error(

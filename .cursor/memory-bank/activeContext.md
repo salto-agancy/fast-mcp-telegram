@@ -1,12 +1,13 @@
 ## Current Work Focus
 
-**Roadmap on `master` (2026-05-27):** product docs and Gemini research — [docs/Roadmap.md](../docs/Roadmap.md).
+**Branch `feature/acl` (2026-05-27):** opt-in session ACL for http-auth.
 
-- **Strategic positioning:** [Strategic-Market-Positioning.md](../docs/Strategic-Market-Positioning.md), [docs/research/](../docs/research/) (Gemini)
-- **Session ACL:** branch `feature/acl` (not merged)
-- **Gategrid evals:** branch `feature/evals` (not merged)
+- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), `ACL_ENABLED`, [acl.yaml.example](../acl.yaml.example)
+- **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md), [acl-operator-research.md](../docs/research/acl-operator-research.md)
+- **Docs:** [SECURITY.md](../SECURITY.md) ACL section
+- **Base:** `master` roadmap docs; merge via PR when ready
 
-**Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release). Raising API, `_bearer_token_and_session_path`, OSError handling in web setup.
+**Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release).
 
 **Shipped (2026-05-25):** GHSA bearer token path traversal fix — PR #53 merged; release [`0.19.1`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.19.1). Credit: [DavidCarliez](https://github.com/DavidCarliez). `session_token_validation.py` enforces URL-safe tokens + session dir containment.
 

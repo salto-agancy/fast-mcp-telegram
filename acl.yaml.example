@@ -1,0 +1,26 @@
+# Tokens omitted from this file retain full account access when ACL is enabled.
+# Set ACL_ENABLED=true and place this file at {session_directory}/acl.yaml
+# or set ACL_CONFIG_PATH to an absolute path.
+
+tokens:
+  # Read-only analyst: Saved Messages only
+  "REPLACE_WITH_BEARER_TOKEN":
+    chats:
+      - me
+    read_only: true
+    allow_global_search: true
+
+  # Team shared: specific work chats, full messaging
+  # "another-token":
+  #   chats:
+  #     - -1001234567890
+  #     - "@myteam"
+  #   read_only: false
+  #   allow_global_search: true
+
+  # Automation: post to channels only, no global search
+  # "automation-token":
+  #   chats:
+  #     - -100999888777
+  #   read_only: false
+  #   allow_global_search: false

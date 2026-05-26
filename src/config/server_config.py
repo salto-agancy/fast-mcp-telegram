@@ -200,6 +200,23 @@ class ServerConfig(BaseSettings):
         description="TTL for in-memory attachment download tickets (seconds)",
     )
 
+    acl_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("acl_enabled", "ACL_ENABLED"),
+        description=(
+            "Enable opt-in per-token session ACL from acl config file (http-auth only)"
+        ),
+    )
+
+    acl_config_path: str = Field(
+        default="",
+        validation_alias=AliasChoices("acl_config_path", "ACL_CONFIG_PATH"),
+        description=(
+            "Path to session ACL YAML/JSON file "
+            "(default: {session_directory}/acl.yaml)"
+        ),
+    )
+
     # Logging configuration
     log_level: str = Field(
         default="DEBUG", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
@@ -248,6 +265,13 @@ class ServerConfig(BaseSettings):
     def require_auth(self) -> bool:
         """Whether authentication is required (no fallback)."""
         return self.server_mode == ServerMode.HTTP_AUTH
+
+    @property
+    def acl_config_file(self) -> Path:
+        """Resolved ACL config path."""
+        if self.acl_config_path.strip():
+            return Path(self.acl_config_path).expanduser()
+        return self.session_directory / "acl.yaml"
 
     @property
     def session_directory(self) -> Path:

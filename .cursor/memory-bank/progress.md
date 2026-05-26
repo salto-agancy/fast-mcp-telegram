@@ -1,5 +1,5 @@
 ### 2026-05-27
-- **Roadmap on `master`:** [docs/Roadmap.md](../docs/Roadmap.md), Gemini research under `docs/research/`, [Strategic-Market-Positioning.md](../docs/Strategic-Market-Positioning.md). Session ACL on `feature/acl`; Gategrid evals on `feature/evals`.
+- **Session ACL (`feature/acl`):** Opt-in `ACL_ENABLED`, static `acl.yaml`, enforcement in MCP tools and MTProto bridge; design docs and 9 tests. Merge to `master` via PR.
 
 ### 2026-05-25
 - **0.19.1 — bearer token path traversal fix:** PR #53 merged. Reject non–URL-safe bearer tokens; resolve session files under `session_directory` only (`session_token_validation.py`). GitHub release `0.19.1`; PyPI via publish workflow. Reporter credit: [DavidCarliez](https://github.com/DavidCarliez). 514 tests pass.

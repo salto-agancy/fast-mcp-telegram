@@ -27,7 +27,19 @@
 - **Session Separation**: Each user gets their own authenticated session file
 - **Token Privacy**: Bearer tokens should be treated as passwords and kept secure
 - **Session Files**: Contain complete Telegram access for the associated token
-- **Account Access**: Anyone with a valid Bearer token can perform **ANY action** on that associated Telegram account
+- **Account Access**: Anyone with a valid Bearer token can perform **ANY action** on that associated Telegram account **unless** opt-in session ACL applies to that token
+
+## Opt-in session ACL (http-auth)
+
+When **`ACL_ENABLED=true`**, operators can restrict **specific Bearer tokens** via a server-side config file (default `{session_directory}/acl.yaml`, override with **`ACL_CONFIG_PATH`**). See **`acl.yaml.example`** and [docs/research/acl-design-brief.md](docs/research/acl-design-brief.md).
+
+- **Backward compatible**: tokens **not** listed in the ACL file keep full account access
+- **Per-token rules**: `chats` whitelist, optional `read_only`, optional `allow_global_search`
+- **Enforcement**: MCP tools and the HTTP MTProto bridge (`/mtproto-api/*`) in http-auth mode
+- **Not enabled** for stdio or http-no-auth
+- **No MCP tool** to change ACL in v1 — edit the file on the server and restart (or future reload)
+
+Treat the ACL file like a secret (contains bearer token strings). Restrict file permissions (e.g. `0600`).
 
 ## Production Security Recommendations
 
@@ -62,11 +74,9 @@ When **`DOMAIN`** is set to a non-placeholder public host and the server runs ov
 
 ## Token Validation Security
 
-- **Format**: HTTP_AUTH bearer tokens must be 43-character URL-safe base64 strings (same as setup/CLI generation: `[A-Za-z0-9_-]{43}`). Tokens containing `/`, `\`, or path segments are rejected.
-- **Path containment**: Session files are resolved as `{session_directory}/{token}.session` and must stay under `session_directory` after `resolve()`.
 - **Reserved Name Blocking**: Prevents common session names from being used as bearer tokens
 - **Blocked Names**: `telegram`, `default`, `session`, `bot`, `user`, `main`, `primary`, `test`, `dev`, `prod`
-- **Case Insensitive**: Reserved-name checks ignore case differences
+- **Case Insensitive**: Validation ignores case differences
 - **Session Conflict Prevention**: Blocks tokens that could create file conflicts with STDIO/HTTP_NO_AUTH sessions
 - **Logging**: Rejected tokens are logged with warning messages for security monitoring
 

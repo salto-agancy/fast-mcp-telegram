@@ -39,7 +39,17 @@ Configured in [src/config/server_config.py](../src/config/server_config.py). Doc
 - Session files at `~/.config/fast-mcp-telegram/{token}.session`
 - LRU session cache (`MAX_ACTIVE_SESSIONS`) in [src/client/connection.py](../src/client/connection.py)
 - URL-based auth for headerless clients: `/v1/url_auth/{token}/mcp/...` ([SECURITY.md](../SECURITY.md))
-- **Scope:** a valid Bearer token grants **full access** to that Telegram account — no per-chat ACL on `master` (see branch `feature/acl`)
+- **Scope:** a valid Bearer token grants **full access** to that Telegram account — **unless** opt-in session ACL is enabled and the token has an entry in `acl.yaml` ([SECURITY.md](../SECURITY.md#opt-in-session-acl-http-auth))
+
+### Session ACL (shipped, opt-in)
+
+| Control | Behavior |
+| --- | --- |
+| Enable | `ACL_ENABLED=true` + config file (default `{session_directory}/acl.yaml`) |
+| Unlisted tokens | Full account access (backward compatible) |
+| Listed tokens | Chat whitelist, optional read-only, optional global search block |
+
+See [research/acl-design-brief.md](research/acl-design-brief.md) and [Roadmap.md](Roadmap.md).
 
 ### Security (shipped)
 
@@ -51,7 +61,7 @@ Configured in [src/config/server_config.py](../src/config/server_config.py). Doc
 | Attachments | Ticketed streaming at `GET /v1/attachments/{uuid}/{filename}` ([src/server_components/attachment_routes.py](../src/server_components/attachment_routes.py)) |
 | Bot sessions | Non-bridge tools blocked ([src/server_components/bot_restrictions.py](../src/server_components/bot_restrictions.py)) |
 
-**Not shipped on `master`:** per-chat ACL (branch `feature/acl`), directory sandbox allowlists, input/output prompt-injection scanners.
+**Not shipped:** directory sandbox allowlists, input/output prompt-injection scanners. Per-chat ACL is **opt-in** when `ACL_ENABLED=true` ([SECURITY.md](../SECURITY.md)).
 
 ### Other shipped features
 
@@ -66,7 +76,7 @@ Configured in [src/config/server_config.py](../src/config/server_config.py). Doc
 
 | Capability | fast-mcp-telegram today | Notable alternative |
 | --- | --- | --- |
-| Per-chat ACL | Not on `master`; WIP on `feature/acl` | mcp-telegram (Prgebish) — default-deny always on |
+| Per-chat ACL | Opt-in (`ACL_ENABLED`) | mcp-telegram (Prgebish) — default-deny always on |
 | Local SQLite message cache | Not implemented | telegram-mcp-server (kfastov) — background sync |
 | Enterprise IdP / OAuth2 | Not implemented | StackOne — managed OAuth |
 
@@ -74,12 +84,13 @@ Configured in [src/config/server_config.py](../src/config/server_config.py). Doc
 
 | Document | Contents |
 | --- | --- |
-| [Roadmap.md](Roadmap.md) | Official product roadmap and branch layout |
+| [Roadmap.md](Roadmap.md) | Official product roadmap |
+| [research/acl-operator-research.md](research/acl-operator-research.md) | ACL competitor audit and personas |
 | [research/gemini-competitive-analysis.md](research/gemini-competitive-analysis.md) | MCP/Telegram landscape, competitor table, ecosystem risks |
 | [research/gemini-strategy-monetization.md](research/gemini-strategy-monetization.md) | Aspirational positioning and monetization hypotheses |
 | [research/gemini-roadmap-proposal.md](research/gemini-roadmap-proposal.md) | Proposed features, phase timeline (planned vs shipped) |
-
-ACL design docs live on branch `feature/acl` ([acl-design-brief.md](research/acl-design-brief.md) after merge).
+| [research/gemini-strategy-monetization.md](research/gemini-strategy-monetization.md) | Aspirational positioning and monetization hypotheses |
+| [research/gemini-roadmap-proposal.md](research/gemini-roadmap-proposal.md) | Proposed features, phase timeline (planned vs shipped) |
 
 ## See also
 
