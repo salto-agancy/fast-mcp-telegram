@@ -105,6 +105,7 @@ def test_server(mock_client):
     # Override the client in the connection module for testing
     import src.client.connection as conn
 
+    original_get_client = conn._get_client_by_token
     conn._get_client_by_token = AsyncMock(return_value=mock_client)
 
     # Register simplified mock versions of tools for testing
@@ -178,7 +179,8 @@ def test_server(mock_client):
         """Edit existing message in Telegram chat."""
         return {"action": "edited", "message_id": message_id, "text": message}
 
-    return mcp
+    yield mcp
+    conn._get_client_by_token = original_get_client
 
 
 @pytest_asyncio.fixture

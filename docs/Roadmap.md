@@ -14,7 +14,7 @@ Work is organized in parallel **lanes**. Each lane has its own branch until merg
 
 | Lane | Branch | Purpose |
 | --- | --- | --- |
-| **Trust** | `feature/acl` | Opt-in session ACL for http-auth blast-radius control |
+| **Trust** | `feature/acl` | Agent guardrails per Bearer token (lanes/profiles), not account lockdown — see [ADR 0001](adr/0001-agent-scoped-session-acl.md) |
 | **Telemetry** | `feature/telemetry` *(planned)* | Production signals that tell QA where agents and users struggle |
 | **QA / Gategrid** | `feature/evals` | Benchmark tool behavior with [Gategrid](https://github.com/leshchenko1979/gategrid) — **GG** — and enforce regressions via **GG gating** |
 | **Docs / strategy** | `master` | Roadmap, capability index, Gemini research reference |
@@ -98,6 +98,17 @@ flowchart LR
 
 Trust, telemetry, and Gategrid evals merge from their feature branches when each lane is ready.
 
+## Trust lane — planned scope
+
+Operator-facing enhancements beyond ACL enforcement (not implemented):
+
+| Item | Purpose |
+| --- | --- |
+| **Sensitive peer denylist (Phase 1.5)** | Server-enforced block on security-sensitive peers (`777000` login codes, BotFather, etc.) for **all** tokens when `ACL_ENABLED` — independent of `chats` allowlist. Addresses **shared-team human threat** (same Bearer token) reading PINs or managing bots via MCP. Optional `blocked_peers.extend` in `acl.yaml`. See [ADR 0001](adr/0001-agent-scoped-session-acl.md), [acl-design-brief.md](research/acl-design-brief.md). |
+| **Chat metadata registry** | Operator-curated metadata for whitelisted/shared chats so team agents can navigate `find_chats` results — human titles, descriptions, tags, and “look here for X” hints. Complements ACL **workspace lanes** (which chats a token may use) with **navigation hints** (what each chat is for); does not replace lane allowlists. Likely config alongside `acl.yaml` or a sibling file; enrichment at the tool boundary (e.g. post-filter on `find_chats`). |
+
+See [acl-design-brief.md](research/acl-design-brief.md) Phase 1.5 and Phase 3 for related ACL work.
+
 ## Telemetry lane — planned scope
 
 Candidate signals for QA triage (not implemented):
@@ -127,6 +138,7 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 
 | Item | Lane | Notes |
 | --- | --- | --- |
+| Sensitive peer denylist | Trust | Phase 1.5 — server defaults + `blocked_peers.extend`; see Trust lane planned scope |
 | Per-token rate limits | Trust / ops | Complements telemetry FLOOD_WAIT signals |
 | SQLite read cache | Performance | Pairs with ACL whitelists |
 | ACL v2 permission matrix | Trust | Prgebish-style read/send per chat |
@@ -135,6 +147,18 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 | Stdio path sandbox | Trust | Local stdio users |
 | Multi-replica attachment tickets | Ops | Shared ticket store |
 | Media OCR pipeline | Features | Beyond voice transcription |
+
+## Where to record future work
+
+| Kind of item | Where to write it |
+| --- | --- |
+| Prioritized capability, lane, or backlog item | **This doc** — lane sections (`Trust`, `Telemetry`, `QA`) or [Backlog](#backlog-not-sequenced) |
+| Design detail for an approved lane (phases, enforcement, config shape) | `docs/research/*-design-brief.md` (e.g. [acl-design-brief.md](research/acl-design-brief.md)) |
+| Architectural decision with tradeoffs and consequences | `docs/adr/NNNN-*.md` (new ADR when the decision is settled) |
+| Competitor notes, spikes, third-party research | `docs/research/` (reference only; link from Roadmap) |
+| Current sprint focus and immediate next steps | `.cursor/memory-bank/activeContext.md` (3–5 items; not a substitute for Roadmap) |
+
+**Rule of thumb:** Roadmap names *what* and *which lane*; research briefs spell *how*; ADRs record *why* a direction was chosen.
 
 ## References
 

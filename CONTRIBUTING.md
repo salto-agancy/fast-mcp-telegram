@@ -114,7 +114,7 @@ python -m src.cli_setup
 
 ### Development with telegram-dev MCP (Cursor IDE)
 
-This project uses a `telegram-dev` MCP server for development:
+Use **telegram-dev** in [`.cursor/mcp.json`](.cursor/mcp.json) for day-to-day stdio development (no ACL):
 
 ```json
 {
@@ -128,25 +128,87 @@ This project uses a `telegram-dev` MCP server for development:
 }
 ```
 
-**Usage:**
+- Auth disabled; default session name `telegram` maps to `config.session_path` (not bearer-token rules).
+- Restart **telegram-dev** in Cursor's MCP panel after code changes.
+- Credentials from project-root `.env` (see `.env.example`). The server loads `.env` automatically when started via `python3 -m src.server` from the project root.
+- **Do not** `source .env.local` in zsh before starting the server — zsh treats `#` comments and special characters in env values differently than Python's dotenv loader and can corrupt `API_HASH`, proxy URLs, or tokens. Use `python3 -m src.server` from the repo root instead.
+- `MTPROTO_PROXY` in `.env` / `.env.local` applies when the server is started from the project root (via Python dotenv, not shell sourcing).
 
-- Start the server and make code changes
-- When you want to test changes, restart the `telegram-dev` MCP server in Cursor's MCP panel
-- Uses credentials from `.env` file
+An optional **telegram-dev-acl** URL entry in `.cursor/mcp.json` (http-auth + fixed `Authorization` header) is **not recommended for ACL testing** — see below.
 
-**Setup:**
+### ACL development and testing (not via Cursor MCP)
 
-1. Copy `.env.example` to `.env` (or create it manually with your credentials)
-2. The MCP server automatically loads credentials from `.env`
-3. Ensure `cwd` points to the project root
+ACL applies only in **http-auth** mode with `ACL_ENABLED=true`. Cursor MCP is a poor fit for exercising the ACL matrix:
 
-**Testing Tools:**
-The MCP server exposes Telegram tools (find_chats, get_messages, send_message, etc.) directly to the AI agent - use them in conversation to test functionality.
+- **stdio has no ACL** — `telegram-dev` bypasses bearer tokens and ACL entirely.
+- **Fixed Authorization header** — a URL MCP entry binds one Bearer token; switching profiles means editing `mcp.json` and reconnecting.
+- **URL MCP limitations** — local http-auth MCP connections can be unreliable; the server must already be running separately.
+- **Session per bearer** — each ACL profile needs its own `{token}.session` via `/setup`, not the stdio `telegram.session`.
+- **Restart and cache issues** — code changes and session/env fixes require restarting both the HTTP server and the MCP client; stale MCP processes are easy to miss.
 
-**Credentials:**
+Use these methods instead:
 
-- Credentials are stored in `.env` (gitignored)
-- `mcp.json` contains only the launch command
+#### 1. pytest (primary regression)
+
+```bash
+pytest tests/test_session_acl.py tests/test_mcp_tool_acl_integration.py -q
+```
+
+Full suite: `pytest tests/ -q`.
+
+#### 2. Manual HTTP server + curl (live matrix)
+
+1. Copy [`acl.dev.yaml.example`](acl.dev.yaml.example) to `acl.dev.yaml` (gitignored — **never commit real tokens or production ACL**).
+2. Start the server from the project root:
+
+```bash
+SERVER_MODE=http-auth HOST=127.0.0.1 PORT=8765 \
+  ACL_ENABLED=true ACL_CONFIG_PATH=acl.dev.yaml \
+  python3 -m src.server
+```
+
+3. Create one session per profile token at `http://127.0.0.1:8765/setup` (session files must match bearer names in `acl.dev.yaml`).
+4. Call tools with curl, swapping the Bearer token per profile:
+
+```bash
+TOKEN="dev_acl_readonly_abcdefghijklmnopqrstuvwxz0"  # from acl.dev.yaml
+
+curl -sS -X POST "http://127.0.0.1:8765/v1/mcp" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "get_messages",
+      "arguments": {"chat_id": "me", "limit": 1}
+    }
+  }'
+```
+
+Repeat with `dev_acl_empty_lane_…` and `dev_acl_team_lane__…` tokens. Expect denials as in the matrix below.
+
+Optional wrapper: [`scripts/acl_mcp_smoke.sh`](scripts/acl_mcp_smoke.sh) runs the same curl pattern for all three profiles. It reads bearer names from `acl.dev.yaml` (override path with `ACL_CONFIG_PATH`); set `BEARER_TOKEN_FOR_TESTING` to override the readonly profile when your yaml uses a custom token key.
+
+**Live ACL test matrix**
+
+| Profile | Bearer token (example file) | Expect |
+| ------- | --------------------------- | ------ |
+| readonly | `dev_acl_readonly_…` | `send_message` denied; `get_messages` on `me` allowed |
+| empty-lane | `dev_acl_empty_lane_…` | `find_chats` denied (empty lane) |
+| team | `dev_acl_team_lane__…` | Whitelisted chat only; other chats denied |
+
+#### 3. Session setup (`/setup`)
+
+Per-token sessions for http-auth (including ACL profiles) are created at `http://127.0.0.1:8765/setup` while the server above is running. Each bearer name in `acl.dev.yaml` needs a matching `{token}.session` under `~/.config/fast-mcp-telegram/`.
+
+**Credentials**
+
+- API keys: `.env` (gitignored)
+- ACL rules: `acl.dev.yaml` (gitignored); example template only in git
+- `mcp.json`: stdio launch command for **telegram-dev** only; no secrets in committed files
 
 ### 4. Start Using!
 

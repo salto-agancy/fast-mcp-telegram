@@ -1,6 +1,7 @@
 ### 2026-05-27
+- **Session ACL Phase 1 (`feature/acl`):** Empty-lane hard deny (pre-check + post-filter), listed-token MTProto block, startup validation (`read_only` requires `chats`, malformed token entries), SECURITY.md operator runbook, integration tests. 26 ACL tests pass.
 - **Roadmap lanes (`master`):** Trust / Telemetry / QA-Gategrid — telemetry informs QA triage, GG benchmark validates, GG gating enforces on PR.
-- **Session ACL (`feature/acl`):** Opt-in `ACL_ENABLED`, static `acl.yaml`, MCP + MTProto enforcement; 9 tests.
+- **Session ACL MVP (`feature/acl`):** opt-in `ACL_ENABLED`, static `acl.yaml`, MCP + MTProto enforcement. Direction: agent guardrails — [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md); Phase 1.5 sensitive peer denylist next.
 
 ### 2026-05-25
 - **0.19.1 — bearer token path traversal fix:** PR #53 merged. Reject non–URL-safe bearer tokens; resolve session files under `session_directory` only (`session_token_validation.py`). GitHub release `0.19.1`; PyPI via publish workflow. Reporter credit: [DavidCarliez](https://github.com/DavidCarliez). 514 tests pass.

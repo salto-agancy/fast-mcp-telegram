@@ -107,18 +107,24 @@ _DESC_INVOKE_MTPROTO = _tool_description(
 )
 
 
-def mcp_tool_with_restrictions(operation_name: str):
+def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool = False):
     """
-    Combined decorator for MCP tools: error handling, auth context, bot restrictions.
+    Combined decorator for MCP tools: error handling, ACL, auth context, bot restrictions.
+
+    Call order (outer → inner): bot → auth → ACL → error → func.
+    Auth must run before ACL so get_request_token() is set for pre-checks.
 
     Args:
         operation_name: Name of the operation for error reporting and bot restrictions
+        allow_bot_sessions: When True, skip bot restriction (for MTProto bridge tools)
     """
 
     def decorator(func):
         decorated_func = server_errors.with_error_handling(operation_name)(func)
-        decorated_func = server_auth.with_auth_context(decorated_func)
         decorated_func = enforce_session_acl(operation_name)(decorated_func)
+        decorated_func = server_auth.with_auth_context(decorated_func)
+        if allow_bot_sessions:
+            return decorated_func
         return bot_restrictions.restrict_non_bridge_for_bot_sessions(operation_name)(
             decorated_func
         )
@@ -319,9 +325,7 @@ def register_tools(mcp: FastMCP) -> None:
             openWorldHint=True,
         ),
     )
-    @server_errors.with_error_handling("invoke_mtproto")
-    @server_auth.with_auth_context
-    @enforce_session_acl("invoke_mtproto")
+    @mcp_tool_with_restrictions("invoke_mtproto", allow_bot_sessions=True)
     async def invoke_mtproto(
         method_full_name: MethodFullName,
         params_json: ParamsJson,

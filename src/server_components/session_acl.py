@@ -16,8 +16,11 @@ from typing import Any, Callable
 
 import yaml
 
-from src.client.connection import get_request_token
 from src.config.server_config import get_config
+from src.server_components.attachment_tickets import (
+    revoke_attachment_tickets,
+    track_minted_attachment_tickets,
+)
 from src.utils.error_handling import log_and_build_error
 
 logger = logging.getLogger(__name__)
@@ -29,13 +32,17 @@ _WRITE_OPERATIONS = frozenset(
         "send_message_to_phone",
     }
 )
-_READ_OPERATIONS = frozenset(
-    {
-        "get_messages",
-        "get_chat_info",
-        "find_chats",
-        "search_messages_globally",
-    }
+_LIST_RESULT_OPERATIONS = frozenset({"find_chats", "search_messages_globally"})
+
+_EMPTY_LANE_DENY_MSG = (
+    "Session ACL: this token has an empty chat lane (chats: [] or chats omitted). "
+    "Add at least one chat id, @username, or me to the token entry in the ACL config."
+)
+_LISTED_TOKEN_MTPROTO_DENY_MSG = (
+    "Session ACL: invoke_mtproto is not permitted for tokens listed in the ACL config."
+)
+_LISTED_TOKEN_MTPROTO_API_DENY_MSG = (
+    "Session ACL: HTTP MTProto bridge is not permitted for tokens listed in the ACL config."
 )
 
 _acl_cache: dict[str, Any] | None = None
@@ -68,33 +75,84 @@ def clear_acl_cache() -> None:
     _acl_cache_path = None
 
 
-def _acl_file_path() -> Path | None:
+def _configured_acl_path() -> Path | None:
     config = get_config()
     if not config.acl_enabled:
         return None
+    return config.acl_config_file
+
+
+class AclConfigError(ValueError):
+    """Raised when ACL is enabled but the config file is missing or invalid."""
+
+
+def _validate_acl_document(doc: dict[str, Any], path: Path) -> None:
+    """Fail-closed startup validation for token entries."""
+    tokens = doc.get("tokens") or {}
+    if not isinstance(tokens, dict):
+        raise AclConfigError(f"ACL config 'tokens' must be a mapping: {path}")
+
+    for token_key, raw in tokens.items():
+        prefix = str(token_key)[:8]
+        if not isinstance(raw, dict):
+            raise AclConfigError(
+                f"ACL config entry for token prefix {prefix}... must be a mapping, "
+                f"not {type(raw).__name__}: {path}"
+            )
+        rule = TokenAclRule.from_dict(raw)
+        if rule.read_only and not rule.chats:
+            raise AclConfigError(
+                f"ACL token prefix {prefix}... has read_only: true but empty or missing "
+                f"chats. Analyst profile requires a non-empty chat lane: {path}"
+            )
+
+
+def validate_acl_config() -> None:
+    """Fail-closed: refuse startup when ACL is enabled but config is absent or invalid."""
+    config = get_config()
+    if not config.acl_enabled or config.disable_auth:
+        return
     path = config.acl_config_file
-    return path if path.is_file() else None
+    if not path.is_file():
+        raise AclConfigError(
+            f"ACL is enabled (ACL_ENABLED=true) but ACL config file not found: {path}. "
+            "Create the file or set ACL_CONFIG_PATH to a valid path."
+        )
+    _load_acl_document()
 
 
 def _load_acl_document() -> dict[str, Any]:
     global _acl_cache, _acl_cache_path
-    path = _acl_file_path()
+    path = _configured_acl_path()
     if path is None:
         _acl_cache = {}
         _acl_cache_path = None
         return _acl_cache
 
+    if not path.is_file():
+        raise AclConfigError(f"ACL config file not found: {path}")
+
     if _acl_cache is not None and _acl_cache_path == path:
         return _acl_cache
 
     text = path.read_text(encoding="utf-8")
-    if path.suffix.lower() == ".json":
-        doc = json.loads(text)
-    else:
-        doc = yaml.safe_load(text) or {}
+    try:
+        if path.suffix.lower() == ".json":
+            doc = json.loads(text)
+        else:
+            doc = yaml.safe_load(text) or {}
+    except json.JSONDecodeError as exc:
+        raise AclConfigError(
+            f"ACL config is not valid JSON: {path} ({exc.msg} at line {exc.lineno}, "
+            f"column {exc.colno})"
+        ) from exc
+    except yaml.YAMLError as exc:
+        raise AclConfigError(f"ACL config is not valid YAML: {path} ({exc})") from exc
 
     if not isinstance(doc, dict):
-        raise ValueError(f"ACL config must be a mapping: {path}")
+        raise AclConfigError(f"ACL config must be a mapping: {path}")
+
+    _validate_acl_document(doc, path)
 
     _acl_cache = doc
     _acl_cache_path = path
@@ -118,8 +176,11 @@ def _rules_for_token(token: str | None) -> TokenAclRule | None:
     if raw is None:
         return None
     if not isinstance(raw, dict):
-        logger.warning("Ignoring invalid ACL entry for token prefix %s...", token[:8])
-        return None
+        logger.error(
+            "Invalid ACL entry for token prefix %s... (expected mapping); denying all tool access",
+            token[:8],
+        )
+        return TokenAclRule()
     return TokenAclRule.from_dict(raw)
 
 
@@ -152,8 +213,12 @@ def _chat_ref_matches(allowed: str | int, candidate: str | int) -> bool:
     return False
 
 
+def _is_empty_lane(rule: TokenAclRule) -> bool:
+    return not rule.chats
+
+
 def _is_chat_allowed(chat_ref: Any, rule: TokenAclRule) -> bool:
-    if not rule.chats:
+    if _is_empty_lane(rule):
         return False
     normalized = _normalize_chat_ref(chat_ref)
     return any(_chat_ref_matches(a, normalized) for a in rule.chats)
@@ -170,6 +235,8 @@ def _deny(operation: str, message: str, params: dict[str, Any] | None = None) ->
 
 def check_pre_tool_access(operation_name: str, kwargs: dict[str, Any]) -> dict[str, Any] | None:
     """Return an error dict when the tool call must be blocked, else None."""
+    from src.client.connection import get_request_token
+
     rule = _rules_for_token(get_request_token())
     if rule is None:
         return None
@@ -181,10 +248,30 @@ def check_pre_tool_access(operation_name: str, kwargs: dict[str, Any]) -> dict[s
             params=kwargs,
         )
 
-    if operation_name == "invoke_mtproto" and rule.read_only:
+    if _is_empty_lane(rule):
+        if operation_name in _LIST_RESULT_OPERATIONS:
+            return _deny(
+                operation_name,
+                _EMPTY_LANE_DENY_MSG,
+                params=kwargs,
+            )
+        if operation_name == "send_message_to_phone":
+            return _deny(
+                operation_name,
+                _EMPTY_LANE_DENY_MSG,
+                params=kwargs,
+            )
+
+    if operation_name == "invoke_mtproto":
+        if rule.read_only:
+            return _deny(
+                operation_name,
+                "Session ACL is read-only: invoke_mtproto is not permitted.",
+                params=kwargs,
+            )
         return _deny(
             operation_name,
-            "Session ACL is read-only: invoke_mtproto is not permitted.",
+            _LISTED_TOKEN_MTPROTO_DENY_MSG,
             params=kwargs,
         )
 
@@ -204,7 +291,7 @@ def check_pre_tool_access(operation_name: str, kwargs: dict[str, Any]) -> dict[s
                 params={"chat_id": chat_id},
             )
 
-    if operation_name == "send_message_to_phone" and rule.chats:
+    if operation_name == "send_message_to_phone" and not _is_empty_lane(rule):
         return _deny(
             operation_name,
             "Session ACL: send_message_to_phone is blocked when a chat whitelist is configured.",
@@ -226,8 +313,15 @@ def _message_chat_id(message: dict[str, Any]) -> str | int | None:
 
 def filter_tool_result(operation_name: str, result: Any) -> Any:
     """Post-filter tool results to enforce chat whitelist on list payloads."""
+    from src.client.connection import get_request_token
+
     rule = _rules_for_token(get_request_token())
-    if rule is None or not rule.chats or not isinstance(result, dict):
+    if rule is None or not isinstance(result, dict):
+        return result
+
+    if _is_empty_lane(rule):
+        if operation_name in _LIST_RESULT_OPERATIONS:
+            return _deny(operation_name, _EMPTY_LANE_DENY_MSG)
         return result
 
     if operation_name == "find_chats" and isinstance(result.get("chats"), list):
@@ -270,14 +364,46 @@ def enforce_session_acl(operation_name: str):
             denial = check_pre_tool_access(operation_name, kwargs)
             if denial is not None:
                 return denial
+
+            track_tickets = operation_name == "get_messages"
+            if track_tickets:
+                with track_minted_attachment_tickets() as minted_ids:
+                    result = await func(*args, **kwargs)
+                    return await _finalize_acl_result(
+                        operation_name, result, minted_ids
+                    )
+
             result = await func(*args, **kwargs)
-            if isinstance(result, dict) and result.get("ok") is False:
-                return result
-            return filter_tool_result(operation_name, result)
+            return await _finalize_acl_result(operation_name, result, [])
 
         return wrapper
 
     return decorator
+
+
+async def _finalize_acl_result(
+    operation_name: str,
+    result: Any,
+    minted_ids: list[str],
+) -> Any:
+    if isinstance(result, dict) and result.get("ok") is False:
+        return result
+    was_ok = isinstance(result, dict) and result.get("ok") is not False
+    filtered = filter_tool_result(operation_name, result)
+    if (
+        operation_name == "get_messages"
+        and was_ok
+        and isinstance(filtered, dict)
+        and filtered.get("ok") is False
+        and minted_ids
+    ):
+        removed = await revoke_attachment_tickets(minted_ids)
+        if removed:
+            logger.info(
+                "Revoked %d attachment ticket(s) after get_messages ACL denial",
+                removed,
+            )
+    return filtered
 
 
 def check_mtproto_api_access(
@@ -293,4 +419,8 @@ def check_mtproto_api_access(
             "Session ACL is read-only: HTTP MTProto bridge is not permitted.",
             params={"allow_dangerous": allow_dangerous},
         )
-    return None
+    return _deny(
+        "mtproto_api",
+        _LISTED_TOKEN_MTPROTO_API_DENY_MSG,
+        params={"allow_dangerous": allow_dangerous},
+    )
