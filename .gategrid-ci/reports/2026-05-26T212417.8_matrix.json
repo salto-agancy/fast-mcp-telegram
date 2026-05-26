@@ -1,0 +1,437 @@
+{
+  "schema_version": 1,
+  "commit_sha": "local",
+  "timestamp": "2026-05-26T21:24:17.868313+00:00",
+  "matrix_path": "/Users/leshchenko/coding_projects/vds/deployed_projects/fast-mcp-telegram/evals/matrices/gate.yaml",
+  "matrix_name": "gate",
+  "fingerprint": {
+    "matrix_name": "gate",
+    "profile_ids": [
+      "main"
+    ],
+    "case_ids": [
+      "find_chats_gate",
+      "get_chat_info_gate",
+      "get_messages_browse_mode",
+      "get_messages_readonly",
+      "search_global_single_result",
+      "search_messages_global"
+    ]
+  },
+  "sampling": {
+    "sampled": false,
+    "seed": null,
+    "max_cells": null,
+    "share": null,
+    "always_include_tags": [],
+    "planned_cells": 6,
+    "executed_cells": 6,
+    "skipped_cells": []
+  },
+  "run_max_retries": 0,
+  "cells": [
+    {
+      "key": {
+        "case_id": "find_chats_gate",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "List some of my recent chats \u2014 five is fine. How many chats did you get?",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "find_chats",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "find_chats": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.03749999450519681
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.03749999450519681,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    },
+    {
+      "key": {
+        "case_id": "search_messages_global",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "Search my messages for the word \u201ctest\u201d and show me up to three hits. Did you find anything?",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "search_messages_globally",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "search_messages_globally": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.012917036656290293
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.012917036656290293,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    },
+    {
+      "key": {
+        "case_id": "get_messages_readonly",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "Open Saved Messages and read the last couple of messages there. If you cannot find Saved Messages, pick one chat and read two messages.",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "get_messages",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "get_messages": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.009333016350865364
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.009333016350865364,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    },
+    {
+      "key": {
+        "case_id": "get_chat_info_gate",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "What can you tell me about Saved Messages as a chat? Use get_chat_info if you need metadata.",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "get_chat_info",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "get_chat_info": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.008750008419156075
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.008750008419156075,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    },
+    {
+      "key": {
+        "case_id": "get_messages_browse_mode",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "In Saved Messages, fetch exactly two recent messages by browsing \u2014 do not search globally and do not send anything.",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "get_messages",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "get_messages": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.00825000461190939
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.00825000461190939,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    },
+    {
+      "key": {
+        "case_id": "search_global_single_result",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "Search globally for the word \u201chello\u201d but only show one result. Do not send or edit any messages.",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "search_messages_globally",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "search_messages_globally": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.006916990969330072
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.006916990969330072,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    }
+  ],
+  "overall": {
+    "pass_rate": 1.0,
+    "duration_ms_mean": 0.013944508585458001,
+    "cell_count": 6,
+    "metrics": {}
+  },
+  "pass_rate": 1.0
+}

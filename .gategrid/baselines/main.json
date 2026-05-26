@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "profile_id": "main",
+  "updated_at": "2026-05-25T13:36:14.244653+00:00",
+  "source_report_path": ".gategrid/reports/2026-05-25T133603.0_matrix.json",
+  "fingerprint": {
+    "matrix_name": "gate",
+    "profile_ids": [
+      "main"
+    ],
+    "case_ids": [
+      "find_chats_gate",
+      "get_messages_readonly",
+      "search_messages_global"
+    ]
+  },
+  "overall": {
+    "pass_rate": 1.0,
+    "duration_ms_mean": 0.02047233283519745,
+    "cell_count": 3,
+    "metrics": {}
+  },
+  "cells": {
+    "find_chats_gate\u0000main\u0000mock": {
+      "key": {
+        "case_id": "find_chats_gate",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "duration_ms": 0.038416997995227575,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      }
+    },
+    "search_messages_global\u0000main\u0000mock": {
+      "key": {
+        "case_id": "search_messages_global",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "duration_ms": 0.013208016753196716,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      }
+    },
+    "get_messages_readonly\u0000main\u0000mock": {
+      "key": {
+        "case_id": "get_messages_readonly",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "duration_ms": 0.009791983757168055,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      }
+    }
+  }
+}

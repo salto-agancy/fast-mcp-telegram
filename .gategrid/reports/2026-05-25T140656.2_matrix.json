@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "commit_sha": "local",
+  "timestamp": "2026-05-25T14:06:56.235216+00:00",
+  "matrix_path": "/Users/leshchenko/coding_projects/vds/deployed_projects/fast-mcp-telegram/evals/matrices/gate.yaml",
+  "matrix_name": "gate",
+  "fingerprint": {
+    "matrix_name": "gate",
+    "profile_ids": [
+      "main"
+    ],
+    "case_ids": [
+      "find_chats_gate",
+      "get_messages_readonly",
+      "search_messages_global"
+    ]
+  },
+  "sampling": {
+    "sampled": false,
+    "seed": null,
+    "max_cells": null,
+    "share": null,
+    "always_include_tags": [],
+    "planned_cells": 3,
+    "executed_cells": 3,
+    "skipped_cells": []
+  },
+  "run_max_retries": 0,
+  "cells": [
+    {
+      "key": {
+        "case_id": "find_chats_gate",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "List some of my recent chats \u2014 five is fine. How many chats did you get?",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "find_chats",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "find_chats": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.04754203837364912
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.04754203837364912,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    },
+    {
+      "key": {
+        "case_id": "search_messages_global",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "Search my messages for the word \u201ctest\u201d and show me up to three hits. Did you find anything?",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "search_messages_globally",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "search_messages_globally": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.016958045307546854
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.016958045307546854,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    },
+    {
+      "key": {
+        "case_id": "get_messages_readonly",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "gate"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "Open Saved Messages and read the last couple of messages there. If you cannot find Saved Messages, pick one chat and read two messages.",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{}",
+                "name": "get_messages",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "get_messages": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_no_destructive_tools": true,
+              "mcp_tooling_ok": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.012459000572562218
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.012459000572562218,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    }
+  ],
+  "overall": {
+    "pass_rate": 1.0,
+    "duration_ms_mean": 0.025653028084586065,
+    "cell_count": 3,
+    "metrics": {}
+  },
+  "pass_rate": 1.0
+}
