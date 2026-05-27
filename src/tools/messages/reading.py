@@ -154,7 +154,7 @@ async def read_messages_by_ids(
 
         successful_results = [r for r in results if "error" not in r]
         if successful_results:
-            await transcribe_voice_messages(successful_results, entity)
+            await transcribe_voice_messages(successful_results, entity, client=client)
 
         successful_count = len(successful_results)
         log_operation_success(

@@ -458,6 +458,7 @@ def make_mock_message(
     msg.forum_topic = forum_topic
     msg.peer_id = peer_id
     msg.reply_to = reply_to
+    msg.forward = None
     for k, v in kwargs.items():
         setattr(msg, k, v)
     return msg

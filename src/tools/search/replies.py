@@ -232,7 +232,9 @@ async def _fetch_replies(
                 include_chat_entity,
             )
 
-    await transcribe_voice_messages(collected[:limit], effective_entity)
+    await transcribe_voice_messages(
+        collected[:limit], effective_entity, client=client
+    )
 
     return collected, discussion_metadata
 

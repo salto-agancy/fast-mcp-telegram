@@ -80,7 +80,7 @@ async def _collect_messages_in_chat(
         for q in per_chat_queries
     ]
     await _execute_parallel_searches_generators(generators, collected, seen_keys, limit)
-    await transcribe_voice_messages(collected, entity)
+    await transcribe_voice_messages(collected, entity, client=client)
     return await _get_chat_message_count(chat_id) if include_total_count else None
 
 

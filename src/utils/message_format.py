@@ -672,10 +672,14 @@ async def _transcribe_single_voice_message(
 
 
 async def transcribe_voice_messages(
-    messages: list[dict[str, Any]], chat_entity
+    messages: list[dict[str, Any]],
+    chat_entity,
+    *,
+    client=None,
 ) -> None:
     """Transcribe voice message dicts in parallel; TaskGroup cancels peers on PremiumRequiredError."""
-    client = await get_connected_client()
+    if client is None:
+        client = await get_connected_client()
 
     is_premium = await _is_user_premium(client)
 
