@@ -47,10 +47,10 @@ async def test_get_connected_client_stdio_default_session_name(stdio_config):
     mock_client.is_connected.return_value = True
 
     with patch(
-        "src.client.connection._build_telegram_client_for_token",
+        "src.client.connection._get_client_by_token",
         new_callable=AsyncMock,
         return_value=mock_client,
-    ) as build_mock:
+    ) as get_mock:
         with patch(
             "src.client.connection.ensure_connection",
             new_callable=AsyncMock,
@@ -59,6 +59,6 @@ async def test_get_connected_client_stdio_default_session_name(stdio_config):
             client = await get_connected_client()
 
     assert client is mock_client
-    build_mock.assert_awaited_once()
-    session_path_arg = build_mock.await_args[0][0]
-    assert session_path_arg == stdio_config.session_path
+    get_mock.assert_awaited_once()
+    token_arg = get_mock.await_args[0][0]
+    assert token_arg == stdio_config.session_name

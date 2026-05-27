@@ -91,7 +91,7 @@ call_tool() {
   local token="$1"
   local label="$2"
   echo "--- ${label} (${token:0:24}...) ---"
-  curl -sS -X POST "${BASE_URL}" \
+  curl -sS --connect-timeout 5 --max-time 15 -X POST "${BASE_URL}" \
     -H "Authorization: Bearer ${token}" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json, text/event-stream" \

@@ -89,8 +89,6 @@ See [research/acl-design-brief.md](research/acl-design-brief.md) and [Roadmap.md
 | [research/gemini-competitive-analysis.md](research/gemini-competitive-analysis.md) | MCP/Telegram landscape, competitor table, ecosystem risks |
 | [research/gemini-strategy-monetization.md](research/gemini-strategy-monetization.md) | Aspirational positioning and monetization hypotheses |
 | [research/gemini-roadmap-proposal.md](research/gemini-roadmap-proposal.md) | Proposed features, phase timeline (planned vs shipped) |
-| [research/gemini-strategy-monetization.md](research/gemini-strategy-monetization.md) | Aspirational positioning and monetization hypotheses |
-| [research/gemini-roadmap-proposal.md](research/gemini-roadmap-proposal.md) | Proposed features, phase timeline (planned vs shipped) |
 
 ## See also
 
