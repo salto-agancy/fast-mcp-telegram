@@ -1,10 +1,10 @@
 ## Current Work Focus
 
-**Trust lane — Session ACL (2026-05-27):** Phase 1.5 shipped — release [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0) (PR #57). Operator `blocked_peers` denylist with dual pre/post enforcement. **Next:** Phase 2 — `ACL_DEFAULT`, `allow_mtproto`, enforcement registry. [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
+**Trust lane — Session ACL (2026-05-27):** Phase 2 implemented on `master` (not released): `allow_mtproto`, unified MTProto gate, `ACL_DENY_UNLISTED_TOKENS`, config load warnings. Phase 1.5 shipped as [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
 
-- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), `blocked_peers` in ACL YAML, [acl.yaml.example](../acl.yaml.example), [SECURITY.md](../SECURITY.md)
-- **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phases 1–3)
-- **Phase 2 (deferred):** `ACL_DEFAULT`, `allow_mtproto`, enforcement registry
+- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), [server_config.py](../src/config/server_config.py) (`ACL_DENY_UNLISTED_TOKENS`)
+- **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phase 3 chat metadata registry next)
+- **Next:** Phase 3 chat metadata registry or release cut for Phase 2
 - **Other lanes:** Telemetry `feature/telemetry` *(planned)*; QA / Gategrid `feature/evals`
 
 **Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release).

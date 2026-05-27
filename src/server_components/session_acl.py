@@ -10,10 +10,11 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import yaml
 
@@ -39,11 +40,19 @@ _EMPTY_LANE_DENY_MSG = (
     "Session ACL: this token has an empty chat lane (chats: [] or chats omitted). "
     "Add at least one chat id, @username, or me to the token entry in the ACL config."
 )
-_LISTED_TOKEN_MTPROTO_DENY_MSG = (
-    "Session ACL: invoke_mtproto is not permitted for tokens listed in the ACL config."
+_MTPROTO_READ_ONLY_DENY_MSG = (
+    "Session ACL is read-only: raw MTProto access is not permitted for this token."
 )
-_LISTED_TOKEN_MTPROTO_API_DENY_MSG = (
-    "Session ACL: HTTP MTProto bridge is not permitted for tokens listed in the ACL config."
+_MTPROTO_GLOBAL_SEARCH_DENY_MSG = (
+    "Session ACL: raw MTProto is not permitted when allow_global_search is false. "
+    "Set allow_global_search: true or use in-lane tools instead."
+)
+_MTPROTO_NOT_ALLOWED_DENY_MSG = (
+    "Session ACL: raw MTProto is not permitted for this token (allow_mtproto is false). "
+    "Set allow_mtproto: true in the token entry to opt in."
+)
+_KNOWN_TOKEN_ACL_KEYS = frozenset(
+    {"chats", "read_only", "allow_global_search", "allow_mtproto"}
 )
 _BLOCKED_PEER_DENY_MSG = (
     "Session ACL: blocked peer ({ref}) is denied for this deployment. See SECURITY.md."
@@ -67,6 +76,7 @@ class TokenAclRule:
     chats: frozenset[str | int] = field(default_factory=frozenset)
     read_only: bool = False
     allow_global_search: bool = True
+    allow_mtproto: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TokenAclRule:
@@ -78,6 +88,7 @@ class TokenAclRule:
             chats=frozenset(chats),
             read_only=bool(data.get("read_only", False)),
             allow_global_search=bool(data.get("allow_global_search", True)),
+            allow_mtproto=bool(data.get("allow_mtproto", False)),
         )
 
 
@@ -119,6 +130,7 @@ def _validate_acl_document(doc: dict[str, Any], path: Path) -> None:
                 f"ACL token prefix {prefix}... has read_only: true but empty or missing "
                 f"chats. Analyst profile requires a non-empty chat lane: {path}"
             )
+        _warn_token_acl_entry(token_key, raw, rule, path)
 
     blocked = doc.get("blocked_peers")
     if blocked is None:
@@ -133,6 +145,44 @@ def _validate_acl_document(doc: dict[str, Any], path: Path) -> None:
                 f"ACL config blocked_peers[{index}] is invalid (expected int, numeric "
                 f"string, or @username): {path}"
             )
+
+
+def _warn_token_acl_entry(
+    token_key: str,
+    raw: dict[str, Any],
+    rule: TokenAclRule,
+    path: Path,
+) -> None:
+    """Log operator hygiene warnings (non-fatal)."""
+    prefix = str(token_key)[:8]
+    unknown = set(raw.keys()) - _KNOWN_TOKEN_ACL_KEYS
+    if unknown:
+        logger.warning(
+            "ACL config token prefix %s... has unknown key(s) %s (ignored): %s",
+            prefix,
+            sorted(unknown),
+            path,
+        )
+    if not rule.chats:
+        logger.warning(
+            "ACL config token prefix %s... has empty or missing chats (empty lane): %s",
+            prefix,
+            path,
+        )
+    if rule.allow_mtproto and rule.read_only:
+        logger.warning(
+            "ACL config token prefix %s... has allow_mtproto: true with read_only: true "
+            "(read_only blocks MTProto at runtime): %s",
+            prefix,
+            path,
+        )
+    if rule.allow_mtproto and not rule.allow_global_search:
+        logger.warning(
+            "ACL config token prefix %s... has allow_mtproto: true with "
+            "allow_global_search: false (global search off blocks MTProto at runtime): %s",
+            prefix,
+            path,
+        )
 
 
 def _is_valid_blocked_peer_entry(value: Any) -> bool:
@@ -204,6 +254,12 @@ def _load_acl_document() -> dict[str, Any]:
 
     _validate_acl_document(doc, path)
 
+    config = get_config()
+    if config.acl_deny_unlisted_tokens:
+        logger.info(
+            "Session ACL: unlisted Bearer tokens denied (ACL_DENY_UNLISTED_TOKENS=true)"
+        )
+
     _acl_cache = doc
     _acl_cache_path = path
     _blocked_peers_cache = _blocked_peers_from_doc(doc)
@@ -225,6 +281,8 @@ def _rules_for_token(token: str | None) -> TokenAclRule | None:
 
     raw = tokens.get(token)
     if raw is None:
+        if config.acl_deny_unlisted_tokens:
+            return TokenAclRule()
         return None
     if not isinstance(raw, dict):
         logger.error(
@@ -288,7 +346,9 @@ def _is_blocked_peer(ref: Any) -> bool:
     normalized = _normalize_chat_ref(ref)
     if normalized == "":
         return False
-    return any(_chat_ref_matches(blocked, normalized) for blocked in _load_blocked_peers())
+    return any(
+        _chat_ref_matches(blocked, normalized) for blocked in _load_blocked_peers()
+    )
 
 
 def _deny_blocked_peer(
@@ -343,14 +403,18 @@ def _peer_refs_from_result(operation: str, result: dict[str, Any]) -> list[str |
     return refs
 
 
-def merge_mtproto_request_params(params: dict[str, Any], params_json: str) -> dict[str, Any]:
+def merge_mtproto_request_params(
+    params: dict[str, Any], params_json: str
+) -> dict[str, Any]:
     """Merge HTTP/tool MTProto params dict with optional params_json string."""
     merged = dict(params) if isinstance(params, dict) else {}
     if not params_json:
         return merged
     parsed = json.loads(params_json)
     if not isinstance(parsed, dict):
-        raise json.JSONDecodeError("params_json must decode to a JSON object", params_json, 0)
+        raise json.JSONDecodeError(
+            "params_json must decode to a JSON object", params_json, 0
+        )
     merged.update(parsed)
     return merged
 
@@ -360,7 +424,11 @@ def _extract_peer_ids_from_mtproto_params(params: dict[str, Any]) -> set[int]:
     if not isinstance(params, dict):
         return ids
     for key, value in params.items():
-        if key in _MTPROTO_PEER_ID_KEYS and isinstance(value, int) and not isinstance(value, bool):
+        if (
+            key in _MTPROTO_PEER_ID_KEYS
+            and isinstance(value, int)
+            and not isinstance(value, bool)
+        ):
             ids.add(value)
         elif isinstance(value, dict):
             for nested_key, nested_value in value.items():
@@ -412,7 +480,9 @@ def _check_blocked_peer_pre(
     chat_id = kwargs.get("chat_id")
     if chat_id is not None and operation in _CHAT_SCOPED_OPERATIONS:
         if _is_blocked_peer(chat_id):
-            return _deny_blocked_peer(operation, _normalize_chat_ref(chat_id), {"chat_id": chat_id})
+            return _deny_blocked_peer(
+                operation, _normalize_chat_ref(chat_id), {"chat_id": chat_id}
+            )
     return None
 
 
@@ -438,7 +508,9 @@ def _filter_blocked_peers_from_result(operation: str, result: dict[str, Any]) ->
         ]
         return {**result, "chats": filtered}
 
-    if operation == "search_messages_globally" and isinstance(result.get("messages"), list):
+    if operation == "search_messages_globally" and isinstance(
+        result.get("messages"), list
+    ):
         filtered = [
             msg
             for msg in result["messages"]
@@ -462,7 +534,24 @@ def _is_chat_allowed(chat_ref: Any, rule: TokenAclRule) -> bool:
     return any(_chat_ref_matches(a, normalized) for a in rule.chats)
 
 
-def _deny(operation: str, message: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+def _mtproto_denial_for_rule(
+    rule: TokenAclRule,
+    operation: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Return denial when raw MTProto is blocked for this token rule."""
+    if rule.read_only:
+        return _deny(operation, _MTPROTO_READ_ONLY_DENY_MSG, params=params)
+    if not rule.allow_global_search:
+        return _deny(operation, _MTPROTO_GLOBAL_SEARCH_DENY_MSG, params=params)
+    if not rule.allow_mtproto:
+        return _deny(operation, _MTPROTO_NOT_ALLOWED_DENY_MSG, params=params)
+    return None
+
+
+def _deny(
+    operation: str, message: str, params: dict[str, Any] | None = None
+) -> dict[str, Any]:
     return log_and_build_error(
         operation=operation,
         error_message=message,
@@ -480,7 +569,9 @@ def _bind_tool_kwargs(
     return dict(bound.arguments)
 
 
-def check_pre_tool_access(operation_name: str, kwargs: dict[str, Any]) -> dict[str, Any] | None:
+def check_pre_tool_access(
+    operation_name: str, kwargs: dict[str, Any]
+) -> dict[str, Any] | None:
     """Return an error dict when the tool call must be blocked, else None."""
     from src.client.connection import get_request_token
 
@@ -517,18 +608,10 @@ def check_pre_tool_access(operation_name: str, kwargs: dict[str, Any]) -> dict[s
                 params=kwargs,
             )
 
-    if operation_name == "invoke_mtproto":
-        if rule.read_only:
-            return _deny(
-                operation_name,
-                "Session ACL is read-only: invoke_mtproto is not permitted.",
-                params=kwargs,
-            )
-        return _deny(
-            operation_name,
-            _LISTED_TOKEN_MTPROTO_DENY_MSG,
-            params=kwargs,
-        )
+    if operation_name == "invoke_mtproto" and (
+        denial := _mtproto_denial_for_rule(rule, operation_name, kwargs)
+    ):
+        return denial
 
     if operation_name == "search_messages_globally" and not rule.allow_global_search:
         return _deny(
@@ -538,7 +621,10 @@ def check_pre_tool_access(operation_name: str, kwargs: dict[str, Any]) -> dict[s
         )
 
     chat_id = kwargs.get("chat_id")
-    if chat_id is not None and operation_name in _WRITE_OPERATIONS | {"get_messages", "get_chat_info"}:
+    if chat_id is not None and operation_name in _WRITE_OPERATIONS | {
+        "get_messages",
+        "get_chat_info",
+    }:
         if not _is_chat_allowed(chat_id, rule):
             return _deny(
                 operation_name,
@@ -599,7 +685,9 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
         ]
         return {**result, "chats": filtered}
 
-    if operation_name == "search_messages_globally" and isinstance(result.get("messages"), list):
+    if operation_name == "search_messages_globally" and isinstance(
+        result.get("messages"), list
+    ):
         filtered = [
             msg
             for msg in result["messages"]
@@ -680,14 +768,5 @@ def check_mtproto_api_access(
     rule = _rules_for_token(token)
     if rule is None:
         return None
-    if rule.read_only:
-        return _deny(
-            "mtproto_api",
-            "Session ACL is read-only: HTTP MTProto bridge is not permitted.",
-            params={"allow_dangerous": allow_dangerous},
-        )
-    return _deny(
-        "mtproto_api",
-        _LISTED_TOKEN_MTPROTO_API_DENY_MSG,
-        params={"allow_dangerous": allow_dangerous},
-    )
+    params = {"allow_dangerous": allow_dangerous}
+    return _mtproto_denial_for_rule(rule, "mtproto_api", params)

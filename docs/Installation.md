@@ -191,7 +191,7 @@ Opt-in **agent guardrails** for shared `http-auth` hosts: restrict specific Bear
 
 1. Set `ACL_ENABLED=true` (and optionally `ACL_CONFIG_PATH`) in the server environment.
 2. Create the ACL file — default `{session_directory}/acl.yaml`, or the path from `ACL_CONFIG_PATH`. Start from [acl.yaml.example](../acl.yaml.example).
-3. List **only** Bearer tokens you want to restrict. **Unlisted tokens keep full tool access.**
+3. List **only** Bearer tokens you want to restrict. **Unlisted tokens keep full tool access** unless `ACL_DENY_UNLISTED_TOKENS=true`.
 4. Restart or redeploy. Startup **fails closed** if ACL is enabled but the file is missing or invalid (`read_only` requires a non-empty `chats` list).
 
 **Lane rules (summary):**
@@ -201,9 +201,9 @@ Opt-in **agent guardrails** for shared `http-auth` hosts: restrict specific Bear
 | `chats` | Allowlist of chat ids, `@username`, or `me` for this token |
 | Empty or omitted `chats` on a **listed** token | **Hard deny** all chat-scoped operations (not an empty result list) |
 | `read_only: true` | Blocks send, edit, `invoke_mtproto`, and the HTTP MTProto bridge |
-| `allow_global_search: false` | Blocks `search_messages_globally` |
-
-Listed tokens cannot use `invoke_mtproto` or `/mtproto-api/*` in Phase 1.
+| `allow_global_search: false` | Blocks `search_messages_globally` and raw MTProto |
+| `allow_mtproto: false` | Default for listed tokens; blocks `invoke_mtproto` and `/mtproto-api/*` unless explicitly `true` with `read_only: false` and `allow_global_search: true` |
+| `ACL_DENY_UNLISTED_TOKENS=true` | Bearer tokens not in `tokens:` get synthetic empty-lane deny |
 
 **Operator runbook:** [SECURITY.md](../SECURITY.md#opt-in-session-acl-http-auth) · **Design:** [ADR 0001](adr/0001-agent-scoped-session-acl.md) · **Local testing:** [CONTRIBUTING.md](../CONTRIBUTING.md#acl-development-and-testing-not-via-cursor-mcp)
 
@@ -229,6 +229,7 @@ MTPROTO_PROXY=tg://proxy?server=your-proxy.com&port=443&secret=your-secret  # Fi
 # Session ACL (http-auth only) — see #session-acl-http-auth
 ACL_ENABLED=false                  # Opt-in per-token agent guardrails
 ACL_CONFIG_PATH=                   # Override default {session_directory}/acl.yaml
+ACL_DENY_UNLISTED_TOKENS=false     # Deny Bearer tokens omitted from tokens: map
 ```
 
 **Tip:** The CLI setup automatically loads `.env` files from your current directory.

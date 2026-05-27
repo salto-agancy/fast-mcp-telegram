@@ -1,6 +1,6 @@
 # Session ACL design brief — agent guardrails
 
-**Status:** Approved direction (2026-05-27). Supersedes zero-trust / account-lockdown framing.  
+**Status:** Approved direction (2026-05-27). Supersedes zero-trust / account-lockdown framing.
 **ADR:** [ADR 0001 — Agent-scoped session ACL](../adr/0001-agent-scoped-session-acl.md).
 
 ## First principles
@@ -112,7 +112,7 @@ Errors: `Session ACL: blocked peer (<ref>) is denied for this deployment. See SE
 | Variable      | Default       | Notes                                                                             |
 | ------------- | ------------- | --------------------------------------------------------------------------------- |
 | `ACL_ENABLED` | false         | Opt-in                                                                            |
-| `ACL_DEFAULT` | `full_access` | Optional `deny` for strict multi-tenant; **not** recommended default for personal |
+| `ACL_DENY_UNLISTED_TOKENS` | false | When true, Bearer tokens omitted from `tokens:` get synthetic empty-lane deny; **not** recommended default for personal |
 
 
 ## Configuration (current + planned)
@@ -134,7 +134,7 @@ tokens:
       - -1001234567890
     read_only: true
     allow_global_search: true
-    # allow_mtproto: false   # Phase 2 — default false when token is listed
+    allow_mtproto: false   # default false when omitted on listed tokens
 ```
 
 See [acl.yaml.example](../../acl.yaml.example).
@@ -199,10 +199,10 @@ Errors: MCP `ok: false` with actionable text; HTTP 403 on MTProto bridge.
 
 | Item                                 | Rationale                                               |
 | ------------------------------------ | ------------------------------------------------------- |
-| `ACL_DEFAULT` env                    | `full_access` default; optional `deny` for multi-tenant |
+| `ACL_DENY_UNLISTED_TOKENS` env       | Default false; true = deny unlisted Bearer tokens       |
 | `allow_mtproto`                      | Default false for listed tokens                         |
 | `allow_global_search` blocks MTProto | Bot profile cannot bypass via raw MTProto               |
-| Enforcement registry                 | DRY tool/route registration                             |
+| Unified MTProto gate                 | Single helper for tool + HTTP bridge                    |
 | Config load warnings                 | Unknown keys, empty lane, risky combos                  |
 
 

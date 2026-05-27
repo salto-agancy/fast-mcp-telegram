@@ -212,8 +212,19 @@ class ServerConfig(BaseSettings):
         default="",
         validation_alias=AliasChoices("acl_config_path", "ACL_CONFIG_PATH"),
         description=(
-            "Path to session ACL YAML/JSON file "
-            "(default: {session_directory}/acl.yaml)"
+            "Path to session ACL YAML/JSON file (default: {session_directory}/acl.yaml)"
+        ),
+    )
+
+    acl_deny_unlisted_tokens: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "acl_deny_unlisted_tokens", "ACL_DENY_UNLISTED_TOKENS"
+        ),
+        description=(
+            "When ACL is enabled, deny all tool access for Bearer tokens omitted "
+            "from the ACL tokens map (synthetic empty lane). Default false preserves "
+            "full access for unlisted tokens."
         ),
     )
 

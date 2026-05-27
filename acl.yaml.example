@@ -25,6 +25,7 @@ tokens:
       - me
     read_only: true
     allow_global_search: true
+    # allow_mtproto: false   # default for listed tokens
 
   # Agent profile: team_lane — work chats, send allowed
   # "another-token":
@@ -33,6 +34,7 @@ tokens:
   #     - "@myteam"
   #   read_only: false
   #   allow_global_search: true
+  #   allow_mtproto: false
 
   # Agent profile: bot — channels only, no global search
   # "automation-token":
@@ -40,3 +42,13 @@ tokens:
   #     - -100999888777
   #   read_only: false
   #   allow_global_search: false
+  #   allow_mtproto: false
+
+  # Optional power profile — raw MTProto escape hatch (use sparingly)
+  # "power-token":
+  #   chats:
+  #     - me
+  #     - "@workgroup"
+  #   read_only: false
+  #   allow_global_search: true
+  #   allow_mtproto: true
