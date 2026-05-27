@@ -7,6 +7,7 @@ restrictions. Tokens not listed keep full account access (backward compatible).
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from dataclasses import dataclass, field
@@ -233,6 +234,15 @@ def _deny(operation: str, message: str, params: dict[str, Any] | None = None) ->
     )
 
 
+def _bind_tool_kwargs(
+    func: Callable, args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge positional and keyword tool arguments for ACL pre-checks."""
+    bound = inspect.signature(func).bind(*args, **kwargs)
+    bound.apply_defaults()
+    return dict(bound.arguments)
+
+
 def check_pre_tool_access(operation_name: str, kwargs: dict[str, Any]) -> dict[str, Any] | None:
     """Return an error dict when the tool call must be blocked, else None."""
     from src.client.connection import get_request_token
@@ -361,7 +371,8 @@ def enforce_session_acl(operation_name: str):
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            denial = check_pre_tool_access(operation_name, kwargs)
+            bound_kwargs = _bind_tool_kwargs(func, args, kwargs)
+            denial = check_pre_tool_access(operation_name, bound_kwargs)
             if denial is not None:
                 return denial
 

@@ -183,12 +183,12 @@ def _session_file_exists(session_path: Path) -> bool:
 
 def _unlink_session_file(session_path: Path) -> None:
     """Remove the on-disk Telethon session file for ``session_path``."""
-    path_to_remove = (
-        session_path
-        if session_path.suffix == ".session"
-        else session_path.with_suffix(".session")
-    )
-    path_to_remove.unlink(missing_ok=True)
+    if session_path.suffix == ".session":
+        session_path.unlink(missing_ok=True)
+        return
+    session_path.with_suffix(".session").unlink(missing_ok=True)
+    if session_path.is_file():
+        session_path.unlink(missing_ok=True)
 
 
 async def _safe_disconnect_after_verify_failure(client: TelegramClient) -> None:

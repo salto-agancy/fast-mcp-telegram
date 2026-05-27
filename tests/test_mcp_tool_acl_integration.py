@@ -88,6 +88,26 @@ async def test_chat_whitelist_blocks_forbidden_chat_via_decorator_chain(acl_conf
 
 
 @pytest.mark.asyncio
+async def test_positional_chat_id_blocked_by_acl_decorator_chain(acl_config):
+    """Positional chat_id must not bypass ACL pre-check (kwargs-only bypass)."""
+    tool_called = AsyncMock(return_value={"ok": True, "messages": []})
+
+    @mcp_tool_with_restrictions("get_messages")
+    async def get_messages(chat_id, limit=50):
+        return await tool_called(chat_id=chat_id, limit=limit)
+
+    with patch(
+        "fastmcp.server.dependencies.get_access_token",
+        return_value=make_access_token("token-team"),
+    ):
+        result = await get_messages(-1000000)
+
+    assert result["ok"] is False
+    assert "not in the allowed list" in result["error"]
+    tool_called.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_chat_whitelist_allows_listed_chat_via_decorator_chain(acl_config):
     """Listed chats pass ACL pre-check and reach the tool body."""
     tool_called = AsyncMock(return_value={"ok": True, "messages": []})

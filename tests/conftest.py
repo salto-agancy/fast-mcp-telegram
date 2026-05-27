@@ -540,6 +540,28 @@ def make_mock_request(path, scheme="https", netloc="example.com", query=""):
 
 
 @pytest.fixture(autouse=True)
+def clear_request_token_context():
+    """Reset bearer token context between tests to avoid ACL/auth leakage."""
+    from src.client.connection import set_request_token
+
+    set_request_token(None)
+    yield
+    set_request_token(None)
+
+
+@pytest.fixture(autouse=True)
+def clear_connection_session_cache():
+    """Clear token session cache between tests to avoid cross-test pollution."""
+    import src.client.connection as conn
+
+    conn._session_cache.clear()
+    conn._connection_failures.clear()
+    yield
+    conn._session_cache.clear()
+    conn._connection_failures.clear()
+
+
+@pytest.fixture(autouse=True)
 def clear_entity_cache():
     """Clear entity type and folder caches before each test to avoid cache pollution.
 
