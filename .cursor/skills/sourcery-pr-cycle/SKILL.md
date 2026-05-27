@@ -193,7 +193,7 @@ Merge via user-preferred method (`gh pr merge`, squash, etc.) when the user asks
 | Skill | Role |
 | ----- | ---- |
 | [sourcery-pr-review-analysis](/Users/leshchenko/.claude/skills/sourcery-pr-review-analysis/SKILL.md) | Triage tables, fetch patterns, categorization |
-| [release-notes](.cursor/skills/release-notes/SKILL.md) | Version bump + release after merge (not part of this loop) |
+| [release-notes](.cursor/skills/release-notes/SKILL.md) | Version bump + release after merge (not part of this loop); before Telegram posts, see release-notes CI gate |
 | [implementation-workflow](.cursor/rules/implementation-workflow.mdc) | Plan approval, exit tests, step 5 closeout |
 
 ## Additional resources

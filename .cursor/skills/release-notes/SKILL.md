@@ -16,7 +16,8 @@ Mandatory workflow for fast-mcp-telegram releases. Release notes belong on GitHu
 2. Update docs (section 3) if needed
 3. Classify scope (section 4) → draft notes (section 5) → review gate when required
 4. `uv version` → commit → tag → push → `gh release create` → `gh release view`
-5. After user confirms GitHub release → Telegram HTML (section 7)
+5. Verify CI/checks green on release tag or master commit (section 6 gate)
+6. Telegram HTML (section 7) only after release is published **and** CI is green (or user explicitly overrides)
 
 ## 1. Context
 
@@ -142,11 +143,20 @@ Or `--notes-file /path/to/notes.md` (temp file; do not commit).
 gh release view <version>
 ```
 
-Wait for user confirmation before Telegram (section 7).
+**CI gate (required before Telegram):** After `gh release create`, confirm GitHub Actions / checks are green on the release tag or the `master` commit that tag points to:
+
+```bash
+gh release view <version>   # note target commit SHA
+gh run list --commit <sha> --limit 10
+# or: gh run list --branch master --limit 5
+gh run watch <run-id>       # optional — wait for completion
+```
+
+Do **not** post Telegram until **both** (a) the GitHub release is published and (b) CI is green. User may explicitly override (e.g. **skip CI wait**, **post anyway**).
 
 ## 7. Telegram announcement
 
-Only after user confirms GitHub release is published.
+Only after section 6: GitHub release published **and** CI green (unless user explicitly overrides).
 
 | Audience | `chat_id` | Language |
 |----------|-----------|----------|
