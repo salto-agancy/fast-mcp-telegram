@@ -67,6 +67,8 @@ class MockTelegramClient:
             mock_msg.id = msg["id"]
             mock_msg.text = msg["text"]
             mock_msg.date = msg["date"]
+            mock_msg.sender_id = None
+            mock_msg.forward = None
             yield mock_msg
 
     async def send_message(self, chat_id, text, **kwargs):
@@ -458,6 +460,8 @@ def make_mock_message(
     msg.forum_topic = forum_topic
     msg.peer_id = peer_id
     msg.reply_to = reply_to
+    # Explicit None avoids MagicMock truthy auto-attrs triggering live get_entity_by_id.
+    msg.sender_id = None
     msg.forward = None
     for k, v in kwargs.items():
         setattr(msg, k, v)
