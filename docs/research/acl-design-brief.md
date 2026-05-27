@@ -51,30 +51,35 @@ Expressed as flags today; named profiles for operators:
 
 Phase 2 adds `**allow_mtproto`** (default **false** for listed tokens). When `allow_global_search` is false, MTProto remains blocked for that profile even if `read_only` is false.
 
-### Sensitive peers = server denylist (Phase 1.5)
-
-Orthogonal to **workspace lane** (`chats` allowlist):
+### Sensitive peers = deployment denylist (Phase 1.5)
 
 
 | Dimension           | `chats` (lane)                                               | `blocked_peers` (sensitive)                                          |
 | ------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------- |
 | **Question**        | Which chats may this token use?                              | Which peers must **never** be reachable via MCP tools?               |
-| **Default**         | Unlisted token → all chats; listed empty → deny all chat ops | **Built-in server list always applied** when `ACL_ENABLED`           |
-| **Operator config** | Per-token `chats`                                            | Optional **deployment-wide** `blocked_peers.extend` only             |
-| **Override**        | Per-token allowlist can include work ids                     | Operators **cannot** remove built-in sensitive ids                   |
+| **Default**         | Unlisted token → all chats; listed empty → deny all chat ops | **Omitted** → no sensitive blocking; lane ACL only                   |
+| **Operator config** | Per-token `chats`                                            | Optional **deployment-wide** list (operators own full denylist)      |
+| **Override**        | Per-token allowlist can include work ids                     | **Deny wins** if peer is both in `chats` and on `blocked_peers`      |
 | **Threat**          | Agent crosses work/personal boundary                         | Malicious teammate reads login PINs or revokes bots via shared token |
 
 
-Built-in defaults (see [Suggested default denylist](#suggested-default-denylist-research)) target account takeover and bot credential exposure. Human operators still use Telegram clients normally.
+Recommended defaults for shared hosts (example + SECURITY.md only — not enforced unless copied into config):
 
-**Minimal config shape (planned):**
+| Peer id | Handle | Why block |
+| ------- | ------ | --------- |
+| `777000` | Telegram service | Login codes, security alerts |
+| `93372553` | @BotFather | Bot tokens, settings |
+| `178220800` | @SpamBot | Spam/limit appeals |
+
+Human operators still use Telegram clients normally.
+
+**Minimal config shape:**
 
 ```yaml
-# Top-level — applies to every token when ACL_ENABLED=true
 blocked_peers:
-  extend:
-    - 1234567890          # optional numeric peer ids
-    # - "@SomeOfficialBot"  # deferred: resolve at enforcement like chats
+  - 777000
+  - 93372553
+  - "@BotFather"
 
 tokens:
   "<bearer-token>":
@@ -82,23 +87,24 @@ tokens:
     read_only: false
 ```
 
-- `**blocked_peers.extend**`: optional operator additions merged **on top of** immutable server defaults (not per-token in v1 — keeps shared-team policy consistent across tokens on one host).
-- **Env alternative (optional implementation):** `ACL_BLOCKED_PEERS_EXTEND` as comma-separated ids for containers without editing YAML.
-- **No `blocked_peers.defaults` in file** — defaults live in code + SECURITY.md; document ids and rationale there.
+- **`blocked_peers` omitted:** no sensitive blocking.
+- **`blocked_peers: []`:** explicit empty.
+- **Non-empty list:** enforced exactly as configured (int, numeric string, `@username` via same normalization as `chats`).
+- **Rejected:** `blocked_peers.extend`, per-token blocked lists, runtime MCP mutation.
 
-**Enforcement (when implemented):** same central checks as lane ACL; deny must win if a peer is both in `chats` and on the sensitive list.
+**Enforcement:** blocked-peer checks run **before** lane ACL for all tokens when the list is non-empty. Post-check on `get_chat_info` / `get_messages` matches resolved **numeric id and username**. Shallow MTProto param scan for numeric ids; invalid non-empty `params_json` → fail-closed when denylist is active.
 
 
 | Tool / route                            | Behavior                                                                                                                   |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `get_messages`, `get_chat_info`         | Pre-check: `chat_id` not in sensitive set                                                                                  |
-| `send_message`, `edit_message`          | Pre-check: target chat not sensitive                                                                                       |
-| `find_chats`                            | Post-filter: drop sensitive peers from `chats[]`                                                                           |
-| `search_messages_globally`              | Post-filter: drop messages whose peer is sensitive                                                                         |
-| `invoke_mtproto`, `POST /mtproto-api/`* | Pre-check peer/chat/user id arguments where applicable; block TL methods whose target is a sensitive peer (no lane bypass) |
+| `get_messages`, `get_chat_info`         | Pre-check: input `chat_id`; post-check: resolved `id` / `username` (and message `chat` fallback for `get_messages`)      |
+| `send_message`, `edit_message`          | Pre-check: target chat not blocked                                                                                         |
+| `find_chats`                            | Post-filter: drop blocked peers from `chats[]`                                                                           |
+| `search_messages_globally`              | Post-filter: drop messages whose peer is blocked                                                                         |
+| `invoke_mtproto`, `POST /mtproto-api/*` | Blocked-peer param scan **before** listed-token gate; shallow numeric id keys only                                       |
 
 
-Errors should name the peer class (“sensitive peer blocked”) and point to SECURITY.md, not imply the operator can allowlist BotFather via `chats`.
+Errors: `Session ACL: blocked peer (<ref>) is denied for this deployment. See SECURITY.md.`
 
 ### Environment defaults (Phase 2)
 
@@ -115,10 +121,10 @@ Enable with `ACL_ENABLED=true`. Path: `ACL_CONFIG_PATH` or `{session_directory}/
 
 ```yaml
 # Agent guardrails: per-token lane + profile. Unlisted tokens = full_access.
-# When ACL is enabled, server-built-in sensitive peers are always blocked via MCP;
-# optional deployment extension (Phase 1.5):
+# Optional deployment denylist (shared hosts — see SECURITY.md):
 # blocked_peers:
-#   extend: []
+#   - 777000
+#   - 93372553
 
 tokens:
   "<bearer-token>":
@@ -179,11 +185,11 @@ Errors: MCP `ok: false` with actionable text; HTTP 403 on MTProto bridge.
 
 | Item                       | Rationale                                              |
 | -------------------------- | ------------------------------------------------------ |
-| Server default denylist    | `777000`, BotFather, etc. — not removable by operators |
-| `blocked_peers.extend`     | Optional deployment-wide extras                        |
-| Tool + MTProto enforcement | No bypass via `invoke_mtproto` or global search        |
-| SECURITY.md section        | List defaults, shared-team threat, extend syntax       |
-| Tests                      | Deny read/send/search for built-in ids; extend merges  |
+| Operator `blocked_peers` list | Deployment-owned denylist; recommended defaults in example + SECURITY.md |
+| Dual pre/post enforcement  | Closes @username ↔ numeric id bypass on chat tools     |
+| Tool + MTProto enforcement | Blocked scan before lane gate; shallow MTProto ids     |
+| SECURITY.md section        | Shared-host checklist, numeric-id rule, post-check behavior |
+| Tests                      | Deny/filter matrix in `test_session_acl.py`            |
 
 
 **Placement:** After Phase 1 merge blockers, **before** Phase 2 `allow_mtproto` / registry — so raw MTProto cannot read login-code chats while profile flags are still catching up.

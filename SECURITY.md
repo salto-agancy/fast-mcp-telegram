@@ -62,6 +62,36 @@ Treat the ACL file like a secret (contains bearer token strings). Restrict file 
 - **`read_only`**: blocks send, edit, `invoke_mtproto`, and the HTTP MTProto bridge.
 - **`allow_global_search`**: when false, blocks `search_messages_globally` pre-check.
 
+### Sensitive peer denylist (`blocked_peers`, Phase 1.5)
+
+When **`blocked_peers`** is configured (non-empty list in the ACL file), those peers are **denied for every Bearer token** — listed and unlisted. Deny wins over a token’s `chats` lane.
+
+| Config | Behavior |
+| --- | --- |
+| **`blocked_peers` omitted** | No sensitive blocking; lane ACL only |
+| **`blocked_peers: []`** | Explicit empty — no sensitive blocking |
+| **Non-empty list** | Enforced exactly as configured (operators own the full list) |
+
+**Recommended defaults** (copy from [`acl.yaml.example`](acl.yaml.example) for shared hosts):
+
+| Peer id | Handle | Why block |
+| --- | --- | --- |
+| `777000` | Telegram service | Login codes, security alerts |
+| `93372553` | @BotFather | Bot tokens, settings |
+| `178220800` | @SpamBot | Spam/limit appeals |
+
+**Numeric ids in YAML** give the best coverage (including shallow MTProto param scans). Optional `@username` entries help **pre-check** raw tool input. **Post-check** on `get_chat_info` and `get_messages` matches **both** resolved numeric `id` and `username` from the tool result — so numeric-only YAML still blocks `@BotFather` input after Telegram resolves the peer, and `@username` YAML still blocks numeric input after resolution.
+
+**Pre-check limitation:** raw tool input is matched without entity lookup. Username-only YAML does not block numeric input until post-check (if the tool succeeds).
+
+**MTProto:** shallow scan of merged `params` / `params_json` for numeric blocked ids only (no TL schema walker). Invalid non-empty `params_json` when `blocked_peers` is configured → fail-closed deny. Residual risk: deeply nested or list params — document and accept for Phase 1.5.
+
+**List post-filter:** `find_chats` and `search_messages_globally` drop blocked peers from results; an empty list after filtering is success (not an error).
+
+**Error:** `Session ACL: blocked peer (<ref>) is denied for this deployment. See SECURITY.md.` (MCP `error_code` `-32007`).
+
+**Shared-host footgun:** `ACL_ENABLED=true` without `blocked_peers` leaves BotFather and login-code chats reachable via MCP — use the checklist above and uncomment the example block.
+
 ### What is blocked for listed tokens
 
 | Surface | Behavior |
@@ -81,7 +111,7 @@ ACL lanes reduce **accidental** cross-chat access and **in-server** tool abuse w
 - Replace Telegram account security (2FA, session revocation in official clients)
 - Apply to stdio or http-no-auth deployments
 
-Phase 1.5 (planned) adds a **sensitive peer denylist** (e.g. login-code user `777000`, BotFather) for shared-team blast radius — see [acl-design-brief.md](docs/research/acl-design-brief.md).
+When **`blocked_peers`** is configured, the denylist applies on http-auth for **all** tokens (see above).
 
 ### Troubleshooting denials
 
@@ -92,7 +122,9 @@ Phase 1.5 (planned) adds a **sensitive peer denylist** (e.g. login-code user `77
 | “read-only” | `read_only: true` on the token | Set `read_only: false` or use a write-capable profile |
 | “global message search” | `allow_global_search: false` | Set `allow_global_search: true` or use `get_messages` in-lane |
 | “listed in the ACL config” on MTProto | Listed tokens cannot use raw MTProto in Phase 1 | Remove token from ACL for full access, or wait for Phase 2 `allow_mtproto` |
-| Server refuses to start | Missing ACL file or invalid YAML | Create file; fix malformed token entries; ensure `read_only` has `chats` |
+| “blocked peer … denied for this deployment” | Peer is on `blocked_peers` denylist | Remove peer from tool args; adjust denylist if policy allows; see numeric-id guidance above |
+| “invalid params_json” with blocked_peers | Malformed JSON when denylist is active | Fix JSON or omit `params_json` |
+| Server refuses to start | Missing ACL file or invalid YAML | Create file; fix malformed token entries; ensure `read_only` has `chats`; fix `blocked_peers` list shape |
 
 No MCP tool mutates ACL in v1 — edit the file on the server and restart.
 

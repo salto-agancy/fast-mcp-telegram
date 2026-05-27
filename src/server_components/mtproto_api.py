@@ -68,9 +68,38 @@ def register_mtproto_api_routes(mcp_app) -> None:
         allow_dangerous = bool(body.get("allow_dangerous", False))
 
         if config.require_auth:
-            from src.server_components.session_acl import check_mtproto_api_access
+            import json
+
+            from src.server_components.session_acl import (
+                blocked_peers_configured,
+                check_blocked_peer_mtproto_params,
+                check_mtproto_api_access,
+                merge_mtproto_request_params,
+            )
 
             token = extract_bearer_token_from_request(request)
+            if blocked_peers_configured():
+                try:
+                    merged_params = merge_mtproto_request_params(
+                        params if isinstance(params, dict) else {},
+                        params_json,
+                    )
+                except json.JSONDecodeError:
+                    error = log_and_build_error(
+                        operation="mtproto_api",
+                        error_message=(
+                            "Session ACL: invalid params_json when blocked_peers is configured. "
+                            "Provide valid JSON or omit params_json. See SECURITY.md."
+                        ),
+                        params={"params_json": params_json[:80] if params_json else ""},
+                        error_code=-32007,
+                    )
+                    return JSONResponse(error, status_code=403)
+                if blocked_denial := check_blocked_peer_mtproto_params(
+                    merged_params, operation="mtproto_api"
+                ):
+                    return JSONResponse(blocked_denial, status_code=403)
+
             if acl_denial := check_mtproto_api_access(token, allow_dangerous=allow_dangerous):
                 return JSONResponse(acl_denial, status_code=403)
 

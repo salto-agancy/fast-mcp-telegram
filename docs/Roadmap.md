@@ -104,7 +104,7 @@ Operator-facing enhancements beyond ACL enforcement (not implemented):
 
 | Item | Purpose |
 | --- | --- |
-| **Sensitive peer denylist (Phase 1.5)** | Server-enforced block on security-sensitive peers (`777000` login codes, BotFather, etc.) for **all** tokens when `ACL_ENABLED` — independent of `chats` allowlist. Addresses **shared-team human threat** (same Bearer token) reading PINs or managing bots via MCP. Optional `blocked_peers.extend` in `acl.yaml`. See [ADR 0001](adr/0001-agent-scoped-session-acl.md), [acl-design-brief.md](research/acl-design-brief.md). |
+| **Sensitive peer denylist (Phase 1.5)** | Operator-configured `blocked_peers` denylist for **all** tokens when non-empty — independent of `chats` allowlist. Dual pre/post enforcement; recommended defaults in `acl.yaml.example` + SECURITY.md. See [ADR 0001](adr/0001-agent-scoped-session-acl.md), [acl-design-brief.md](research/acl-design-brief.md). |
 | **Chat metadata registry** | Operator-curated metadata for whitelisted/shared chats so team agents can navigate `find_chats` results — human titles, descriptions, tags, and “look here for X” hints. Complements ACL **workspace lanes** (which chats a token may use) with **navigation hints** (what each chat is for); does not replace lane allowlists. Likely config alongside `acl.yaml` or a sibling file; enrichment at the tool boundary (e.g. post-filter on `find_chats`). |
 
 See [acl-design-brief.md](research/acl-design-brief.md) Phase 1.5 and Phase 3 for related ACL work.
@@ -138,7 +138,7 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 
 | Item | Lane | Notes |
 | --- | --- | --- |
-| Sensitive peer denylist | Trust | Phase 1.5 — server defaults + `blocked_peers.extend`; see Trust lane planned scope |
+| Sensitive peer denylist | Trust | Phase 1.5 — operator `blocked_peers` list + dual enforcement; see Trust lane planned scope |
 | Per-token rate limits | Trust / ops | Complements telemetry FLOOD_WAIT signals |
 | SQLite read cache | Performance | Pairs with ACL whitelists |
 | ACL v2 permission matrix | Trust | Prgebish-style read/send per chat |

@@ -45,9 +45,21 @@ _LISTED_TOKEN_MTPROTO_DENY_MSG = (
 _LISTED_TOKEN_MTPROTO_API_DENY_MSG = (
     "Session ACL: HTTP MTProto bridge is not permitted for tokens listed in the ACL config."
 )
+_BLOCKED_PEER_DENY_MSG = (
+    "Session ACL: blocked peer ({ref}) is denied for this deployment. See SECURITY.md."
+)
+_INVALID_MTPROTO_JSON_DENY_MSG = (
+    "Session ACL: invalid params_json when blocked_peers is configured. "
+    "Provide valid JSON or omit params_json. See SECURITY.md."
+)
+_MTPROTO_PEER_ID_KEYS = frozenset({"user_id", "chat_id", "channel_id", "peer_id", "id"})
+_CHAT_SCOPED_OPERATIONS = frozenset(
+    {"get_messages", "get_chat_info", "send_message", "edit_message"}
+)
 
 _acl_cache: dict[str, Any] | None = None
 _acl_cache_path: Path | None = None
+_blocked_peers_cache: frozenset[str | int] | None = None
 
 
 @dataclass(frozen=True)
@@ -71,9 +83,10 @@ class TokenAclRule:
 
 def clear_acl_cache() -> None:
     """Reset loaded ACL config (for tests)."""
-    global _acl_cache, _acl_cache_path
+    global _acl_cache, _acl_cache_path, _blocked_peers_cache
     _acl_cache = None
     _acl_cache_path = None
+    _blocked_peers_cache = None
 
 
 def _configured_acl_path() -> Path | None:
@@ -107,6 +120,31 @@ def _validate_acl_document(doc: dict[str, Any], path: Path) -> None:
                 f"chats. Analyst profile requires a non-empty chat lane: {path}"
             )
 
+    blocked = doc.get("blocked_peers")
+    if blocked is None:
+        return
+    if not isinstance(blocked, list):
+        raise AclConfigError(
+            f"ACL config 'blocked_peers' must be a list when present: {path}"
+        )
+    for index, item in enumerate(blocked):
+        if not _is_valid_blocked_peer_entry(item):
+            raise AclConfigError(
+                f"ACL config blocked_peers[{index}] is invalid (expected int, numeric "
+                f"string, or @username): {path}"
+            )
+
+
+def _is_valid_blocked_peer_entry(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    if not isinstance(value, str):
+        return False
+    normalized = _normalize_chat_ref(value)
+    return normalized != ""
+
 
 def validate_acl_config() -> None:
     """Fail-closed: refuse startup when ACL is enabled but config is absent or invalid."""
@@ -122,12 +160,23 @@ def validate_acl_config() -> None:
     _load_acl_document()
 
 
+def _blocked_peers_from_doc(doc: dict[str, Any]) -> frozenset[str | int]:
+    raw = doc.get("blocked_peers")
+    if not isinstance(raw, list):
+        return frozenset()
+    peers: set[str | int] = set()
+    for item in raw:
+        peers.add(_normalize_chat_ref(item))
+    return frozenset(peers)
+
+
 def _load_acl_document() -> dict[str, Any]:
-    global _acl_cache, _acl_cache_path
+    global _acl_cache, _acl_cache_path, _blocked_peers_cache
     path = _configured_acl_path()
     if path is None:
         _acl_cache = {}
         _acl_cache_path = None
+        _blocked_peers_cache = frozenset()
         return _acl_cache
 
     if not path.is_file():
@@ -157,6 +206,7 @@ def _load_acl_document() -> dict[str, Any]:
 
     _acl_cache = doc
     _acl_cache_path = path
+    _blocked_peers_cache = _blocked_peers_from_doc(doc)
     logger.info("Loaded session ACL config from %s", path)
     return _acl_cache
 
@@ -214,6 +264,193 @@ def _chat_ref_matches(allowed: str | int, candidate: str | int) -> bool:
     return False
 
 
+def _load_blocked_peers() -> frozenset[str | int]:
+    config = get_config()
+    if not config.acl_enabled or config.disable_auth:
+        return frozenset()
+    global _blocked_peers_cache
+    if _blocked_peers_cache is not None:
+        return _blocked_peers_cache
+    _load_acl_document()
+    return _blocked_peers_cache if _blocked_peers_cache is not None else frozenset()
+
+
+def blocked_peers_configured() -> bool:
+    """True when ACL is on and blocked_peers is a non-empty deployment list."""
+    return bool(_load_blocked_peers())
+
+
+def _blocked_peers_active() -> bool:
+    return bool(_load_blocked_peers())
+
+
+def _is_blocked_peer(ref: Any) -> bool:
+    normalized = _normalize_chat_ref(ref)
+    if normalized == "":
+        return False
+    return any(_chat_ref_matches(blocked, normalized) for blocked in _load_blocked_peers())
+
+
+def _deny_blocked_peer(
+    operation: str, ref: str | int, params: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    return _deny(
+        operation,
+        _BLOCKED_PEER_DENY_MSG.format(ref=ref),
+        params=params,
+    )
+
+
+def _first_blocked_ref(refs: list[str | int]) -> str | int | None:
+    for ref in refs:
+        if _is_blocked_peer(ref):
+            return ref
+    return None
+
+
+def _peer_refs_from_result(operation: str, result: dict[str, Any]) -> list[str | int]:
+    refs: list[str | int] = []
+
+    def _append_ref(value: Any) -> None:
+        if value is None:
+            return
+        normalized = _normalize_chat_ref(value)
+        if normalized != "":
+            refs.append(normalized)
+
+    if operation == "get_chat_info":
+        _append_ref(result.get("id"))
+        _append_ref(result.get("username"))
+        return refs
+
+    if operation == "get_messages":
+        _append_ref(result.get("chat_id"))
+        chat = result.get("chat")
+        if isinstance(chat, dict):
+            _append_ref(chat.get("id"))
+            _append_ref(chat.get("username"))
+        messages = result.get("messages")
+        if isinstance(messages, list):
+            for message in messages:
+                if not isinstance(message, dict):
+                    continue
+                msg_chat = message.get("chat")
+                if isinstance(msg_chat, dict):
+                    _append_ref(msg_chat.get("id"))
+                    _append_ref(msg_chat.get("username"))
+        return refs
+
+    return refs
+
+
+def merge_mtproto_request_params(params: dict[str, Any], params_json: str) -> dict[str, Any]:
+    """Merge HTTP/tool MTProto params dict with optional params_json string."""
+    merged = dict(params) if isinstance(params, dict) else {}
+    if not params_json:
+        return merged
+    parsed = json.loads(params_json)
+    if not isinstance(parsed, dict):
+        raise json.JSONDecodeError("params_json must decode to a JSON object", params_json, 0)
+    merged.update(parsed)
+    return merged
+
+
+def _extract_peer_ids_from_mtproto_params(params: dict[str, Any]) -> set[int]:
+    ids: set[int] = set()
+    if not isinstance(params, dict):
+        return ids
+    for key, value in params.items():
+        if key in _MTPROTO_PEER_ID_KEYS and isinstance(value, int) and not isinstance(value, bool):
+            ids.add(value)
+        elif isinstance(value, dict):
+            for nested_key, nested_value in value.items():
+                if (
+                    nested_key in _MTPROTO_PEER_ID_KEYS
+                    and isinstance(nested_value, int)
+                    and not isinstance(nested_value, bool)
+                ):
+                    ids.add(nested_value)
+    return ids
+
+
+def check_blocked_peer_mtproto_params(
+    params: dict[str, Any], *, operation: str = "invoke_mtproto"
+) -> dict[str, Any] | None:
+    """Return denial when merged MTProto params reference a numeric blocked peer id."""
+    blocked = _load_blocked_peers()
+    if not blocked:
+        return None
+    numeric_blocked = {peer for peer in blocked if isinstance(peer, int)}
+    if not numeric_blocked:
+        return None
+    for peer_id in _extract_peer_ids_from_mtproto_params(params):
+        if peer_id in numeric_blocked:
+            return _deny_blocked_peer(operation, peer_id, params=params)
+    return None
+
+
+def _check_blocked_peer_pre(
+    operation: str, kwargs: dict[str, Any]
+) -> dict[str, Any] | None:
+    if operation == "invoke_mtproto":
+        params_json = kwargs.get("params_json") or ""
+        raw_params = kwargs.get("params")
+        params = raw_params if isinstance(raw_params, dict) else {}
+        if params_json:
+            try:
+                merged = merge_mtproto_request_params(params, params_json)
+            except json.JSONDecodeError:
+                return _deny(
+                    operation,
+                    _INVALID_MTPROTO_JSON_DENY_MSG,
+                    params=kwargs,
+                )
+        else:
+            merged = params
+        return check_blocked_peer_mtproto_params(merged)
+
+    chat_id = kwargs.get("chat_id")
+    if chat_id is not None and operation in _CHAT_SCOPED_OPERATIONS:
+        if _is_blocked_peer(chat_id):
+            return _deny_blocked_peer(operation, _normalize_chat_ref(chat_id), {"chat_id": chat_id})
+    return None
+
+
+def _filter_blocked_peers_from_result(operation: str, result: dict[str, Any]) -> Any:
+    if operation in {"get_chat_info", "get_messages"}:
+        blocked_ref = _first_blocked_ref(_peer_refs_from_result(operation, result))
+        if blocked_ref is not None:
+            return _deny_blocked_peer(operation, blocked_ref)
+
+    if operation == "find_chats" and isinstance(result.get("chats"), list):
+        filtered = [
+            chat
+            for chat in result["chats"]
+            if isinstance(chat, dict)
+            and _first_blocked_ref(
+                [
+                    _normalize_chat_ref(chat.get("id")),
+                    _normalize_chat_ref(chat.get("chat_id")),
+                    _normalize_chat_ref(chat.get("username")),
+                ]
+            )
+            is None
+        ]
+        return {**result, "chats": filtered}
+
+    if operation == "search_messages_globally" and isinstance(result.get("messages"), list):
+        filtered = [
+            msg
+            for msg in result["messages"]
+            if isinstance(msg, dict)
+            and (cid := _message_chat_id(msg)) is not None
+            and not _is_blocked_peer(cid)
+        ]
+        return {**result, "messages": filtered}
+
+    return result
+
+
 def _is_empty_lane(rule: TokenAclRule) -> bool:
     return not rule.chats
 
@@ -246,6 +483,14 @@ def _bind_tool_kwargs(
 def check_pre_tool_access(operation_name: str, kwargs: dict[str, Any]) -> dict[str, Any] | None:
     """Return an error dict when the tool call must be blocked, else None."""
     from src.client.connection import get_request_token
+
+    config = get_config()
+    if not config.acl_enabled or config.disable_auth:
+        return None
+
+    if _blocked_peers_active():
+        if blocked_denial := _check_blocked_peer_pre(operation_name, kwargs):
+            return blocked_denial
 
     rule = _rules_for_token(get_request_token())
     if rule is None:
@@ -325,8 +570,19 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
     """Post-filter tool results to enforce chat whitelist on list payloads."""
     from src.client.connection import get_request_token
 
+    if not isinstance(result, dict):
+        return result
+    if result.get("ok") is False:
+        return result
+
+    config = get_config()
+    if config.acl_enabled and not config.disable_auth and _blocked_peers_active():
+        result = _filter_blocked_peers_from_result(operation_name, result)
+        if isinstance(result, dict) and result.get("ok") is False:
+            return result
+
     rule = _rules_for_token(get_request_token())
-    if rule is None or not isinstance(result, dict):
+    if rule is None:
         return result
 
     if _is_empty_lane(rule):
