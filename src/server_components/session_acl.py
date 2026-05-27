@@ -59,6 +59,7 @@ _CHAT_SCOPED_OPERATIONS = frozenset(
 
 _acl_cache: dict[str, Any] | None = None
 _acl_cache_path: Path | None = None
+_blocked_peers_cache: frozenset[str | int] | None = None
 
 
 @dataclass(frozen=True)
@@ -82,9 +83,10 @@ class TokenAclRule:
 
 def clear_acl_cache() -> None:
     """Reset loaded ACL config (for tests)."""
-    global _acl_cache, _acl_cache_path
+    global _acl_cache, _acl_cache_path, _blocked_peers_cache
     _acl_cache = None
     _acl_cache_path = None
+    _blocked_peers_cache = None
 
 
 def _configured_acl_path() -> Path | None:
@@ -158,12 +160,23 @@ def validate_acl_config() -> None:
     _load_acl_document()
 
 
+def _blocked_peers_from_doc(doc: dict[str, Any]) -> frozenset[str | int]:
+    raw = doc.get("blocked_peers")
+    if not isinstance(raw, list):
+        return frozenset()
+    peers: set[str | int] = set()
+    for item in raw:
+        peers.add(_normalize_chat_ref(item))
+    return frozenset(peers)
+
+
 def _load_acl_document() -> dict[str, Any]:
-    global _acl_cache, _acl_cache_path
+    global _acl_cache, _acl_cache_path, _blocked_peers_cache
     path = _configured_acl_path()
     if path is None:
         _acl_cache = {}
         _acl_cache_path = None
+        _blocked_peers_cache = frozenset()
         return _acl_cache
 
     if not path.is_file():
@@ -193,6 +206,7 @@ def _load_acl_document() -> dict[str, Any]:
 
     _acl_cache = doc
     _acl_cache_path = path
+    _blocked_peers_cache = _blocked_peers_from_doc(doc)
     logger.info("Loaded session ACL config from %s", path)
     return _acl_cache
 
@@ -254,16 +268,16 @@ def _load_blocked_peers() -> frozenset[str | int]:
     config = get_config()
     if not config.acl_enabled or config.disable_auth:
         return frozenset()
-    doc = _load_acl_document()
-    raw = doc.get("blocked_peers")
-    if raw is None:
-        return frozenset()
-    if not isinstance(raw, list):
-        return frozenset()
-    peers: set[str | int] = set()
-    for item in raw:
-        peers.add(_normalize_chat_ref(item))
-    return frozenset(peers)
+    global _blocked_peers_cache
+    if _blocked_peers_cache is not None:
+        return _blocked_peers_cache
+    _load_acl_document()
+    return _blocked_peers_cache if _blocked_peers_cache is not None else frozenset()
+
+
+def blocked_peers_configured() -> bool:
+    """True when ACL is on and blocked_peers is a non-empty deployment list."""
+    return bool(_load_blocked_peers())
 
 
 def _blocked_peers_active() -> bool:
@@ -324,7 +338,6 @@ def _peer_refs_from_result(operation: str, result: dict[str, Any]) -> list[str |
                 if isinstance(msg_chat, dict):
                     _append_ref(msg_chat.get("id"))
                     _append_ref(msg_chat.get("username"))
-                    break
         return refs
 
     return refs

@@ -71,14 +71,14 @@ def register_mtproto_api_routes(mcp_app) -> None:
             import json
 
             from src.server_components.session_acl import (
-                _load_blocked_peers,
+                blocked_peers_configured,
                 check_blocked_peer_mtproto_params,
                 check_mtproto_api_access,
                 merge_mtproto_request_params,
             )
 
             token = extract_bearer_token_from_request(request)
-            if _load_blocked_peers():
+            if blocked_peers_configured():
                 try:
                     merged_params = merge_mtproto_request_params(
                         params if isinstance(params, dict) else {},
