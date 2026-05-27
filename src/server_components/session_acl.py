@@ -550,12 +550,19 @@ def _is_chat_allowed(chat_ref: Any, rule: TokenAclRule) -> bool:
     return any(_chat_ref_matches(a, normalized) for a in rule.chats)
 
 
+def _is_unlisted_synthetic_rule(rule: TokenAclRule) -> bool:
+    """True when rule was synthesized for ACL_DENY_UNLISTED_TOKENS (not from yaml)."""
+    return rule.unlisted_deny
+
+
 def _mtproto_denial_for_rule(
     rule: TokenAclRule,
     operation: str,
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Return denial when raw MTProto is blocked for this token rule."""
+    if _is_unlisted_synthetic_rule(rule):
+        return _deny(operation, _UNLISTED_TOKEN_DENY_MSG, params=params)
     if rule.read_only:
         return _deny(operation, _MTPROTO_READ_ONLY_DENY_MSG, params=params)
     if not rule.allow_global_search:

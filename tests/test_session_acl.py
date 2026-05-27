@@ -709,6 +709,25 @@ tokens:
     assert "not listed in the acl config" in denial["error"].lower()
 
 
+def test_deny_unlisted_tokens_blocks_invoke_mtproto(tmp_path):
+    _write_acl_config(
+        tmp_path,
+        """
+tokens:
+  listed-only:
+    chats:
+      - me
+""",
+    )
+    config = get_config()
+    config.acl_deny_unlisted_tokens = True
+    set_config(config)
+    set_request_token("not-in-acl-file")
+    denial = check_pre_tool_access("invoke_mtproto", {"params_json": "{}"})
+    assert denial is not None
+    assert "not listed in the acl config" in denial["error"].lower()
+
+
 def test_deny_unlisted_tokens_false_preserves_full_access(tmp_path):
     _write_acl_config(
         tmp_path,
