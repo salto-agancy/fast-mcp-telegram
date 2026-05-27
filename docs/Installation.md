@@ -203,7 +203,7 @@ Opt-in **agent guardrails** for shared `http-auth` hosts: restrict specific Bear
 | `read_only: true` | Blocks send, edit, `invoke_mtproto`, and the HTTP MTProto bridge |
 | `allow_global_search: false` | Blocks `search_messages_globally` and raw MTProto |
 | `allow_mtproto: false` | Default for listed tokens; blocks `invoke_mtproto` and `/mtproto-api/*` unless explicitly `true` with `read_only: false` and `allow_global_search: true` |
-| `ACL_DENY_UNLISTED_TOKENS=true` | Bearer tokens not in `tokens:` get synthetic empty-lane deny |
+| `ACL_DENY_UNLISTED_TOKENS=true` | Bearer tokens not in `tokens:` get a synthetic empty-lane denial |
 
 **Operator runbook:** [SECURITY.md](../SECURITY.md#opt-in-session-acl-http-auth) · **Design:** [ADR 0001](adr/0001-agent-scoped-session-acl.md) · **Local testing:** [CONTRIBUTING.md](../CONTRIBUTING.md#acl-development-and-testing-not-via-cursor-mcp)
 

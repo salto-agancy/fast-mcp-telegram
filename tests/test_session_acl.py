@@ -706,7 +706,7 @@ tokens:
     set_request_token("not-in-acl-file")
     denial = check_pre_tool_access("find_chats", {"query": "x"})
     assert denial is not None
-    assert "empty chat lane" in denial["error"].lower()
+    assert "not listed in the acl config" in denial["error"].lower()
 
 
 def test_deny_unlisted_tokens_false_preserves_full_access(tmp_path):
@@ -747,6 +747,26 @@ tokens:
     )
     assert denial is not None
     assert "blocked peer" in denial["error"].lower()
+
+
+def test_acl_load_ignores_x_prefixed_token_keys(tmp_path, caplog):
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    _write_acl_config(
+        tmp_path,
+        """
+tokens:
+  warn-token:
+    chats:
+      - me
+    x_note: operator metadata
+""",
+    )
+    from src.server_components.session_acl import _load_acl_document
+
+    _load_acl_document()
+    assert not any("unknown key" in rec.message.lower() for rec in caplog.records)
 
 
 def test_acl_load_warns_on_unknown_token_keys(tmp_path, caplog):

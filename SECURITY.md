@@ -63,7 +63,8 @@ Treat the ACL file like a secret (contains bearer token strings). Restrict file 
 - **`read_only`**: blocks send, edit, `invoke_mtproto`, and the HTTP MTProto bridge.
 - **`allow_global_search`**: when false, blocks `search_messages_globally` pre-check and raw MTProto.
 - **`allow_mtproto`**: when false (default for listed tokens), blocks `invoke_mtproto` and the HTTP MTProto bridge. Requires `read_only: false` and `allow_global_search: true` to allow raw MTProto.
-- **`ACL_DENY_UNLISTED_TOKENS`**: when true, Bearer tokens omitted from `tokens:` get the same restrictions as a listed token with an empty `chats` lane. Default false.
+- **`ACL_DENY_UNLISTED_TOKENS`**: when true, Bearer tokens omitted from `tokens:` are denied with an explicit unlisted-token message (not the generic empty-lane text). Default false.
+- **Unknown token keys**: keys not in the ACL schema log a warning at load; operator metadata may use an `x_` prefix (for example `x_note`) to avoid warnings.
 
 ### Sensitive peer denylist (`blocked_peers`, Phase 1.5)
 
@@ -126,7 +127,7 @@ When **`blocked_peers`** is configured, the denylist applies on http-auth for **
 | “global message search” | `allow_global_search: false` | Set `allow_global_search: true` or use `get_messages` in-lane |
 | “allow_mtproto is false” on MTProto | Listed token has not opted in to raw MTProto | Set `allow_mtproto: true` (and ensure `read_only: false`, `allow_global_search: true`) |
 | “allow_global_search is false” on MTProto | Bot-style profile blocks raw MTProto | Set `allow_global_search: true` or use in-lane tools |
-| Unlisted token denied everywhere | `ACL_DENY_UNLISTED_TOKENS=true` | Add token to `tokens:` with a lane, or set env to false |
+| Unlisted token denied everywhere | `ACL_DENY_UNLISTED_TOKENS=true` | Add token to `tokens:` with a lane, or set `ACL_DENY_UNLISTED_TOKENS=false` |
 | “blocked peer … denied for this deployment” | Peer is on `blocked_peers` denylist | Remove peer from tool args; adjust denylist if policy allows; see numeric-id guidance above |
 | “invalid params_json” with blocked_peers | Malformed JSON when denylist is active | Fix JSON or omit `params_json` |
 | Server refuses to start | Missing ACL file or invalid YAML | Create file; fix malformed token entries; ensure `read_only` has `chats`; fix `blocked_peers` list shape |

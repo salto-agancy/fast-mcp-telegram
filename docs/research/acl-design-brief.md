@@ -112,7 +112,7 @@ Errors: `Session ACL: blocked peer (<ref>) is denied for this deployment. See SE
 | Variable      | Default       | Notes                                                                             |
 | ------------- | ------------- | --------------------------------------------------------------------------------- |
 | `ACL_ENABLED` | false         | Opt-in                                                                            |
-| `ACL_DENY_UNLISTED_TOKENS` | false | When true, Bearer tokens omitted from `tokens:` get synthetic empty-lane deny; **not** recommended default for personal |
+| `ACL_DENY_UNLISTED_TOKENS` | false | When true, Bearer tokens omitted from `tokens:` get a synthetic empty-lane denial; **not** recommended default for personal |
 
 
 ## Configuration (current + planned)

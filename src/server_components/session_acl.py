@@ -40,6 +40,11 @@ _EMPTY_LANE_DENY_MSG = (
     "Session ACL: this token has an empty chat lane (chats: [] or chats omitted). "
     "Add at least one chat id, @username, or me to the token entry in the ACL config."
 )
+_UNLISTED_TOKEN_DENY_MSG = (
+    "Session ACL: this Bearer token is not listed in the ACL config and "
+    "ACL_DENY_UNLISTED_TOKENS=true. Add a tokens: entry for this bearer or set "
+    "ACL_DENY_UNLISTED_TOKENS=false."
+)
 _MTPROTO_READ_ONLY_DENY_MSG = (
     "Session ACL is read-only: raw MTProto access is not permitted for this token."
 )
@@ -77,6 +82,7 @@ class TokenAclRule:
     read_only: bool = False
     allow_global_search: bool = True
     allow_mtproto: bool = False
+    unlisted_deny: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TokenAclRule:
@@ -155,7 +161,11 @@ def _warn_token_acl_entry(
 ) -> None:
     """Log operator hygiene warnings (non-fatal)."""
     prefix = str(token_key)[:8]
-    unknown = set(raw.keys()) - _KNOWN_TOKEN_ACL_KEYS
+    unknown = {
+        key
+        for key in raw
+        if key not in _KNOWN_TOKEN_ACL_KEYS and not str(key).startswith("x_")
+    }
     if unknown:
         logger.warning(
             "ACL config token prefix %s... has unknown key(s) %s (ignored): %s",
@@ -163,9 +173,9 @@ def _warn_token_acl_entry(
             sorted(unknown),
             path,
         )
-    if not rule.chats:
+    if not rule.chats and "chats" not in raw:
         logger.warning(
-            "ACL config token prefix %s... has empty or missing chats (empty lane): %s",
+            "ACL config token prefix %s... has missing chats key (empty lane): %s",
             prefix,
             path,
         )
@@ -282,7 +292,7 @@ def _rules_for_token(token: str | None) -> TokenAclRule | None:
     raw = tokens.get(token)
     if raw is None:
         if config.acl_deny_unlisted_tokens:
-            return TokenAclRule()
+            return TokenAclRule(unlisted_deny=True)
         return None
     if not isinstance(raw, dict):
         logger.error(
@@ -527,6 +537,12 @@ def _is_empty_lane(rule: TokenAclRule) -> bool:
     return not rule.chats
 
 
+def _empty_lane_deny_msg(rule: TokenAclRule) -> str:
+    if rule.unlisted_deny:
+        return _UNLISTED_TOKEN_DENY_MSG
+    return _EMPTY_LANE_DENY_MSG
+
+
 def _is_chat_allowed(chat_ref: Any, rule: TokenAclRule) -> bool:
     if _is_empty_lane(rule):
         return False
@@ -595,18 +611,11 @@ def check_pre_tool_access(
         )
 
     if _is_empty_lane(rule):
+        lane_msg = _empty_lane_deny_msg(rule)
         if operation_name in _LIST_RESULT_OPERATIONS:
-            return _deny(
-                operation_name,
-                _EMPTY_LANE_DENY_MSG,
-                params=kwargs,
-            )
+            return _deny(operation_name, lane_msg, params=kwargs)
         if operation_name == "send_message_to_phone":
-            return _deny(
-                operation_name,
-                _EMPTY_LANE_DENY_MSG,
-                params=kwargs,
-            )
+            return _deny(operation_name, lane_msg, params=kwargs)
 
     if operation_name == "invoke_mtproto" and (
         denial := _mtproto_denial_for_rule(rule, operation_name, kwargs)
@@ -673,7 +682,7 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
 
     if _is_empty_lane(rule):
         if operation_name in _LIST_RESULT_OPERATIONS:
-            return _deny(operation_name, _EMPTY_LANE_DENY_MSG)
+            return _deny(operation_name, _empty_lane_deny_msg(rule))
         return result
 
     if operation_name == "find_chats" and isinstance(result.get("chats"), list):
