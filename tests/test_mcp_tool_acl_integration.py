@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastmcp.exceptions import ToolError
 
 from src.config.server_config import ServerConfig, ServerMode, set_config
 from src.server_components.session_acl import clear_acl_cache
 from src.server_components.tools_register import mcp_tool_with_restrictions
 from tests.conftest import make_access_token
+
+
+async def _await_tool_denial(awaitable):
+    """ACL denials flow through error handling and raise ToolError in the decorator chain."""
+    try:
+        return await awaitable
+    except ToolError as exc:
+        return json.loads(str(exc))
 
 
 @pytest.fixture(autouse=True)
@@ -60,7 +70,7 @@ async def test_read_only_token_blocks_send_message_via_decorator_chain(acl_confi
         "fastmcp.server.dependencies.get_access_token",
         return_value=make_access_token("token-readonly"),
     ):
-        result = await send_message(chat_id="me", message="hello")
+        result = await _await_tool_denial(send_message(chat_id="me", message="hello"))
 
     assert result["ok"] is False
     assert "read-only" in result["error"].lower()
@@ -80,7 +90,7 @@ async def test_chat_whitelist_blocks_forbidden_chat_via_decorator_chain(acl_conf
         "fastmcp.server.dependencies.get_access_token",
         return_value=make_access_token("token-team"),
     ):
-        result = await get_messages(chat_id=-1000000)
+        result = await _await_tool_denial(get_messages(chat_id=-1000000))
 
     assert result["ok"] is False
     assert "not in the allowed list" in result["error"]
@@ -100,7 +110,7 @@ async def test_positional_chat_id_blocked_by_acl_decorator_chain(acl_config):
         "fastmcp.server.dependencies.get_access_token",
         return_value=make_access_token("token-team"),
     ):
-        result = await get_messages(-1000000)
+        result = await _await_tool_denial(get_messages(-1000000))
 
     assert result["ok"] is False
     assert "not in the allowed list" in result["error"]
@@ -154,7 +164,7 @@ async def test_empty_lane_blocks_find_chats_via_decorator_chain(empty_lane_acl_c
         "fastmcp.server.dependencies.get_access_token",
         return_value=make_access_token("empty-lane"),
     ):
-        result = await find_chats(query="work")
+        result = await _await_tool_denial(find_chats(query="work"))
 
     assert result["ok"] is False
     assert "empty chat lane" in result["error"].lower()
@@ -178,9 +188,11 @@ async def test_chat_whitelist_blocks_invoke_mtproto_via_decorator_chain(acl_conf
         "fastmcp.server.dependencies.get_access_token",
         return_value=make_access_token("token-team"),
     ):
-        result = await invoke_mtproto(
-            method_full_name="messages.GetHistory",
-            params_json="{}",
+        result = await _await_tool_denial(
+            invoke_mtproto(
+                method_full_name="messages.GetHistory",
+                params_json="{}",
+            )
         )
 
     assert result["ok"] is False

@@ -111,8 +111,9 @@ def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool 
     """
     Combined decorator for MCP tools: error handling, ACL, auth context, bot restrictions.
 
-    Call order (outer → inner): bot → auth → ACL → error → func.
+    Call order (outer → inner): bot → auth → error → ACL → func.
     Auth must run before ACL so get_request_token() is set for pre-checks.
+    ACL wraps the original tool function so signature-based checks remain robust.
 
     Args:
         operation_name: Name of the operation for error reporting and bot restrictions
@@ -120,8 +121,8 @@ def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool 
     """
 
     def decorator(func):
-        decorated_func = server_errors.with_error_handling(operation_name)(func)
-        decorated_func = enforce_session_acl(operation_name)(decorated_func)
+        decorated_func = enforce_session_acl(operation_name)(func)
+        decorated_func = server_errors.with_error_handling(operation_name)(decorated_func)
         decorated_func = server_auth.with_auth_context(decorated_func)
         if allow_bot_sessions:
             return decorated_func

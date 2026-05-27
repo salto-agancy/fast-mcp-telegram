@@ -28,9 +28,12 @@ from src.server_components.attachment_tickets import (
 
 @pytest.fixture(autouse=True)
 def _reset_acl():
+    """Clear ACL cache and request token between tests (token also reset in conftest)."""
     clear_acl_cache()
+    set_request_token(None)
     yield
     clear_acl_cache()
+    set_request_token(None)
 
 
 @pytest.fixture
