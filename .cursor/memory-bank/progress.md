@@ -1,10 +1,11 @@
 ### 2026-05-27
+- **0.21.0 — Session ACL Phase 1.5:** PR #57 merged; optional operator `blocked_peers` YAML list, dual pre/post enforcement (id + username), MTProto param gate; PyPI + GHCR. GitHub release `0.21.0`.
 - **Phase 1.5 — Session ACL blocked_peers:** Operator-configured deployment denylist; dual pre/post enforcement (id + username post-check); MTProto shallow scan before lane gate; SECURITY.md shared-host checklist; tests in `test_session_acl.py`.
 - **Phase 1 closeout (`master`):** Post-release fixes — CI voice-transcription test client pass-through (`4f76129`), Sourcery follow-ups (PR #56), release CI gate in skill docs, test mock `sender_id`/`forward` defaults (~141s → ~1s local full suite).
 - **0.20.0 — Session ACL Phase 1:** GitHub release `0.20.0`; opt-in `ACL_ENABLED` / `ACL_CONFIG_PATH` on http-auth, per-token chat lanes, `read_only`, empty-lane hard deny, listed-token MTProto block, fail-closed startup, SECURITY.md + Installation docs.
 - **Session ACL Phase 1 closed (`master`, PR #56):** Empty-lane hard deny (pre-check + post-filter), listed-token MTProto block, startup validation (`read_only` requires `chats`, malformed token entries), SECURITY.md operator runbook, integration tests.
 - **Roadmap lanes (`master`):** Trust / Telemetry / QA-Gategrid — telemetry informs QA triage, GG benchmark validates, GG gating enforces on PR.
-- **Session ACL MVP on `master`:** opt-in `ACL_ENABLED`, static `acl.yaml`, MCP + MTProto enforcement. Direction: agent guardrails — [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md); Phase 1.5 sensitive peer denylist next.
+- **Session ACL MVP on `master`:** opt-in `ACL_ENABLED`, static `acl.yaml`, MCP + MTProto enforcement. Direction: agent guardrails — [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md); Phase 2 next.
 
 ### 2026-05-25
 - **0.19.1 — bearer token path traversal fix:** PR #53 merged. Reject non–URL-safe bearer tokens; resolve session files under `session_directory` only (`session_token_validation.py`). GitHub release `0.19.1`; PyPI via publish workflow. Reporter credit: [DavidCarliez](https://github.com/DavidCarliez). 514 tests pass.

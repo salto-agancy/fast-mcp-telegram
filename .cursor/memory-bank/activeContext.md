@@ -1,6 +1,6 @@
 ## Current Work Focus
 
-**Trust lane — Session ACL (2026-05-27):** Phase 1 **closed** on `master` — release [`0.20.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.20.0). **Phase 1.5 shipped in branch** — operator `blocked_peers` denylist with dual pre/post enforcement. [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
+**Trust lane — Session ACL (2026-05-27):** Phase 1.5 shipped — release [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0) (PR #57). Operator `blocked_peers` denylist with dual pre/post enforcement. **Next:** Phase 2 — `ACL_DEFAULT`, `allow_mtproto`, enforcement registry. [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
 
 - **Implementation:** [session_acl.py](../src/server_components/session_acl.py), `blocked_peers` in ACL YAML, [acl.yaml.example](../acl.yaml.example), [SECURITY.md](../SECURITY.md)
 - **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phases 1–3)
