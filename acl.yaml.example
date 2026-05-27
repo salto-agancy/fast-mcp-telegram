@@ -3,14 +3,20 @@
 # Set ACL_ENABLED=true; default path {session_directory}/acl.yaml or ACL_CONFIG_PATH.
 # See docs/adr/0001-agent-scoped-session-acl.md and docs/research/acl-design-brief.md.
 #
-# Sensitive peers (Phase 1.5, planned): when ACL is enabled, the server always blocks MCP
-# access to built-in security peers (e.g. 777000 login codes, BotFather) — even if listed
-# under a token's chats. Operators cannot disable those defaults; optional deployment-wide
-# extension only:
+# Shared-host checklist: when ACL_ENABLED=true on a shared http-auth host, uncomment
+# blocked_peers below (or define your own list). Without blocked_peers, lane ACL alone
+# does not block login-code chats or BotFather — teammates with the same Bearer token
+# can still reach those peers via MCP tools.
+#
+# Recommend numeric ids first for MTProto coverage; optional @handle lines help pre-check.
+# Post-check on chat tools matches both resolved numeric id and username from results.
 #
 # blocked_peers:
-#   extend:
-#     - 1234567890
+#   - 777000          # Telegram service — login codes, security alerts
+#   - 93372553        # @BotFather — bot tokens, settings
+#   - 178220800       # @SpamBot — spam/limit appeals
+#   - "@BotFather"    # optional pre-check alias
+#   - "@SpamBot"
 
 tokens:
   # Agent profile: analyst (read-only lane — Saved Messages only)

@@ -1,8 +1,8 @@
 ## Current Work Focus
 
-**Trust lane — Session ACL (2026-05-27):** Phase 1 **closed** on `master` — release [`0.20.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.20.0), PR #55+#56, post-release CI/test hygiene. **Next: Phase 1.5** — sensitive peer denylist. [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
+**Trust lane — Session ACL (2026-05-27):** Phase 1 **closed** on `master` — release [`0.20.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.20.0). **Phase 1.5 shipped in branch** — operator `blocked_peers` denylist with dual pre/post enforcement. [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
 
-- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), `ACL_ENABLED`, [acl.yaml.example](../acl.yaml.example), [SECURITY.md](../SECURITY.md)
+- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), `blocked_peers` in ACL YAML, [acl.yaml.example](../acl.yaml.example), [SECURITY.md](../SECURITY.md)
 - **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phases 1–3)
 - **Phase 2 (deferred):** `ACL_DEFAULT`, `allow_mtproto`, enforcement registry
 - **Other lanes:** Telemetry `feature/telemetry` *(planned)*; QA / Gategrid `feature/evals`

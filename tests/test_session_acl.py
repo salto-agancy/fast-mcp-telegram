@@ -11,11 +11,13 @@ from src.client.connection import set_request_token
 from src.config.server_config import ServerConfig, ServerMode, set_config
 from src.server_components.session_acl import (
     TokenAclRule,
+    check_blocked_peer_mtproto_params,
     check_mtproto_api_access,
     check_pre_tool_access,
     clear_acl_cache,
     enforce_session_acl,
     filter_tool_result,
+    merge_mtproto_request_params,
     validate_acl_config,
     AclConfigError,
 )
@@ -358,3 +360,270 @@ def test_validate_acl_rejects_malformed_token_entry(tmp_path):
     set_config(config)
     with pytest.raises(AclConfigError, match="must be a mapping"):
         validate_acl_config()
+
+
+# --- Phase 1.5: blocked_peers denylist ---
+
+BOTFATHER_ID = 93372553
+LOGIN_SERVICE_ID = 777000
+
+
+def _write_acl_config(tmp_path: Path, body: str) -> Path:
+    acl_file = tmp_path / "acl.yaml"
+    acl_file.write_text(body, encoding="utf-8")
+    config = ServerConfig(_cli_parse_args=[])
+    config.server_mode = ServerMode.HTTP_AUTH
+    config.acl_enabled = True
+    config.acl_config_path = str(acl_file)
+    set_config(config)
+    return acl_file
+
+
+@pytest.fixture
+def blocked_peers_base_config(tmp_path: Path):
+    return _write_acl_config(
+        tmp_path,
+        f"""
+blocked_peers:
+  - {BOTFATHER_ID}
+tokens:
+  token-team:
+    chats:
+      - {BOTFATHER_ID}
+      - -1001234567890
+    read_only: false
+""",
+    )
+
+
+def test_blocked_peers_omitted_no_blocking(tmp_path):
+    _write_acl_config(
+        tmp_path,
+        f"""
+tokens:
+  t:
+    chats:
+      - {BOTFATHER_ID}
+""",
+    )
+    set_request_token("unlisted-token")
+    assert check_pre_tool_access("get_messages", {"chat_id": BOTFATHER_ID}) is None
+
+
+def test_blocked_peers_numeric_input_pre_check_deny(blocked_peers_base_config):
+    set_request_token("unlisted-token")
+    denial = check_pre_tool_access("get_messages", {"chat_id": BOTFATHER_ID})
+    assert denial is not None
+    assert denial["error_code"] == -32007
+    assert "blocked peer" in denial["error"]
+    assert str(BOTFATHER_ID) in denial["error"]
+
+
+def test_blocked_peers_numeric_yaml_at_username_input_post_check_deny(
+    blocked_peers_base_config,
+):
+    set_request_token("unlisted-token")
+    assert check_pre_tool_access("get_chat_info", {"chat_id": "@BotFather"}) is None
+    denial = filter_tool_result(
+        "get_chat_info",
+        {"ok": True, "id": BOTFATHER_ID, "title": "BotFather"},
+    )
+    assert denial["ok"] is False
+    assert "blocked peer" in denial["error"]
+
+
+def test_blocked_peers_at_username_yaml_numeric_input_post_check_deny(tmp_path):
+    _write_acl_config(
+        tmp_path,
+        """
+blocked_peers:
+  - "@BotFather"
+tokens: {}
+""",
+    )
+    set_request_token("unlisted-token")
+    assert check_pre_tool_access("get_chat_info", {"chat_id": BOTFATHER_ID}) is None
+    denial = filter_tool_result(
+        "get_chat_info",
+        {"ok": True, "id": BOTFATHER_ID, "username": "BotFather"},
+    )
+    assert denial["ok"] is False
+    assert "blocked peer" in denial["error"]
+
+
+def test_blocked_peers_at_username_input_pre_check_deny(tmp_path):
+    _write_acl_config(
+        tmp_path,
+        """
+blocked_peers:
+  - "@BotFather"
+tokens: {}
+""",
+    )
+    set_request_token("unlisted-token")
+    denial = check_pre_tool_access("get_chat_info", {"chat_id": "@BotFather"})
+    assert denial is not None
+    assert "blocked peer" in denial["error"]
+
+
+def test_blocked_peers_omitted_id_allowed(blocked_peers_base_config):
+    set_request_token("unlisted-token")
+    assert check_pre_tool_access("get_messages", {"chat_id": LOGIN_SERVICE_ID}) is None
+
+
+def test_blocked_peers_deny_wins_over_token_lane(blocked_peers_base_config):
+    set_request_token("token-team")
+    denial = check_pre_tool_access("get_messages", {"chat_id": BOTFATHER_ID})
+    assert denial is not None
+    assert "blocked peer" in denial["error"]
+
+
+def test_blocked_peers_find_chats_post_filter_unlisted_token(blocked_peers_base_config):
+    set_request_token("unlisted-token")
+    result = filter_tool_result(
+        "find_chats",
+        {
+            "ok": True,
+            "chats": [
+                {"id": BOTFATHER_ID, "title": "BotFather"},
+                {"id": -1001234567890, "title": "Work"},
+            ],
+        },
+    )
+    assert len(result["chats"]) == 1
+    assert result["chats"][0]["id"] == -1001234567890
+
+
+def test_blocked_peers_global_search_post_filter_unlisted_token(blocked_peers_base_config):
+    set_request_token("unlisted-token")
+    result = filter_tool_result(
+        "search_messages_globally",
+        {
+            "ok": True,
+            "messages": [
+                {"id": 1, "chat_id": BOTFATHER_ID},
+                {"id": 2, "chat_id": -1001234567890},
+            ],
+        },
+    )
+    assert len(result["messages"]) == 1
+    assert result["messages"][0]["chat_id"] == -1001234567890
+
+
+def test_blocked_peers_get_chat_info_post_check_id_only(blocked_peers_base_config):
+    set_request_token("unlisted-token")
+    denial = filter_tool_result(
+        "get_chat_info",
+        {"ok": True, "id": BOTFATHER_ID, "title": "BotFather"},
+    )
+    assert denial["ok"] is False
+    assert "blocked peer" in denial["error"]
+
+
+def test_blocked_peers_get_chat_info_post_check_username_only(tmp_path):
+    _write_acl_config(
+        tmp_path,
+        """
+blocked_peers:
+  - "@BotFather"
+tokens: {}
+""",
+    )
+    set_request_token("unlisted-token")
+    denial = filter_tool_result(
+        "get_chat_info",
+        {"ok": True, "id": 999, "username": "BotFather"},
+    )
+    assert denial["ok"] is False
+    assert "blocked peer" in denial["error"]
+
+
+def test_blocked_peers_get_chat_info_post_check_id_and_username(blocked_peers_base_config):
+    set_request_token("unlisted-token")
+    denial = filter_tool_result(
+        "get_chat_info",
+        {"ok": True, "id": BOTFATHER_ID, "username": "BotFather"},
+    )
+    assert denial["ok"] is False
+
+
+def test_blocked_peers_get_messages_post_check_message_chat_fallback(
+    blocked_peers_base_config,
+):
+    set_request_token("unlisted-token")
+    assert check_pre_tool_access("get_messages", {"chat_id": "@BotFather"}) is None
+    denial = filter_tool_result(
+        "get_messages",
+        {
+            "ok": True,
+            "messages": [
+                {"id": 1, "chat": {"id": BOTFATHER_ID, "username": "BotFather"}},
+            ],
+        },
+    )
+    assert denial["ok"] is False
+    assert "blocked peer" in denial["error"]
+
+
+def test_blocked_peers_invoke_mtproto_param_scan(blocked_peers_base_config):
+    set_request_token("unlisted-token")
+    denial = check_pre_tool_access(
+        "invoke_mtproto",
+        {"params_json": json.dumps({"peer": {"user_id": BOTFATHER_ID}})},
+    )
+    assert denial is not None
+    assert "blocked peer" in denial["error"]
+
+
+def test_blocked_peers_invoke_mtproto_invalid_json_fail_closed(blocked_peers_base_config):
+    set_request_token("unlisted-token")
+    denial = check_pre_tool_access(
+        "invoke_mtproto",
+        {"params_json": "{not-json"},
+    )
+    assert denial is not None
+    assert "invalid params_json" in denial["error"].lower()
+
+
+def test_blocked_peers_mtproto_http_merge_and_scan(blocked_peers_base_config):
+    merged = merge_mtproto_request_params(
+        {"peer": {"user_id": BOTFATHER_ID}},
+        json.dumps({"limit": 10}),
+    )
+    denial = check_blocked_peer_mtproto_params(merged, operation="mtproto_api")
+    assert denial is not None
+    assert denial["operation"] == "mtproto_api"
+    assert "blocked peer" in denial["error"]
+
+
+def test_validate_acl_rejects_malformed_blocked_peers(tmp_path):
+    _write_acl_config(
+        tmp_path,
+        """
+blocked_peers:
+  extend:
+    - 123
+tokens: {}
+""",
+    )
+    with pytest.raises(AclConfigError, match="blocked_peers"):
+        validate_acl_config()
+
+
+def test_blocked_peers_skipped_when_acl_disabled(tmp_path):
+    acl_file = tmp_path / "acl.yaml"
+    acl_file.write_text(
+        f"""
+blocked_peers:
+  - {BOTFATHER_ID}
+tokens: {{}}
+""",
+        encoding="utf-8",
+    )
+    config = ServerConfig(_cli_parse_args=[])
+    config.server_mode = ServerMode.HTTP_AUTH
+    config.acl_enabled = False
+    config.acl_config_path = str(acl_file)
+    set_config(config)
+    set_request_token("any")
+    assert check_pre_tool_access("get_messages", {"chat_id": BOTFATHER_ID}) is None

@@ -28,7 +28,7 @@ ACL applies only when **`ACL_ENABLED=true`** on **http-auth**. No ACL on stdio o
 
 Human operators continue to use Telegram normally; guardrails reduce **accidental** cross-lane data mixup and **inadvertent** destructive tool actions by agents connected through this server, and — for shared tokens — **intentional** reads of security-sensitive peers via MCP tools.
 
-**Sensitive peer denylist:** When ACL is enabled, a server-maintained set of peer ids (login/service notifications, BotFather, etc.) is **always denied** for MCP tool access, even if a token’s `chats` allowlist would otherwise include them. Operators may **extend** the denylist per deployment; they cannot disable built-in defaults. This is guardrails for **blast radius on shared tokens**, not a substitute for rotating compromised tokens or Telegram-side 2FA.
+**Sensitive peer denylist:** When ACL is enabled and **`blocked_peers`** is configured (non-empty deployment list), those peers are **denied for all MCP tool access** for every Bearer token, even if a token’s `chats` allowlist would otherwise include them. Operators **own the full denylist** (add/remove any peer); recommended defaults live in [`acl.yaml.example`](../acl.yaml.example) and SECURITY.md only — not hardcoded at enforcement time. Omitting `blocked_peers` keeps lane-only ACL. This is guardrails for **blast radius on shared tokens**, not a substitute for rotating compromised tokens or Telegram-side 2FA.
 
 ## Consequences
 
@@ -41,7 +41,7 @@ Human operators continue to use Telegram normally; guardrails reduce **accidenta
 ### Defaults and phases
 
 - **Phase 1 (merge blockers):** correctness and operator docs — empty `chats` leak fix, malformed token handling, `read_only` requires `chats` validation, SECURITY.md runbook, alignment with this ADR.
-- **Phase 1.5 (Trust lane):** **sensitive peer denylist** — server defaults always on when `ACL_ENABLED`; optional operator `blocked_peers.extend`; enforced on chat-scoped tools, `find_chats` / global search post-filters, and `invoke_mtproto` / MTProto bridge (no bypass). See [acl-design-brief.md](../research/acl-design-brief.md).
+- **Phase 1.5 (Trust lane):** **sensitive peer denylist** — operator-configured `blocked_peers` list when present; dual pre/post enforcement (including resolved id + username post-check); MTProto shallow param scan before lane gates; recommended defaults in example + SECURITY.md only. See [acl-design-brief.md](../research/acl-design-brief.md).
 - **Phase 2 (v1.5):** `ACL_DEFAULT` env (default `full_access`), `allow_mtproto` default false for listed tokens, `allow_global_search` blocks MTProto for agent profiles, enforcement registry, config warnings.
 - **Phase 3 (roadmap, deferred):** file-watch reload, external ACL store, per-chat permission matrix — lower priority than agent-profile guardrails.
 
