@@ -200,6 +200,23 @@ class ServerConfig(BaseSettings):
         description="TTL for in-memory attachment download tickets (seconds)",
     )
 
+    acl_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("acl_enabled", "ACL_ENABLED"),
+        description=(
+            "Enable opt-in per-token session ACL from acl config file (http-auth only)"
+        ),
+    )
+
+    acl_config_path: str = Field(
+        default="",
+        validation_alias=AliasChoices("acl_config_path", "ACL_CONFIG_PATH"),
+        description=(
+            "Path to session ACL YAML/JSON file "
+            "(default: {session_directory}/acl.yaml)"
+        ),
+    )
+
     # Logging configuration
     log_level: str = Field(
         default="DEBUG", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
@@ -248,6 +265,13 @@ class ServerConfig(BaseSettings):
     def require_auth(self) -> bool:
         """Whether authentication is required (no fallback)."""
         return self.server_mode == ServerMode.HTTP_AUTH
+
+    @property
+    def acl_config_file(self) -> Path:
+        """Resolved ACL config path."""
+        if self.acl_config_path.strip():
+            return Path(self.acl_config_path).expanduser()
+        return self.session_directory / "acl.yaml"
 
     @property
     def session_directory(self) -> Path:
@@ -317,6 +341,12 @@ class ServerConfig(BaseSettings):
                 "⚠️ Production mode without API credentials - ensure they're available for setup"
             )
 
+        if self.acl_enabled and not self.disable_auth:
+            from src.server_components.session_acl import validate_acl_config
+
+            validate_acl_config()
+            logger.info(f"🔒 Session ACL enabled: {self.acl_config_file}")
+
     @classmethod
     def from_args_and_env(cls) -> "ServerConfig":
         """Create configuration from command line arguments and environment variables.
@@ -324,7 +354,11 @@ class ServerConfig(BaseSettings):
         With native CLI parsing, this simply creates the config instance.
         pydantic-settings automatically handles CLI args, env vars, and .env files.
         """
+        global _config
         config = cls()
+        # Register before validate_config so ACL and other validators can call get_config()
+        # without re-entering from_args_and_env (RecursionError during startup).
+        _config = config
         config.validate_config()
         return config
 

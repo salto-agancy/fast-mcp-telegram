@@ -58,6 +58,7 @@ coverage.xml
 
 # MCP specific
 .cursorrules
+acl.dev.yaml
 
 # OS specific
 .DS_Store

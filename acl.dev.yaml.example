@@ -1,0 +1,31 @@
+# Local ACL harness (http-auth). Copy to acl.dev.yaml (gitignored).
+# Live testing: start http-auth server + curl with Bearer header — not Cursor MCP (see CONTRIBUTING.md).
+# Each token below must have a matching session file: {session_directory}/{token}.session
+# Create sessions via http://127.0.0.1:8765/setup after starting the ACL dev server.
+#
+#   cp acl.dev.yaml.example acl.dev.yaml
+#   # Edit tokens only if you regenerate sessions with new bearer names.
+#
+# ACL_CONFIG_PATH=acl.dev.yaml  (relative to project root when starting the server)
+
+tokens:
+  # Profile: readonly — Saved Messages only, no send
+  # In acl.dev.yaml you may use BEARER_TOKEN_FOR_TESTING from .env instead of this placeholder.
+  "dev_acl_readonly_abcdefghijklmnopqrstuvwxz0":
+    chats:
+      - me
+    read_only: true
+    allow_global_search: true
+
+  # Profile: empty_lane — hard deny on chat-scoped tools (ACL matrix testing)
+  "dev_acl_empty_lane_abcdefghijklmnopqrstuvwx":
+    chats: []
+    read_only: false
+    allow_global_search: false
+
+  # Profile: team — single work chat, send allowed (replace id with your supergroup/channel)
+  "dev_acl_team_lane__abcdefghijklmnopqrstuvwx":
+    chats:
+      - -1001234567890
+    read_only: false
+    allow_global_search: false

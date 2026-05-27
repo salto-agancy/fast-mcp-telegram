@@ -161,6 +161,36 @@ def _error_message_suggests_auth_issue(exc: BaseException) -> bool:
     return any(s in lowered for s in _AUTH_ERROR_SUBSTRINGS)
 
 
+def _resolve_session_path_for_token(token: str) -> Path:
+    """Map token to Telethon session path.
+
+    When auth is disabled (stdio / http-no-auth), the configured ``session_name``
+    (e.g. ``telegram``) is not a bearer token — use ``config.session_path`` directly.
+    """
+    config = get_config()
+    if config.disable_auth and token == config.session_name:
+        return config.session_path
+    return validated_session_file_path(SESSION_DIR, token)
+
+
+def _session_file_exists(session_path: Path) -> bool:
+    """True if a Telethon session file exists for ``session_path`` (with or without .session suffix)."""
+    if session_path.suffix == ".session":
+        return session_path.is_file()
+    with_suffix = session_path.with_suffix(".session")
+    return with_suffix.is_file() or session_path.is_file()
+
+
+def _unlink_session_file(session_path: Path) -> None:
+    """Remove the on-disk Telethon session file for ``session_path``."""
+    if session_path.suffix == ".session":
+        session_path.unlink(missing_ok=True)
+        return
+    session_path.with_suffix(".session").unlink(missing_ok=True)
+    if session_path.is_file():
+        session_path.unlink(missing_ok=True)
+
+
 async def _safe_disconnect_after_verify_failure(client: TelegramClient) -> None:
     try:
         if client.is_connected():
@@ -249,10 +279,10 @@ async def _build_telegram_client_for_token(
 
 
 def _try_unlink_session_on_auth_error(session_path: Path, token: str) -> None:
-    if not session_path.exists():
+    if not _session_file_exists(session_path):
         return
     try:
-        session_path.unlink()
+        _unlink_session_file(session_path)
         logger.warning(
             f"Auto-deleted invalid session file for token {token[:8]}... due to auth error"
         )
@@ -293,7 +323,7 @@ async def _get_client_by_token(token: str) -> TelegramClient:
             return client
 
         try:
-            session_path = validated_session_file_path(SESSION_DIR, token)
+            session_path = _resolve_session_path_for_token(token)
         except InvalidSessionTokenError as e:
             raise SessionNotAuthorizedError("Invalid bearer token") from e
 
@@ -403,12 +433,12 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
             )
             # Remove session file immediately to prevent loop
             try:
-                session_path = validated_session_file_path(SESSION_DIR, token)
+                session_path = _resolve_session_path_for_token(token)
             except InvalidSessionTokenError:
                 session_path = None
-            if session_path is not None and session_path.exists():
+            if session_path is not None and _session_file_exists(session_path):
                 try:
-                    session_path.unlink()
+                    _unlink_session_file(session_path)
                     logger.info(f"Removed fatal session file for token {token[:8]}...")
                 except Exception as del_e:
                     logger.warning(f"Failed to remove fatal session file: {del_e}")
@@ -493,12 +523,12 @@ async def cleanup_failed_sessions():
 
             # Remove session file
             try:
-                session_path = validated_session_file_path(SESSION_DIR, token)
+                session_path = _resolve_session_path_for_token(token)
             except InvalidSessionTokenError:
                 continue
-            if session_path.exists():
+            if _session_file_exists(session_path):
                 try:
-                    session_path.unlink()
+                    _unlink_session_file(session_path)
                     logger.info(f"Removed failed session file for token {token[:8]}...")
                 except Exception as e:
                     logger.warning(

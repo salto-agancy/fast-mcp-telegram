@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from collections.abc import Iterable
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from src.config.server_config import get_config
@@ -24,6 +27,9 @@ class AttachmentTicket:
 
 _tickets: dict[str, AttachmentTicket] = {}
 _lock = asyncio.Lock()
+_minted_ticket_ids: ContextVar[list[str] | None] = ContextVar(
+    "_minted_ticket_ids", default=None
+)
 
 
 def _prune_expired_unlocked() -> None:
@@ -31,6 +37,31 @@ def _prune_expired_unlocked() -> None:
     dead = [k for k, v in _tickets.items() if v.expires_at <= now]
     for k in dead:
         del _tickets[k]
+
+
+@contextmanager
+def track_minted_attachment_tickets():
+    """Collect ticket IDs minted during this block (for ACL post-filter cleanup)."""
+    ids: list[str] = []
+    token = _minted_ticket_ids.set(ids)
+    try:
+        yield ids
+    finally:
+        _minted_ticket_ids.reset(token)
+
+
+async def revoke_attachment_tickets(ticket_ids: Iterable[str]) -> int:
+    """Remove tickets by ID. Returns count removed."""
+    ids = [tid for tid in ticket_ids if tid]
+    if not ids:
+        return 0
+    async with _lock:
+        removed = 0
+        for tid in ids:
+            if tid in _tickets:
+                del _tickets[tid]
+                removed += 1
+        return removed
 
 
 async def mint_attachment_ticket(
@@ -56,6 +87,9 @@ async def mint_attachment_ticket(
     async with _lock:
         _prune_expired_unlocked()
         _tickets[tid] = rec
+    tracking = _minted_ticket_ids.get()
+    if tracking is not None:
+        tracking.append(tid)
     return tid
 
 

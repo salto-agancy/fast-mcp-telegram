@@ -27,7 +27,76 @@
 - **Session Separation**: Each user gets their own authenticated session file
 - **Token Privacy**: Bearer tokens should be treated as passwords and kept secure
 - **Session Files**: Contain complete Telegram access for the associated token
-- **Account Access**: Anyone with a valid Bearer token can perform **ANY action** on that associated Telegram account
+- **Account Access**: Anyone with a valid Bearer token can perform **ANY action** on that associated Telegram account **unless** opt-in session ACL applies to that token
+
+## Opt-in session ACL (http-auth)
+
+When **`ACL_ENABLED=true`**, operators can restrict **specific Bearer tokens** via a server-side config file (default `{session_directory}/acl.yaml`, override with **`ACL_CONFIG_PATH`**). See **`acl.yaml.example`**, [ADR 0001](docs/adr/0001-agent-scoped-session-acl.md), and [acl-design-brief.md](docs/research/acl-design-brief.md).
+
+**Framing:** ACL is **agent guardrails** (workspace lanes + capability profiles), not account lockdown. Humans continue using Telegram in official clients; guardrails limit what **connected agents** can do via MCP tools on this server.
+
+### Enablement
+
+1. Set `ACL_ENABLED=true` in the server environment (http-auth only; not stdio or http-no-auth).
+2. Create the ACL file at the default path or set `ACL_CONFIG_PATH`.
+3. Restart the server (or redeploy). Startup **fails closed** if ACL is enabled but the file is missing or invalid.
+4. List only the Bearer tokens you want to restrict. **Unlisted tokens keep full tool access.**
+
+Treat the ACL file like a secret (contains bearer token strings). Restrict file permissions (e.g. `0600`).
+
+### Agent profiles (operator vocabulary)
+
+| Profile | Typical use | `chats` | `read_only` | `allow_global_search` |
+| --- | --- | --- | --- | --- |
+| **full_access** *(default, unlisted token)* | Personal / demo | — | false | true |
+| **analyst** | Read-only lane | non-empty list | true | true |
+| **team_lane** | Work chats, send allowed | non-empty list | false | true |
+| **bot** | Channel automation | channel ids | false | false |
+
+`read_only: true` **requires** a non-empty `chats` list (startup validation rejects analyst entries without a lane).
+
+### Lane rules
+
+- **`chats`**: allowlist of chat ids, `@username`, or `me` (Saved Messages) for this token’s workspace lane.
+- **Listed token with empty `chats`** (`chats: []` or `chats` omitted): **deny all chat-scoped operations** — hard deny on `find_chats` and `search_messages_globally` (not an empty result list), block reads/writes to any chat, block `send_message_to_phone`.
+- **`read_only`**: blocks send, edit, `invoke_mtproto`, and the HTTP MTProto bridge.
+- **`allow_global_search`**: when false, blocks `search_messages_globally` pre-check.
+
+### What is blocked for listed tokens
+
+| Surface | Behavior |
+| --- | --- |
+| MCP tools (`get_messages`, `send_message`, …) | Pre-check `chat_id` against lane; post-filter list results |
+| `find_chats` / `search_messages_globally` | Post-filter to lane; **empty lane → hard deny** |
+| `invoke_mtproto` | Blocked for **any listed token** (Phase 2 will add `allow_mtproto`) |
+| HTTP MTProto bridge (`/mtproto-api/*`) | Same as `invoke_mtproto` for listed tokens |
+
+Denials return MCP `ok: false` with actionable text (token, chat id, lane). HTTP bridge returns 403.
+
+### Shared-token limits
+
+ACL lanes reduce **accidental** cross-chat access and **in-server** tool abuse when teammates share one Bearer token on an http-auth host. ACL does **not**:
+
+- Stop someone with the raw Bearer token from calling Telegram outside this MCP server
+- Replace Telegram account security (2FA, session revocation in official clients)
+- Apply to stdio or http-no-auth deployments
+
+Phase 1.5 (planned) adds a **sensitive peer denylist** (e.g. login-code user `777000`, BotFather) for shared-team blast radius — see [acl-design-brief.md](docs/research/acl-design-brief.md).
+
+### Troubleshooting denials
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| “empty chat lane” | Token listed with `chats: []` or no `chats` key | Add at least one chat to the token entry |
+| “not in the allowed list” | Tool targets a chat outside the lane | Add chat id / `@username` to `chats` or use an unlisted token |
+| “read-only” | `read_only: true` on the token | Set `read_only: false` or use a write-capable profile |
+| “global message search” | `allow_global_search: false` | Set `allow_global_search: true` or use `get_messages` in-lane |
+| “listed in the ACL config” on MTProto | Listed tokens cannot use raw MTProto in Phase 1 | Remove token from ACL for full access, or wait for Phase 2 `allow_mtproto` |
+| Server refuses to start | Missing ACL file or invalid YAML | Create file; fix malformed token entries; ensure `read_only` has `chats` |
+
+No MCP tool mutates ACL in v1 — edit the file on the server and restart.
+
+**Development and testing:** ACL behavior is validated with **pytest** and a local **http-auth** server exercised via **curl** (Bearer header per profile), not via Cursor MCP — stdio mode has no ACL, and URL MCP entries bind a single fixed token. See [CONTRIBUTING.md — ACL development and testing](CONTRIBUTING.md#acl-development-and-testing-not-via-cursor-mcp).
 
 ## Production Security Recommendations
 
@@ -66,7 +135,7 @@ When **`DOMAIN`** is set to a non-placeholder public host and the server runs ov
 - **Path containment**: Session files are resolved as `{session_directory}/{token}.session` and must stay under `session_directory` after `resolve()`.
 - **Reserved Name Blocking**: Prevents common session names from being used as bearer tokens
 - **Blocked Names**: `telegram`, `default`, `session`, `bot`, `user`, `main`, `primary`, `test`, `dev`, `prod`
-- **Case Insensitive**: Reserved-name checks ignore case differences
+- **Case Insensitive**: Validation ignores case differences
 - **Session Conflict Prevention**: Blocks tokens that could create file conflicts with STDIO/HTTP_NO_AUTH sessions
 - **Logging**: Rejected tokens are logged with warning messages for security monitoring
 

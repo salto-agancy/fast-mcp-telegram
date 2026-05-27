@@ -105,6 +105,7 @@ def test_server(mock_client):
     # Override the client in the connection module for testing
     import src.client.connection as conn
 
+    original_get_client = conn._get_client_by_token
     conn._get_client_by_token = AsyncMock(return_value=mock_client)
 
     # Register simplified mock versions of tools for testing
@@ -178,7 +179,8 @@ def test_server(mock_client):
         """Edit existing message in Telegram chat."""
         return {"action": "edited", "message_id": message_id, "text": message}
 
-    return mcp
+    yield mcp
+    conn._get_client_by_token = original_get_client
 
 
 @pytest_asyncio.fixture
@@ -535,6 +537,28 @@ def make_mock_request(path, scheme="https", netloc="example.com", query=""):
 
 
 # ============== Cache Management Fixtures ==============
+
+
+@pytest.fixture(autouse=True)
+def clear_request_token_context():
+    """Reset bearer token context between tests to avoid ACL/auth leakage."""
+    from src.client.connection import set_request_token
+
+    set_request_token(None)
+    yield
+    set_request_token(None)
+
+
+@pytest.fixture(autouse=True)
+def clear_connection_session_cache():
+    """Clear token session cache between tests to avoid cross-test pollution."""
+    import src.client.connection as conn
+
+    conn._session_cache.clear()
+    conn._connection_failures.clear()
+    yield
+    conn._session_cache.clear()
+    conn._connection_failures.clear()
 
 
 @pytest.fixture(autouse=True)

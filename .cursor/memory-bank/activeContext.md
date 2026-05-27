@@ -1,5 +1,13 @@
 ## Current Work Focus
-**Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release). Raising API, `_bearer_token_and_session_path`, OSError handling in web setup.
+
+**Branch `feature/acl` — Trust lane (2026-05-27):** Phase 1 merge blockers implemented (empty-lane deny, startup validation, SECURITY.md runbook). Dev harness: `telegram-dev` stdio + `telegram-dev-acl` http-auth (`acl.dev.yaml.example`, CONTRIBUTING). Phase 1.5 next: sensitive peer denylist. [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
+
+- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), `ACL_ENABLED`, [acl.yaml.example](../acl.yaml.example), [SECURITY.md](../SECURITY.md)
+- **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phases 1–3)
+- **Phase 2 (deferred):** `ACL_DEFAULT`, `allow_mtproto`, enforcement registry
+- **Other lanes:** Telemetry `feature/telemetry` *(planned)*; QA / Gategrid `feature/evals`
+
+**Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release).
 
 **Shipped (2026-05-25):** GHSA bearer token path traversal fix — PR #53 merged; release [`0.19.1`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.19.1). Credit: [DavidCarliez](https://github.com/DavidCarliez). `session_token_validation.py` enforces URL-safe tokens + session dir containment.
 

@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "commit_sha": "local",
+  "timestamp": "2026-05-25T13:36:02.777830+00:00",
+  "matrix_path": "/Users/leshchenko/coding_projects/vds/deployed_projects/fast-mcp-telegram/evals/matrices/smoke.yaml",
+  "matrix_name": "smoke",
+  "fingerprint": {
+    "matrix_name": "smoke",
+    "profile_ids": [
+      "main"
+    ],
+    "case_ids": [
+      "find_chats_smoke"
+    ]
+  },
+  "sampling": {
+    "sampled": false,
+    "seed": null,
+    "max_cells": null,
+    "share": null,
+    "always_include_tags": [],
+    "planned_cells": 1,
+    "executed_cells": 1,
+    "skipped_cells": []
+  },
+  "run_max_retries": 0,
+  "cells": [
+    {
+      "key": {
+        "case_id": "find_chats_smoke",
+        "profile_id": "main",
+        "model_id": "mock"
+      },
+      "passed": true,
+      "tags": [
+        "mcp",
+        "smoke"
+      ],
+      "attempts": [
+        {
+          "attempt_index": 0,
+          "passed": true,
+          "artifact": {
+            "messages": [
+              {
+                "role": "user",
+                "content": "Call find_chats with query 'Saved' and limit 3. Summarize how many chats were returned.",
+                "name": null,
+                "tool_call_id": null
+              },
+              {
+                "role": "tool",
+                "content": "{\"chats\": []}",
+                "name": "find_chats",
+                "tool_call_id": null
+              },
+              {
+                "role": "assistant",
+                "content": "ok",
+                "name": null,
+                "tool_call_id": null
+              }
+            ],
+            "metrics": {
+              "mcp_errors": 0,
+              "tool_call_count": 1,
+              "turns": 0,
+              "tokens_spent": 0
+            },
+            "tools_called": {
+              "find_chats": 1
+            },
+            "evaluators": {
+              "file_content_match": true,
+              "mcp_tooling_ok": true,
+              "no_destructive_tools": true
+            },
+            "error": null
+          },
+          "error": null,
+          "duration_ms": 0.03495905548334122
+        }
+      ],
+      "flaky_suspect": false,
+      "duration_ms": 0.03495905548334122,
+      "metrics": {
+        "mcp_errors": 0,
+        "tool_call_count": 1,
+        "turns": 0,
+        "tokens_spent": 0
+      },
+      "error": null
+    }
+  ],
+  "overall": {
+    "pass_rate": 1.0,
+    "duration_ms_mean": 0.03495905548334122,
+    "cell_count": 1,
+    "metrics": {}
+  },
+  "pass_rate": 1.0
+}

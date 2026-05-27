@@ -448,6 +448,7 @@ dependencies = [
     { name = "fastmcp-slim", extra = ["server"] },
     { name = "jinja2" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
     { name = "telethon" },
     { name = "telethonfaketls" },
 ]
@@ -467,6 +468,7 @@ requires-dist = [
     { name = "fastmcp-slim", extras = ["server"], specifier = ">=3.3" },
     { name = "jinja2" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
     { name = "telethon" },
     { name = "telethonfaketls" },
 ]
