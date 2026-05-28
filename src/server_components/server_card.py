@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from src._version import __version__
 
@@ -31,7 +31,7 @@ def register_server_card_route(mcp_app):
     _card_cache: dict | None = None
 
     @mcp_app.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
-    async def server_card(_):
+    async def server_card(request):
         nonlocal _card_cache
 
         if _card_cache is None:
@@ -57,11 +57,16 @@ def register_server_card_route(mcp_app):
                 "prompts": [],
             }
 
+        etag = _compute_etag(_card_cache)
+
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag": etag})
+
         return JSONResponse(
             _card_cache,
             headers={
                 "Cache-Control": "public, max-age=3600",
-                "ETag": _compute_etag(_card_cache),
+                "ETag": etag,
             },
         )
 
