@@ -33,15 +33,15 @@ def register_server_card_route(mcp_app: FastMCP) -> None:
     available via ``mcp_app.list_tools()``.  The card is built lazily on
     the first request and then cached for the lifetime of the process.
     """
-    _card_cache: dict | None = None
+    _card_state: tuple[dict, str] | None = None
 
     @mcp_app.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
     async def server_card(request: Request):
-        nonlocal _card_cache
+        nonlocal _card_state
 
-        if _card_cache is None:
+        if _card_state is None:
             tools = await mcp_app.list_tools()
-            _card_cache = {
+            card = {
                 "serverInfo": {
                     "name": "fast-mcp-telegram",
                     "version": __version__,
@@ -63,14 +63,15 @@ def register_server_card_route(mcp_app: FastMCP) -> None:
                 "resources": [],
                 "prompts": [],
             }
+            _card_state = (card, _compute_etag(card))
 
-        etag = _compute_etag(_card_cache)
+        card, etag = _card_state
 
         if request.headers.get("if-none-match") == etag:
             return Response(status_code=304, headers={"ETag": etag})
 
         return JSONResponse(
-            _card_cache,
+            card,
             headers={
                 "Cache-Control": "public, max-age=3600",
                 "ETag": etag,
