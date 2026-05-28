@@ -19,6 +19,7 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
 | **awesome-mcp-servers** | https://github.com/punkpeye/awesome-mcp-servers/pull/7019 | ⏳ PR pending | Awaiting merge by @punkpeye |
+| **MCPFind** | https://github.com/MCPFind/mcp-find/pull/53 | ✅ Submitted | PR #53 to `community-servers.yml`
 | **MCP.Directory** | https://mcp.directory | ✅ Submitted | "Server Submitted!" — auto-pulls metadata from GitHub, publishes within 24h |
 
 ## Failed — Blocks Automation ❌
@@ -26,7 +27,6 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
 | **MCPMarket** | https://mcpmarket.com/submit | ❌ Submit requires auth | GitHub OAuth in browser — their GraphQL API also requires auth |
-| **MCPFind** | https://mcpfind.org/submit | ❌ Disabled | Form at mcpfind.org/submit uses "Open GitHub Editor" workflow — GitHub OAuth + submission system disabled on site ("site is not setup to accept submissions") |
 | **Smithery** | https://smithery.ai/servers/fast-mcp-telegram | ❌ 404 | Was live at sing./server/; needs re-publish via URL or hosted Docker |
 | **PulseMCP** | https://pulsemcp.com/servers | ❌ Blocked | Cloudflare blocks automated checks |
 | **MCPForge** | https://mcpforge.org | ❌ Not a directory | Managed hosting service (like Smithery), not a listing directory |
