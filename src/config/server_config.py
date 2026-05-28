@@ -132,6 +132,16 @@ class ServerConfig(BaseSettings):
         description="Phone number for Telegram authentication (include country code)",
     )
 
+    bot_token: str = Field(
+        default="",
+        description=(
+            "Bot token from @BotFather. Alternative to phone+OTP setup. "
+            "When set, the server authenticates automatically on startup "
+            "without interactive setup — ideal for Glama Try in Browser, "
+            "CI/CD, and ephemeral deployments."
+        ),
+    )
+
     # Web setup, MCP URL generation, and attachment_download_url base (HTTP transport).
     domain: str = Field(
         default="your-domain.com",
