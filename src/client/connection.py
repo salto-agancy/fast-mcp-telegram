@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import inspect
 import logging
 import secrets
 import time
@@ -210,7 +211,7 @@ async def _connect_client_and_verify_or_cleanup(
         # Otherwise, connect explicitly and verify the existing session.
         if cfg.bot_api_token:
             result = client.start(bot_token=cfg.bot_api_token)
-            if asyncio.iscoroutine(result):
+            if inspect.isawaitable(result):
                 await result
         else:
             await client.connect()

@@ -31,7 +31,7 @@ Create a bot via [@BotFather](https://t.me/BotFather), then:
 uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
   --api-id="your_api_id" \
   --api-hash="your_api_hash" \
-  --bot-token="1234567890:ABCdef..."
+  --bot-api-token="1234567890:ABCdef..."
 ```
 
 Or skip the setup step entirely — just add `BOT_API_TOKEN` to your env and the server auto-authenticates on startup when no session file exists.

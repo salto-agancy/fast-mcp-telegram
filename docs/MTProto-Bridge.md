@@ -380,7 +380,7 @@ Create a bot session using the CLI setup tool:
 
 ```bash
 # Create a bot session (replace with your bot token from BotFather)
-python -m src.cli_setup --api-id <your_api_id> --api-hash <your_api_hash> --bot-api-token <bot_token_from_botfather>
+python -m src.cli_setup --api-id <your_api_id> --api-hash <your_api_hash> --bot-api-token <bot_token_from_BotFather>
 
 # The command will print a Bearer token - this identifies your bot
 # Example output:

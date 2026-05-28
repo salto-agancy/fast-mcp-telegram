@@ -65,7 +65,7 @@ class SetupConfig(ServerConfig):
         if not self.bot_api_token and not self.phone_number:
             raise ValueError(
                 "Either phone number (for user account) or bot token (for bot account) is required. "
-                "Provide via --phone-number or --bot-token argument, or corresponding environment variables."
+                "Provide via --phone-number or --bot-api-token argument, or corresponding environment variables."
             )
 
         # Validate session name doesn't contain slashes (would break URL-based auth and file paths)
