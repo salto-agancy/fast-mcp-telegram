@@ -203,24 +203,22 @@ async def _connect_client_and_verify_or_cleanup(
     client: TelegramClient, token: str
 ) -> None:
     try:
-        await client.connect()
+        cfg = get_config()
 
-        # Auto-authenticate with bot token if no session exists yet.
-        # This enables "Try in Browser" on Glama, ephemeral containers,
-        # and CI runs without a separate setup step.
-        auth_key = getattr(client.session, "auth_key", None)
-        if not auth_key:
-            cfg = get_config()
-            if cfg.bot_api_token:
-                logger.info(
-                    "No existing session — authenticating with bot token..."
-                )
-                result = client.start(bot_token=cfg.bot_api_token)
-                if asyncio.iscoroutine(result):
-                    await result
-                logger.info("Bot token authentication succeeded!")
+        # If bot_api_token is set, client.start() handles both connection
+        # and non-interactive authentication (no OTP needed).
+        # Otherwise, connect explicitly and verify the existing session.
+        if cfg.bot_api_token:
+            result = client.start(bot_token=cfg.bot_api_token)
+            if asyncio.iscoroutine(result):
+                await result
+        else:
+            await client.connect()
 
         await verify_authorized_connection(client)
+
+        if cfg.bot_api_token:
+            logger.info("Bot API token authentication succeeded!")
     except SessionNotAuthorizedError as e:
         await _safe_disconnect_after_verify_failure(client)
         logger.error(
