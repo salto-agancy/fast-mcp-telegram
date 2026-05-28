@@ -15,13 +15,26 @@ Fast MCP Telegram runs in two modes:
 
 ## Local Setup (stdio)
 
-**Step 1 — Authenticate**
+**Step 1 — Authenticate (choose one)**
+
+**Option A: Phone number (full Telegram user access)**
 ```bash
 uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
   --api-id="your_api_id" \
   --api-hash="your_api_hash" \
   --phone-number="+1234567890"
 ```
+
+**Option B: Bot token (simpler, no phone, no OTP)**
+Create a bot via [@BotFather](https://t.me/BotFather), then:
+```bash
+uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
+  --api-id="your_api_id" \
+  --api-hash="your_api_hash" \
+  --bot-token="1234567890:ABCdef..."
+```
+
+Or skip the setup step entirely — just add `BOT_TOKEN` to your env and the server auto-authenticates on startup when no session file exists.
 
 **Step 2 — Configure your MCP client:**
 
@@ -214,9 +227,12 @@ Listed tokens cannot use `invoke_mtproto` or `/mtproto-api/*` in Phase 1.
 ### Environment Variables
 
 ```bash
-# Required
+# Required (pick one auth method)
+# — User account (phone + OTP):
 API_ID=your_api_id
 API_HASH=your_api_hash
+# — Bot account (no phone, no OTP):
+# BOT_TOKEN=1234567890:ABCdef...
 
 # Optional
 SERVER_MODE=http-auth             # stdio (default) or http-auth for remote

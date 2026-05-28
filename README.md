@@ -66,6 +66,17 @@ uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
 
 Sessions are stored in `~/.config/fast-mcp-telegram/`.
 
+**Bot token alternative (no phone number):** Create a bot via [@BotFather](https://t.me/BotFather) and use `--bot-token` instead of `--phone-number`:
+
+```bash
+uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
+  --api-id="your_api_id" \
+  --api-hash="your_api_hash" \
+  --bot-token="1234567890:ABCdef..."
+```
+
+No OTP, no verification code. Or skip the setup step entirely — just add `BOT_TOKEN` to your env and the server auto-authenticates on startup.
+
 ### 2. Configure MCP Client
 
 **stdio mode (local):**
