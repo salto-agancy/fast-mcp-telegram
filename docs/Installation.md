@@ -196,7 +196,7 @@ The web setup interface manages Telegram sessions directly from your browser. Ac
 
 ## Session ACL (http-auth)
 
-Opt-in **agent guardrails** for shared `http-auth` hosts: restrict specific Bearer tokens to chat lanes and capability profiles (analyst read-only, team lane, bot channel-only). Humans keep using Telegram in official clients; ACL limits what **connected agents** can do via MCP on this server.
+Optional **per-token limits** on shared `http-auth` hosts: choose which chats each Bearer may use and whether it may send messages or call raw Telegram APIs. Profiles in [SECURITY.md](../SECURITY.md#opt-in-session-acl-http-auth) include analyst (read-only), team_lane (work chats), and bot (channels only). People can still use Telegram in the official apps.
 
 **Scope:** `ACL_ENABLED=true` applies only in **`http-auth`** mode. Stdio and `http-no-auth` are unchanged.
 
@@ -205,18 +205,18 @@ Opt-in **agent guardrails** for shared `http-auth` hosts: restrict specific Bear
 1. Set `ACL_ENABLED=true` (and optionally `ACL_CONFIG_PATH`) in the server environment.
 2. Create the ACL file — default `{session_directory}/acl.yaml`, or the path from `ACL_CONFIG_PATH`. Start from [acl.yaml.example](../acl.yaml.example).
 3. List **only** Bearer tokens you want to restrict. **Unlisted tokens keep full tool access** unless `ACL_DENY_UNLISTED_TOKENS=true`.
-4. Restart or redeploy. Startup **fails closed** if ACL is enabled but the file is missing or invalid (`read_only` requires a non-empty `chats` list).
+4. Restart or redeploy. The server **refuses to start** if ACL is enabled but the file is missing or invalid (`read_only` requires a non-empty `chats` list).
 
-**Lane rules (summary):**
+**Settings (summary):**
 
 | Setting | Effect |
 | --- | --- |
-| `chats` | Allowlist of chat ids, `@username`, or `me` for this token |
-| Empty or omitted `chats` on a **listed** token | **Hard deny** all chat-scoped operations (not an empty result list) |
-| `read_only: true` | Blocks send, edit, `invoke_mtproto`, and the HTTP MTProto bridge |
+| `chats` | Chat ids, `@username`, or `me` this Bearer may use |
+| Empty or omitted `chats` on a **listed** token | Chat tools return an error (not an empty result list) |
+| `read_only: true` | Blocks send, edit, `invoke_mtproto`, and `/mtproto-api/*` |
 | `allow_global_search: false` | Blocks `search_messages_globally` and raw MTProto |
-| `allow_mtproto: false` | Default for listed tokens; blocks `invoke_mtproto` and `/mtproto-api/*` unless explicitly `true` with `read_only: false` and `allow_global_search: true` |
-| `ACL_DENY_UNLISTED_TOKENS=true` | Bearer tokens not in `tokens:` get a synthetic empty-lane denial |
+| `allow_mtproto: false` | Default for listed tokens; blocks raw MTProto unless `true` with `read_only: false` and `allow_global_search: true` |
+| `ACL_DENY_UNLISTED_TOKENS=true` | Any Bearer not listed under `tokens:` is denied |
 
 **Operator runbook:** [SECURITY.md](../SECURITY.md#opt-in-session-acl-http-auth) · **Design:** [ADR 0001](adr/0001-agent-scoped-session-acl.md) · **Local testing:** [CONTRIBUTING.md](../CONTRIBUTING.md#acl-development-and-testing-not-via-cursor-mcp)
 
@@ -243,7 +243,7 @@ SESSION_DIR=~/.config/fast-mcp-telegram  # Custom session directory
 MTPROTO_PROXY=tg://proxy?server=your-proxy.com&port=443&secret=your-secret  # Firewall proxy
 
 # Session ACL (http-auth only) — see #session-acl-http-auth
-ACL_ENABLED=false                  # Opt-in per-token agent guardrails
+ACL_ENABLED=false                  # Opt-in per-token MCP limits (http-auth)
 ACL_CONFIG_PATH=                   # Override default {session_directory}/acl.yaml
 ACL_DENY_UNLISTED_TOKENS=false     # Deny Bearer tokens omitted from tokens: map
 ```

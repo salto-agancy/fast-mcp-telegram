@@ -675,7 +675,7 @@ def test_allow_mtproto_true_still_blocked_when_global_search_false(tmp_path):
         tmp_path,
         """
 tokens:
-  bot-like:
+  automation-token:
     chats:
       - -100999
     read_only: false
@@ -683,7 +683,7 @@ tokens:
     allow_mtproto: true
 """,
     )
-    set_request_token("bot-like")
+    set_request_token("automation-token")
     denial = check_pre_tool_access("invoke_mtproto", {"params_json": "{}"})
     assert denial is not None
     assert "allow_global_search" in denial["error"].lower()

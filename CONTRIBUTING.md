@@ -197,7 +197,7 @@ Optional wrapper: [`scripts/acl_mcp_smoke.sh`](scripts/acl_mcp_smoke.sh) runs th
 | Profile | Bearer token (example file) | Expect |
 | ------- | --------------------------- | ------ |
 | readonly | `dev_acl_readonly_…` | `send_message` denied; `get_messages` on `me` allowed |
-| empty-lane | `dev_acl_empty_lane_…` | `find_chats` denied (empty lane) |
+| empty-lane | `dev_acl_empty_lane_…` | `find_chats` denied (token has `chats: []`) |
 | team | `dev_acl_team_lane__…` | Whitelisted chat only; other chats denied |
 
 #### 3. Session setup (`/setup`)

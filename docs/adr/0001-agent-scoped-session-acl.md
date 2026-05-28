@@ -15,11 +15,11 @@ Prior research compared competitors (e.g. default-deny chat ACL in other MCP ser
 
 ## Decision
 
-**Session ACL is agent guardrails** — scoped **lanes** for MCP/MTProto tool use per Bearer token, not account-wide lockdown.
+**Session ACL** limits MCP and MTProto tool use per Bearer token (which chats and which capabilities), not account-wide lockdown.
 
 | Lens | Meaning |
 | --- | --- |
-| **Scope** | Workspace **lane**: which chats an agent profile may touch via tools |
+| **Scope** | **Chat allowlist** (`chats`): which chats a token may use via tools |
 | **Capabilities** | Agent **profiles**: read, write (send/edit), search, MTProto — expressed as `read_only`, `allow_global_search`, future `allow_mtproto`, etc. |
 | **Default for personal** | Opt-in ACL; tokens **omitted** from config keep full tool access (human Telegram use unchanged) |
 | **Default for multi-tenant** | `ACL_DENY_UNLISTED_TOKENS=true` may be used for strict hosts; **not** the recommended default for personal/demo hosting |
@@ -28,14 +28,14 @@ ACL applies only when **`ACL_ENABLED=true`** on **http-auth**. No ACL on stdio o
 
 Human operators continue to use Telegram normally; guardrails reduce **accidental** cross-lane data mixup and **inadvertent** destructive tool actions by agents connected through this server, and — for shared tokens — **intentional** reads of security-sensitive peers via MCP tools.
 
-**Sensitive peer denylist:** When ACL is enabled and **`blocked_peers`** is configured (non-empty deployment list), those peers are **denied for all MCP tool access** for every Bearer token, even if a token’s `chats` allowlist would otherwise include them. Operators **own the full denylist** (add/remove any peer); recommended defaults live in [`acl.yaml.example`](../acl.yaml.example) and SECURITY.md only — not hardcoded at enforcement time. Omitting `blocked_peers` keeps lane-only ACL. This is guardrails for **blast radius on shared tokens**, not a substitute for rotating compromised tokens or Telegram-side 2FA.
+**Sensitive peer denylist:** When ACL is enabled and **`blocked_peers`** is configured (non-empty deployment list), those peers are **denied for all MCP tool access** for every Bearer token, even if a token’s `chats` allowlist would otherwise include them. Operators **own the full denylist** (add/remove any peer); recommended defaults live in [`acl.yaml.example`](../acl.yaml.example) and SECURITY.md only — not hardcoded at enforcement time. Omitting `blocked_peers` keeps lane-only ACL. This limits what teammates can reach **through this MCP server** when they share a Bearer token; it is not a substitute for rotating compromised tokens or Telegram-side 2FA.
 
 ## Consequences
 
 ### Policy model
 
 - Static server-side file (`acl.yaml` / JSON); no MCP tool to edit ACL in v1.
-- Enforcement at tool boundaries (pre-check + post-filter where needed).
+- Enforcement at tool boundaries (checks before tools run; filter results where needed).
 - Errors should name the fix (token, chat id, flag) for operators and agents.
 
 ### Defaults and phases

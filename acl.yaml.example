@@ -1,4 +1,4 @@
-# Agent guardrails (http-auth): per-token workspace lane + profile — not account lockdown.
+# Per-token MCP limits (http-auth): which chats each Bearer may use and what tools it may call.
 # Tokens omitted from this file keep full tool access when ACL is enabled.
 # Set ACL_ENABLED=true; default path {session_directory}/acl.yaml or ACL_CONFIG_PATH.
 # See docs/adr/0001-agent-scoped-session-acl.md and docs/research/acl-design-brief.md.
@@ -8,8 +8,8 @@
 # does not block login-code chats or BotFather — teammates with the same Bearer token
 # can still reach those peers via MCP tools.
 #
-# Recommend numeric ids first for MTProto coverage; optional @handle lines help pre-check.
-# Post-check on chat tools matches both resolved numeric id and username from results.
+# Use numeric peer ids when possible. @handle lines help block usernames in tool arguments.
+# After get_chat_info / get_messages run, results are checked using resolved id and username.
 #
 # blocked_peers:
 #   - 777000          # Telegram service — login codes, security alerts
@@ -44,7 +44,7 @@ tokens:
   #   allow_global_search: false
   #   allow_mtproto: false
 
-  # Optional power profile — raw MTProto escape hatch (use sparingly)
+  # Optional: listed token that may use raw MTProto (use sparingly; see SECURITY.md)
   # "power-token":
   #   chats:
   #     - me

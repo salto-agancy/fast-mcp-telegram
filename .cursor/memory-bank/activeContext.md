@@ -1,6 +1,6 @@
 ## Current Work Focus
 
-**Trust lane — Session ACL (2026-05-27):** Phase 2 on branch `feature/acl-phase2-guardrails` (PR #58): `allow_mtproto`, unified MTProto gate, `ACL_DENY_UNLISTED_TOKENS`, config load warnings. Phase 1.5 shipped as [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
+**Trust lane — Session ACL (2026-05-27):** Phase 2 on branch `feature/acl-phase2-guardrails` (PR #58): `allow_mtproto`, unified MTProto gate, `ACL_DENY_UNLISTED_TOKENS`, config load warnings; plain-language operator docs. Phase 1.5 shipped as [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0) (`blocked_peers`). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
 
 - **Implementation:** [session_acl.py](../src/server_components/session_acl.py), [server_config.py](../src/config/server_config.py) (`ACL_DENY_UNLISTED_TOKENS`)
 - **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phase 3 chat metadata registry next)
