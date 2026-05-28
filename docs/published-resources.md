@@ -11,6 +11,7 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 | **Docker (GHCR)** | `ghcr.io/leshchenko1979/fast-mcp-telegram:*` | ✅ Live | Published alongside releases |
 | **RemoteMCPList** | https://github.com/remotemcplist/servers/issues/22 | ✅ Submitted | GitHub issue #22 created |
 | **ToolSDK Registry** | https://github.com/toolsdk-ai/toolsdk-mcp-registry/pull/324 | ✅ PR #324 | Added `fast-mcp-telegram.json` to registry |
+| **Official MCP Registry** | https://registry.modelcontextprotocol.io | ✅ Published v0.22.2 | Published via `mcp-publisher` — `io.github.leshchenko1979/fast-mcp-telegram` |
 
 ## Submitted — Awaiting Review / Merge ⏳
 
@@ -34,7 +35,6 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
-| **Official MCP Registry** | https://registry.modelcontextprotocol.io | 🔲 Needs device auth | `mcp-publisher login github` — user must visit https://github.com/login/device and enter device code |
 | **GitHub MCP Registry** | — | 🔲 Needs email | Requires email to `partnerships@github.com` — agent cannot send email |
 
 ## Adding a new listing
