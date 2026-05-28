@@ -6,7 +6,7 @@
 [![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
 [![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
 
-**Fast MCP Telegram Server** - Telegram integration with direct API access, powerful search, and advanced messaging for AI assistants.
+**Fast MCP Telegram Server** — MCP/HTTP Gateway for Telegram — Multi-tenant, MTProto User API, 8 context-efficient tools
 
 ## Try the Demo
 
@@ -33,13 +33,14 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 
 | Feature                                                                                             | Description                                                                                                    |
 | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| :globe_with_meridians: **[HTTP-MTProto Bridge](docs/MTProto-Bridge.md#key-benefits)**               | Direct curl access to any Telegram API method with entity resolution and safety guardrails                     |
-| :dart: **[AI-Optimized](docs/Tools-Reference.md#overview)**                                         | Conserves context with fewer general-purpose tools, LLM-friendly API design, and MCP ToolAnnotations           |
-| :closed_lock_with_key: **[Multi-User Authentication](docs/Installation.md#remote-setup-http-auth)** | Shared `http-auth` server: one Bearer token per user, one Telegram account per MCP connection; session isolation and LRU cache |
-| :shield: **[Session ACL](docs/Installation.md#session-acl-http-auth)** | Opt-in per-token limits on `http-auth` (`ACL_ENABLED`) — chat lanes, `read_only`, `blocked_peers`, `allow_mtproto`, `ACL_DENY_UNLISTED_TOKENS`; see [SECURITY.md](SECURITY.md#opt-in-session-acl-http-auth) |
-| :label: **[One Agent, Multiple Accounts](docs/Installation.md#multi-account-mcp-tool-prefix)**     | Optional `PREFIX_MCP_TOOLS_WITH_ACCOUNT` — when **one** agent uses several MCP connections (same server, different tokens), prefixes tool names so they do not collide; not needed for standard multi-user hosting |
-| :tv: **[Web Setup Interface](docs/Installation.md#web-setup-interface)**                            | Browser-based authentication flow with immediate config generation                                             |
+
 | :building_construction: **[Dual Transport](docs/Installation.md#overview)**                         | Stdio for local MCP clients, HTTP for remote deploys (`http-auth` production, optional `http-no-auth` for dev) |
+| :closed_lock_with_key: **[Multi-User Authentication](docs/Installation.md#remote-setup-http-auth)** | Shared `http-auth` server: one Bearer token per user, one Telegram account per MCP connection; session isolation and LRU cache |
+| :dart: **[AI-Optimized](docs/Tools-Reference.md#overview)**                                         | 8 consolidated tools vs 80+ micro-tools — context-efficient design, LLM-friendly API, MCP ToolAnnotations     |
+| :globe_with_meridians: **[HTTP-MTProto Bridge](docs/MTProto-Bridge.md#key-benefits)**               | Direct curl access to any Telegram API method with entity resolution and safety guardrails                     |
+| :shield: **[Session ACL](docs/Installation.md#session-acl-http-auth)** | Opt-in per-token limits on `http-auth` (`ACL_ENABLED`) — chat lanes, `read_only`, `blocked_peers`, `allow_mtproto`, `ACL_DENY_UNLISTED_TOKENS`; see [SECURITY.md](SECURITY.md#opt-in-session-acl-http-auth) |
+| :tv: **[Web Setup Interface](docs/Installation.md#web-setup-interface)**                            | Browser-based authentication flow with immediate config generation                                             |
+| :label: **[One Agent, Multiple Accounts](docs/Installation.md#multi-account-mcp-tool-prefix)**     | Optional `PREFIX_MCP_TOOLS_WITH_ACCOUNT` — when **one** agent uses several MCP connections (same server, different tokens), prefixes tool names so they do not collide; not needed for standard multi-user hosting |
 | :rocket: **[MTProto Proxy Support](docs/Installation.md#mtproto-proxy)**                            | Connect via MTProto proxy with automatic Fake TLS (EE prefix) and standard proxy detection                     |
 | :card_file_box: **[Unified Session Management](docs/Installation.md#configuration-reference)**      | Single configuration system for setup and server; per-token session files on shared multi-user hosts          |
 | :mag_right: **[Intelligent Search](docs/Search-Guidelines.md#what-works)**                          | Global & per-chat message search with multi-query support and intelligent deduplication                        |
@@ -66,16 +67,7 @@ uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
 
 Sessions are stored in `~/.config/fast-mcp-telegram/`.
 
-**Bot token alternative (no phone number):** Create a bot via [@BotFather](https://t.me/BotFather) and use `--bot-api-token` instead of `--phone-number`:
-
-```bash
-uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
-  --api-id="your_api_id" \
-  --api-hash="your_api_hash" \
-  --bot-api-token="1234567890:ABCdef..."
-```
-
-No OTP, no verification code. Or skip the setup step entirely — just add `BOT_API_TOKEN` to your env and the server auto-authenticates on startup.
+> **Bot token alternative:** Set `BOT_API_TOKEN` instead of `--phone-number` to skip OTP. See [Installation Guide](docs/Installation.md).
 
 ### 2. Configure MCP Client
 
