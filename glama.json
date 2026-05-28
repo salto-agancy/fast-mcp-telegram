@@ -1,0 +1,49 @@
+{
+  "id": "leshchenko1979/fast-mcp-telegram",
+  "name": "Fast MCP Telegram",
+  "description": "Production-grade Telegram MCP server with direct MTProto API access, multi-user Bearer ACL, dual transport (stdio + HTTP SSE), voice transcription, file attachments, and context-optimized design. One-command setup with uvx fast-mcp-telegram.",
+  "categories": ["communication", "messaging", "telegram"],
+  "repository": "https://github.com/leshchenko1979/fast-mcp-telegram",
+  "homepage": "https://tg-mcp.l1979.ru",
+  "license": "MIT",
+  "relatedServers": [
+    "chaindead/telegram-mcp",
+    "chigwell/telegram-mcp",
+    "overpod/mcp-telegram",
+    "FantomaSkaRus1/telegram-bot-mcp"
+  ],
+  "env": {
+    "API_ID": {
+      "description": "Telegram API ID from my.telegram.org. Required for both user and bot accounts.",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Telegram API Hash from my.telegram.org. Required for both user and bot accounts.",
+      "required": true
+    },
+    "PHONE_NUMBER": {
+      "description": "Phone number with country code (e.g. +1234567890). Required for user account setup.",
+      "required": false
+    },
+    "BOT_API_TOKEN": {
+      "description": "Bot token from @BotFather. Alternative to phone number for bot account setup. Simpler authentication, limited to bot API features.",
+      "required": false
+    },
+    "SERVER_MODE": {
+      "description": "Server transport mode: stdio (local MCP clients), http-auth (remote/production, requires Bearer token), http-no-auth (dev, no auth). Default: http-auth",
+      "required": false
+    },
+    "DOMAIN": {
+      "description": "Public domain for web setup UI and attachment URL generation. Required for http-auth mode.",
+      "required": false
+    },
+    "SESSION_NAME": {
+      "description": "Session file name for stdio mode. Default: telegram",
+      "required": false
+    },
+    "MTPROTO_PROXY": {
+      "description": "MTProto proxy connection string (tg://proxy?server=...&port=...&secret=...)",
+      "required": false
+    }
+  }
+}

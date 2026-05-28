@@ -3,7 +3,8 @@
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://github.com/leshchenko1979/fast-mcp-telegram)
-[![Health Status](https://gatus.l1979.ru/api/v1/endpoints/always-on_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/always-on_fast-mcp-telegram)
+[![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
+[![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
 
 **Fast MCP Telegram Server** - Telegram integration with direct API access, powerful search, and advanced messaging for AI assistants.
 
@@ -64,6 +65,17 @@ uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
 ```
 
 Sessions are stored in `~/.config/fast-mcp-telegram/`.
+
+**Bot token alternative (no phone number):** Create a bot via [@BotFather](https://t.me/BotFather) and use `--bot-api-token` instead of `--phone-number`:
+
+```bash
+uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
+  --api-id="your_api_id" \
+  --api-hash="your_api_hash" \
+  --bot-api-token="1234567890:ABCdef..."
+```
+
+No OTP, no verification code. Or skip the setup step entirely — just add `BOT_API_TOKEN` to your env and the server auto-authenticates on startup.
 
 ### 2. Configure MCP Client
 

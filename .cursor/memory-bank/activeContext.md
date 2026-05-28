@@ -1,11 +1,13 @@
 ## Current Work Focus
 
-**Trust lane — Session ACL (2026-05-27):** Phase 2 implemented on `master` (not released): `allow_mtproto`, unified MTProto gate, `ACL_DENY_UNLISTED_TOKENS`, config load warnings. Phase 1.5 shipped as [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
+**Trust lane — Session ACL (2026-05-27):** Phase 2 on branch `feature/acl-phase2-guardrails` (PR #58): `allow_mtproto`, unified MTProto gate, `ACL_DENY_UNLISTED_TOKENS`, config load warnings. Phase 1.5 shipped as [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
 
 - **Implementation:** [session_acl.py](../src/server_components/session_acl.py), [server_config.py](../src/config/server_config.py) (`ACL_DENY_UNLISTED_TOKENS`)
 - **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phase 3 chat metadata registry next)
-- **Next:** Phase 3 chat metadata registry or release cut for Phase 2
+- **Next:** Merge PR #58; optional release; Phase 3 chat metadata registry
 - **Other lanes:** Telemetry `feature/telemetry` *(planned)*; QA / Gategrid `feature/evals`
+
+**Shipped on `master` (2026-05-28):** Bot token runtime auth — PR #62 (`BOT_API_TOKEN` auto-auth for non-interactive bot setup). Server card from tool registry — PR #63. Published-resources tracking — PR #64.
 
 **Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release).
 
@@ -16,7 +18,7 @@
 **Shipped (2026-05-24):** Account-prefixed MCP tools — PR #52 merged; release `0.19.0` on GitHub/PyPI; GHCR deploy via push to `master`.
 
 - Opt-in `PREFIX_MCP_TOOLS_WITH_ACCOUNT` for **one agent, multiple MCP connections** (same server, different tokens) — not for standard **multi-user server** (one token per user per connection)
-- Docs clarified: Installation `#http-auth-two-deployment-patterns`, README Features, Tools-Reference, GitHub release + Telegram posts edited (2026-05-24)
+- Docs clarified: Installation `#http-auth-two-deployment-patterns`, README Features, Tools-Reference, GitHub release + Telegram posts edited (2026-05-04)
 - Middleware: [`account_tool_prefix_middleware.py`](../src/server_components/account_tool_prefix_middleware.py) + [`account_prefix_cache.py`](../src/server_components/account_prefix_cache.py)
 
 ---
@@ -74,7 +76,6 @@
   - `src/client/connection.py` (main client)
   - `src/server_components/web_setup.py` (setup flow)
   - `src/cli_setup.py` (CLI setup)
-
 
 ---
 

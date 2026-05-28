@@ -1,3 +1,6 @@
+### 2026-05-28
+- **Bot Token Runtime Auth (PR #62):** Added `BOT_API_TOKEN` env var to `ServerConfig`. When `BOT_API_TOKEN` is set and no session file exists, `connection.py` auto-authenticates via `client.start(bot_api_token=...)` before `verify_authorized_connection()`. No interactive setup needed — enables Glama "Try in Browser" and simplifies bot account onboarding. Docs updated (README, Installation.md, .env.example, glama.json). Memory bank updated.
+
 ### 2026-05-27
 - **Session ACL Phase 2 (master, unreleased):** `allow_mtproto` per listed token (default false); `allow_global_search: false` blocks raw MTProto; unified `_mtproto_denial_for_rule` for tool + HTTP bridge; `ACL_DENY_UNLISTED_TOKENS` for strict multi-tenant; config load warnings for unknown keys and risky combos; docs (SECURITY.md, Installation, ADR, brief, examples).
 - **0.21.0 — Session ACL Phase 1.5:** PR #57 merged; optional operator `blocked_peers` YAML list, dual pre/post enforcement (id + username), MTProto param gate; PyPI + GHCR. GitHub release `0.21.0`.

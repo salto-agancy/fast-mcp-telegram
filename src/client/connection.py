@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import inspect
 import logging
 import secrets
 import time
@@ -200,11 +201,23 @@ async def _safe_disconnect_after_verify_failure(client: TelegramClient) -> None:
 
 
 async def _connect_client_and_verify_or_cleanup(
-    client: TelegramClient, token: str
+    client: TelegramClient, token: str, bot_api_token: str = ""
 ) -> None:
     try:
-        await client.connect()
+        # If bot_api_token is set, client.start() handles both connection
+        # and non-interactive authentication (no OTP needed).
+        # Otherwise, connect explicitly and verify the existing session.
+        if bot_api_token:
+            result = client.start(bot_token=bot_api_token)
+            if inspect.isawaitable(result):
+                await result
+        else:
+            await client.connect()
+
         await verify_authorized_connection(client)
+
+        if bot_api_token:
+            logger.info("Bot API token authentication succeeded!")
     except SessionNotAuthorizedError as e:
         await _safe_disconnect_after_verify_failure(client)
         logger.error(
@@ -274,7 +287,7 @@ async def _build_telegram_client_for_token(
     }
     client_kwargs |= build_mtproto_client_args(_cfg.mtproto_proxy, logger.info)
     client = TelegramClient(**client_kwargs)
-    await _connect_client_and_verify_or_cleanup(client, token)
+    await _connect_client_and_verify_or_cleanup(client, token, _cfg.bot_api_token)
     return client
 
 
