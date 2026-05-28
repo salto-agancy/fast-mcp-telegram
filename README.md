@@ -6,6 +6,10 @@
 [![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
 [![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
 
+<p align="center">
+  <img src="images/hero.png" alt="fast-mcp-telegram — Multi-tenant MCP/HTTP Gateway for Telegram" width="900">
+</p>
+
 **Fast MCP Telegram Server** — MCP/HTTP Gateway for Telegram — Multi-tenant, MTProto User API, 8 context-efficient tools
 
 ## Try the Demo
