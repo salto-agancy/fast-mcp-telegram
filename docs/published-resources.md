@@ -26,7 +26,7 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
-| **MCPMarket** | https://app.mcpmarket.com/servers/fast-mcp-telegram | ❌ 404 | `addByUrl` GraphQL mutation created DB entry, but listing not public — custom deploys require Pro plan |
+| **MCPMarket** | https://app.mcpmarket.com/servers/fast-mcp-telegram | ❌ Dead end | Custom MCP deployments from GitHub require Pro plan — user declined |
 | **Smithery** | https://smithery.ai/servers/fast-mcp-telegram | ❌ 404 | Was live at sing./server/; needs re-publish via URL or hosted Docker |
 | **PulseMCP** | https://pulsemcp.com/servers | ❌ Blocked | Cloudflare blocks automated checks |
 | **MCPForge** | https://mcpforge.org | ❌ Not a directory | Managed hosting service (like Smithery), not a listing directory |
