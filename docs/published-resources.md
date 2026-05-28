@@ -17,15 +17,15 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
 | **awesome-mcp-servers** | https://github.com/punkpeye/awesome-mcp-servers/pull/7019 | ⏳ PR pending | Awaiting merge by @punkpeye |
-| **MCP.Directory** | https://mcp.directory | ❌ Form failed | Submit form requires authentication (Sign In) |
-| **mcp.so** | https://mcp.so | ❌ Form failed | Submit form requires GitHub login |
-| **MCPMarket** | https://mcpmarket.com/submit | ❌ Form failed | Submit form requires authentication |
-| **MCPFind** | https://mcpfind.org/submit | ❌ Form failed | Submit requires GitHub auth / PR workflow |
+| **MCP.Directory** | https://mcp.directory | ✅ Submitted | "Server Submitted!" — auto-pulls metadata from GitHub, publishes within 24h |
 
 ## Failed — Blocks Automation ❌
 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
+| **mcp.so** | https://mcp.so | ❌ Submit requires login | Web form at mcp.so/submit — needs GitHub sign-in to submit |
+| **MCPMarket** | https://mcpmarket.com/submit | ❌ Submit requires auth | Form found at mcpmarket.com/submit — filled URL, clicked Submit, page didn't change |
+| **MCPFind** | https://mcpfind.org/submit | ❌ Submit requires auth | Form at mcpfind.org/submit uses "Open GitHub Editor" workflow — needs GitHub auth |
 | **Smithery** | https://smithery.ai/servers/fast-mcp-telegram | ❌ 404 | Was live at sing./server/; needs re-publish via URL or hosted Docker |
 | **PulseMCP** | https://pulsemcp.com/servers | ❌ Blocked | Cloudflare blocks automated checks |
 | **MCPForge** | https://mcpforge.org | ❌ Not a directory | Managed hosting service (like Smithery), not a listing directory |
@@ -34,7 +34,7 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
-| **Official MCP Registry** | https://registry.modelcontextprotocol.io | 🔲 Needs device auth | `mcp-publisher login github` prints device code — user must visit https://github.com/login/device and enter the code |
+| **Official MCP Registry** | https://registry.modelcontextprotocol.io | 🔲 Needs device auth | `mcp-publisher login github` — user must visit https://github.com/login/device and enter device code |
 | **GitHub MCP Registry** | — | 🔲 Needs email | Requires email to `partnerships@github.com` — agent cannot send email |
 
 ## Adding a new listing
