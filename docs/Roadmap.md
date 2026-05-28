@@ -151,6 +151,8 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 | Stdio path sandbox | Trust | Local stdio users |
 | Multi-replica attachment tickets | Ops | Shared ticket store |
 | Media OCR pipeline | Features | Beyond voice transcription |
+| **Refactoring** | All lanes | Post-Phase-3 cleanup: consolidate session config, extract shared logic from `connection.py`/`server.py`, reduce duplication across transport modes, standardise error types. Unblocks faster iteration in subsequent phases. |
+| **Docs review** | Docs / strategy | Post-Phase-3 audit: verify every public function has a docstring, every tool has usage examples, every ADR is up to date with code, all `TODO`s are intentional. Publish API reference. |
 
 ## Where to record future work
 
