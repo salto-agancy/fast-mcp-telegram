@@ -142,6 +142,8 @@ See [Web Setup Interface](#web-setup-interface) for detailed instructions.
 
 **Health check:** `curl https://your-domain.com/health`
 
+**MCP discovery (HTTP modes):** `GET /.well-known/mcp/server-card.json` returns server metadata and the registered tool list (built from the live FastMCP registry). Useful for Smithery and similar installers; does not require an active Telegram session.
+
 ### HTTP auth: two deployment patterns
 
 Remote `http-auth` supports two different setups. Do not confuse them when reading docs or choosing env vars.
