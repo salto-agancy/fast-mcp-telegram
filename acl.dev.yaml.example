@@ -16,12 +16,14 @@ tokens:
       - me
     read_only: true
     allow_global_search: true
+    allow_mtproto: false
 
   # Profile: empty_lane — hard deny on chat-scoped tools (ACL matrix testing)
   "dev_acl_empty_lane_abcdefghijklmnopqrstuvwx":
     chats: []
     read_only: false
     allow_global_search: false
+    allow_mtproto: false
 
   # Profile: team — single work chat, send allowed (replace id with your supergroup/channel)
   "dev_acl_team_lane__abcdefghijklmnopqrstuvwx":
@@ -29,3 +31,4 @@ tokens:
       - -1001234567890
     read_only: false
     allow_global_search: false
+    allow_mtproto: false

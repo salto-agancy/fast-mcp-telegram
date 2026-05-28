@@ -140,7 +140,7 @@ async def test_chat_whitelist_allows_listed_chat_via_decorator_chain(acl_config)
 def empty_lane_acl_config(tmp_path: Path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
-        'tokens:\n  empty-lane:\n    chats: []\n    read_only: false\n',
+        "tokens:\n  empty-lane:\n    chats: []\n    read_only: false\n",
         encoding="utf-8",
     )
     config = ServerConfig(_cli_parse_args=[])
@@ -154,7 +154,9 @@ def empty_lane_acl_config(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_empty_lane_blocks_find_chats_via_decorator_chain(empty_lane_acl_config):
     """Empty chat lane must hard-deny find_chats before the tool body runs."""
-    tool_called = AsyncMock(return_value={"ok": True, "chats": [{"id": -100123, "title": "Leaked"}]})
+    tool_called = AsyncMock(
+        return_value={"ok": True, "chats": [{"id": -100123, "title": "Leaked"}]}
+    )
 
     @mcp_tool_with_restrictions("find_chats")
     async def find_chats(query, limit=50):
@@ -196,5 +198,5 @@ async def test_chat_whitelist_blocks_invoke_mtproto_via_decorator_chain(acl_conf
         )
 
     assert result["ok"] is False
-    assert "listed in the acl config" in result["error"].lower()
+    assert "allow_global_search" in result["error"].lower()
     tool_called.assert_not_called()

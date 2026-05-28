@@ -1,6 +1,6 @@
 # Session ACL design brief — agent guardrails
 
-**Status:** Approved direction (2026-05-27). Supersedes zero-trust / account-lockdown framing.  
+**Status:** Approved direction (2026-05-27). Supersedes zero-trust / account-lockdown framing.
 **ADR:** [ADR 0001 — Agent-scoped session ACL](../adr/0001-agent-scoped-session-acl.md).
 
 ## First principles
@@ -10,7 +10,7 @@
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Telegram is multi-device**    | Humans use the account outside MCP; ACL does not “secure the account.”                                                                                        |
 | **MCP is an agent surface**     | Guardrails limit what **connected agents** can do via tools, not human clients.                                                                               |
-| **Lanes, not lockdown**         | Each Bearer token maps to a **workspace lane** (chat set + capability profile).                                                                               |
+| **Lanes, not lockdown**         | Each Bearer token maps to an allowed **chat list** (`chats`) plus capability flags.                                                                         |
 | **Opt-in for personal hosting** | Unlisted tokens keep full tool access; avoids breaking demos and single-user setups.                                                                          |
 | **Shared hosting needs lanes**  | Team/automation tokens get explicit profiles so agents do not mix work and personal chats.                                                                    |
 | **Shared token, human threat**  | Teammates with the same Bearer token can abuse MCP tools; **sensitive peers** (login codes, BotFather) need a server denylist **outside** the chat allowlist. |
@@ -112,7 +112,7 @@ Errors: `Session ACL: blocked peer (<ref>) is denied for this deployment. See SE
 | Variable      | Default       | Notes                                                                             |
 | ------------- | ------------- | --------------------------------------------------------------------------------- |
 | `ACL_ENABLED` | false         | Opt-in                                                                            |
-| `ACL_DEFAULT` | `full_access` | Optional `deny` for strict multi-tenant; **not** recommended default for personal |
+| `ACL_DENY_UNLISTED_TOKENS` | false | When true, Bearer tokens omitted from `tokens:` are denied; **not** recommended default for personal |
 
 
 ## Configuration (current + planned)
@@ -134,7 +134,7 @@ tokens:
       - -1001234567890
     read_only: true
     allow_global_search: true
-    # allow_mtproto: false   # Phase 2 — default false when token is listed
+    allow_mtproto: false   # default false when omitted on listed tokens
 ```
 
 See [acl.yaml.example](../../acl.yaml.example).
@@ -186,7 +186,7 @@ Errors: MCP `ok: false` with actionable text; HTTP 403 on MTProto bridge.
 | Item                       | Rationale                                              |
 | -------------------------- | ------------------------------------------------------ |
 | Operator `blocked_peers` list | Deployment-owned denylist; recommended defaults in example + SECURITY.md |
-| Dual pre/post enforcement  | Closes @username ↔ numeric id bypass on chat tools     |
+| Before/after tool checks     | Blocks @username ↔ numeric id bypass on chat tools     |
 | Tool + MTProto enforcement | Blocked scan before lane gate; shallow MTProto ids     |
 | SECURITY.md section        | Shared-host checklist, numeric-id rule, post-check behavior |
 | Tests                      | Deny/filter matrix in `test_session_acl.py`            |
@@ -199,10 +199,10 @@ Errors: MCP `ok: false` with actionable text; HTTP 403 on MTProto bridge.
 
 | Item                                 | Rationale                                               |
 | ------------------------------------ | ------------------------------------------------------- |
-| `ACL_DEFAULT` env                    | `full_access` default; optional `deny` for multi-tenant |
+| `ACL_DENY_UNLISTED_TOKENS` env       | Default false; true = deny unlisted Bearer tokens       |
 | `allow_mtproto`                      | Default false for listed tokens                         |
 | `allow_global_search` blocks MTProto | Bot profile cannot bypass via raw MTProto               |
-| Enforcement registry                 | DRY tool/route registration                             |
+| Unified MTProto gate                 | Single helper for tool + HTTP bridge                    |
 | Config load warnings                 | Unknown keys, empty lane, risky combos                  |
 
 
