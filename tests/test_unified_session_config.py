@@ -83,7 +83,7 @@ class TestUnifiedSessionConfig:
         setup_config = SetupConfig(_cli_parse_args=[])
         # Should have setup-specific fields
         assert hasattr(setup_config, "overwrite")
-        assert hasattr(setup_config, "bot_token")
+        assert hasattr(setup_config, "bot_api_token")
         # Should also have all ServerConfig fields
         assert hasattr(setup_config, "session_name")
         assert hasattr(setup_config, "session_directory")
