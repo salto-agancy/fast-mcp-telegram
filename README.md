@@ -11,6 +11,7 @@
 </p>
 
 **Fast MCP Telegram Server** — MCP/HTTP Gateway for Telegram — Multi-tenant, MTProto User API, 8 context-efficient tools
+`mcp-name: io.github.leshchenko1979/fast-mcp-telegram`
 
 ## Try the Demo
 
