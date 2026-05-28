@@ -1,11 +1,17 @@
-# Per-token MCP limits (http-auth): which chats each Bearer may use and what tools it may call.
-# Tokens omitted from this file keep full tool access when ACL is enabled.
+# Per-principal MCP limits (http-auth): which chats each principal may use and what tools it may call.
+# Principals omitted from this file keep full tool access when ACL is enabled.
 # Set ACL_ENABLED=true; default path {session_directory}/acl.yaml or ACL_CONFIG_PATH.
 # See docs/adr/0001-agent-scoped-session-acl.md and docs/research/acl-design-brief.md.
 #
+# Terminology (see SECURITY.md):
+#   Principal — one hosted MCP session (Telegram account) with lane rules below.
+#   Principal identifier — key under principals: (today = same string as Bearer + {id}.session).
+#   Bearer token — HTTP credential only; not the ACL policy noun.
+#   Chat ref — entry in chats: (id, @handle, me); not a principal.
+#
 # Shared-host checklist: when ACL_ENABLED=true on a shared http-auth host, uncomment
 # blocked_peers below (or define your own list). Without blocked_peers, lane ACL alone
-# does not block login-code chats or BotFather — teammates with the same Bearer token
+# does not block login-code chats or BotFather — teammates sharing a principal identifier
 # can still reach those peers via MCP tools.
 #
 # Use numeric peer ids when possible. @handle lines help block usernames in tool arguments.
@@ -18,17 +24,17 @@
 #   - "@BotFather"    # optional pre-check alias
 #   - "@SpamBot"
 
-tokens:
+principals:
   # Agent profile: analyst (read-only lane — Saved Messages only)
   "REPLACE_WITH_BEARER_TOKEN":
     chats:
       - me
     read_only: true
     allow_global_search: true
-    # allow_mtproto: false   # default for listed tokens
+    # allow_mtproto: false   # default for listed principals
 
   # Agent profile: team_lane — work chats, send allowed
-  # "another-token":
+  # "another-principal-id":
   #   chats:
   #     - -1001234567890
   #     - "@myteam"
@@ -37,15 +43,15 @@ tokens:
   #   allow_mtproto: false
 
   # Agent profile: bot — channels only, no global search
-  # "automation-token":
+  # "automation-principal-id":
   #   chats:
   #     - -100999888777
   #   read_only: false
   #   allow_global_search: false
   #   allow_mtproto: false
 
-  # Optional: listed token that may use raw MTProto (use sparingly; see SECURITY.md)
-  # "power-token":
+  # Optional: listed principal that may use raw MTProto (use sparingly; see SECURITY.md)
+  # "power-principal-id":
   #   chats:
   #     - me
   #     - "@workgroup"

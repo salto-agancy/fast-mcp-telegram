@@ -85,7 +85,7 @@ flowchart LR
 | 1. Roadmap and research | Done | Docs | `master` | This doc, Gemini under [research/](research/) |
 | 2. ACL audit and design | Done | Trust | `feature/acl` | [acl-operator-research.md](research/acl-operator-research.md), [acl-design-brief.md](research/acl-design-brief.md) |
 | 3. ACL MVP | Done | Trust | `feature/acl` | [session_acl.py](../src/server_components/session_acl.py) |
-| 4. ACL principal identifiers | Planned | Trust | `feature/acl` | `acl.yaml` agent keys: Bearer token, `@username`, or Telegram `user_id` — see [Trust lane](#trust-lane--planned-scope) |
+| 4. Principal identifier forms | Planned | Trust | `feature/acl` | Human-readable `principals:` keys: `@username`, `user_id`, or opaque id — see [Trust lane](#trust-lane--planned-scope) |
 | 5. GG scaffold | In progress | QA | `feature/evals` | Six gate cases, mock baseline, PR workflow |
 | 6. Telemetry for QA | Planned | Telemetry | `feature/telemetry` | Tool/error/latency signals → case backlog |
 | 7. GG depth + live eval | Planned | QA | `feature/evals` | Cases driven by telemetry; optional VDS live matrix |
@@ -107,7 +107,7 @@ Operator-facing enhancements beyond ACL enforcement (not implemented):
 | --- | --- |
 | **Sensitive peer denylist (Phase 1.5)** | Operator-configured `blocked_peers` denylist for **all** tokens when non-empty — independent of `chats` allowlist. Dual pre/post enforcement; recommended defaults in `acl.yaml.example` + SECURITY.md. See [ADR 0001](adr/0001-agent-scoped-session-acl.md), [acl-design-brief.md](research/acl-design-brief.md). |
 | **Chat metadata registry** | Operator-curated metadata for whitelisted/shared chats so team agents can navigate `find_chats` results — human titles, descriptions, tags, and “look here for X” hints. Complements ACL **workspace lanes** (which chats a token may use) with **navigation hints** (what each chat is for); does not replace lane allowlists. Likely config alongside `acl.yaml` or a sibling file; enrichment at the tool boundary (e.g. post-filter on `find_chats`). |
-| **ACL principal identifiers** | **Admin ergonomics:** operators can key `tokens:` entries by Telegram `@username` or numeric `user_id` instead of copying opaque Bearer strings — easier to assign lanes to people and audit who has which profile. **Semantics:** these are **alternative config keys** for the same per-agent lane rules; they identify the **Telegram account** bound to a Bearer session (`{token}.session`), not chat peers listed under `chats:`. **Runtime unchanged:** HTTP clients still send `Authorization: Bearer <token>`; the server resolves principal keys to the matching session/token at config load or setup time. |
+| **Principal identifier forms** | **Admin ergonomics:** operators can key `principals:` entries by Telegram `@username` or numeric `user_id` instead of copying opaque Bearer strings — easier to assign lanes to people and audit who has which profile. **Semantics:** these are **alternative principal identifiers** for the same lane rules; they identify the **Telegram account** bound to a session (`{id}.session`), not chat peers listed under `chats:`. **Runtime unchanged:** HTTP clients still send `Authorization: Bearer <token>`; the server resolves identifiers to the matching session at config load or setup time. |
 
 See [acl-design-brief.md](research/acl-design-brief.md) Phase 1.5 and Phase 3 for related ACL work.
 
@@ -141,7 +141,7 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 | Item | Lane | Notes |
 | --- | --- | --- |
 | Sensitive peer denylist | Trust | Phase 1.5 — operator `blocked_peers` list + dual enforcement; see Trust lane planned scope |
-| ACL principal identifiers | Trust | Human-readable `tokens:` keys (`@username`, `user_id`) as alternatives to Bearer-only; config keys name the session owner, not chat peers — see [step 4](#current-sequence) and Trust lane |
+| Principal identifier forms | Trust | Human-readable principal identifiers (`@username`, `user_id`) as alternatives to opaque ids — see [step 4](#current-sequence) and Trust lane |
 | Per-token rate limits | Trust / ops | Complements telemetry FLOOD_WAIT signals |
 | SQLite read cache | Performance | Pairs with ACL whitelists |
 | ACL v2 permission matrix | Trust | Prgebish-style read/send per chat |

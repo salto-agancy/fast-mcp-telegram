@@ -1,0 +1,42 @@
+---
+description: Write clear, jargon-free documentation (README, docs, SECURITY, memory bank)
+globs: "**/*.md"
+alwaysApply: false
+---
+
+# Plain-language documentation
+
+When editing Markdown (README, `docs/`, `SECURITY.md`, `CONTRIBUTING.md`, ADRs, memory bank, example YAML comments):
+
+## Goal
+
+A new operator or contributor should understand **what to do** and **what happens** without decoding project slang.
+
+## Keep (widely used or project-defined once)
+
+- Standard product terms after a short gloss: **MCP**, **Bearer token**, **principal**, **principal identifier**, **http-auth**, **Telegram**, **MTProto**, **ACL**
+- Env vars and YAML keys as literals: `ACL_ENABLED`, `allow_mtproto`, `chats`
+- Linked internal names when they are the actual config surface (file paths, tool names)
+
+## Avoid or replace
+
+| Avoid | Prefer |
+| --- | --- |
+| Invented shorthand (`bot-like`, `power profile` without table context) | Names from `SECURITY.md` / examples: **bot**, **team_lane**, **analyst** |
+| Phase/version jargon alone (“Phase 2 guardrails”) | What changed: “listed principals need `allow_mtproto: true` for raw MTProto” |
+| Implementation slang without explanation (“synthetic rule”, “empty lane”) | Plain outcome: “principal not in `principals:` is denied” or “listed principal with no `chats` cannot use chat tools” |
+| `-like`, `-style`, “footgun”, “blast radius” in operator runbooks | Direct risk: “teammates with the same principal identifier can read login codes” |
+| Stacking nouns (“dual pre/post enforcement”) | One sentence: what is checked before the tool runs and what is filtered after |
+
+## Style
+
+- Prefer **tables** for profiles and flags; one row = one audience action.
+- First mention of a restriction: **symptom → cause → fix** (troubleshooting), not error-code archaeology.
+- Example tokens in tests/docs: use names from `acl.yaml.example` (`automation-token`), not cute internal labels.
+- English only; short sentences; active voice (“Set `allow_mtproto: true`”) over passive stacks.
+
+## Quick check before finishing doc edits
+
+1. Would someone who only runs http-auth understand this without reading `session_acl.py`?
+2. Did every coined phrase appear in a glossary table or get removed?
+3. Are env vars and YAML keys copy-pasteable and spelled exactly as in code?

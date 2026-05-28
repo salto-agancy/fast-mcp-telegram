@@ -38,12 +38,11 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 
 | Feature                                                                                             | Description                                                                                                    |
 | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-
 | :building_construction: **[Dual Transport](docs/Installation.md#overview)**                         | Stdio for local MCP clients, HTTP for remote deploys (`http-auth` production, optional `http-no-auth` for dev) |
 | :closed_lock_with_key: **[Multi-User Authentication](docs/Installation.md#remote-setup-http-auth)** | Shared `http-auth` server: one Bearer token per user, one Telegram account per MCP connection; session isolation and LRU cache |
 | :dart: **[AI-Optimized](docs/Tools-Reference.md#overview)**                                         | 8 consolidated tools vs 80+ micro-tools — context-efficient design, LLM-friendly API, MCP ToolAnnotations     |
 | :globe_with_meridians: **[HTTP-MTProto Bridge](docs/MTProto-Bridge.md#key-benefits)**               | Direct curl access to any Telegram API method with entity resolution and safety guardrails                     |
-| :shield: **[Session ACL](docs/Installation.md#session-acl-http-auth)** | Opt-in per-token limits on `http-auth` (`ACL_ENABLED`) — chat lanes, `read_only`, `blocked_peers`, `allow_mtproto`, `ACL_DENY_UNLISTED_TOKENS`; see [SECURITY.md](SECURITY.md#opt-in-session-acl-http-auth) |
+| :shield: **[Session ACL](docs/Installation.md#session-acl-http-auth)** | Opt-in per-principal limits on `http-auth` (`ACL_ENABLED`) — chat lanes, `read_only`, `blocked_peers`, `allow_mtproto`, `ACL_DENY_UNLISTED_PRINCIPALS`; see [SECURITY.md](SECURITY.md#opt-in-session-acl-http-auth) |
 | :tv: **[Web Setup Interface](docs/Installation.md#web-setup-interface)**                            | Browser-based authentication flow with immediate config generation                                             |
 | :label: **[One Agent, Multiple Accounts](docs/Installation.md#multi-account-mcp-tool-prefix)**     | Optional `PREFIX_MCP_TOOLS_WITH_ACCOUNT` — when **one** agent uses several MCP connections (same server, different tokens), prefixes tool names so they do not collide; not needed for standard multi-user hosting |
 | :rocket: **[MTProto Proxy Support](docs/Installation.md#mtproto-proxy)**                            | Connect via MTProto proxy with automatic Fake TLS (EE prefix) and standard proxy detection                     |

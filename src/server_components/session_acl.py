@@ -1,8 +1,8 @@
 """
-Opt-in per-token session ACL for http-auth deployments.
+Opt-in per-principal session ACL for http-auth deployments.
 
-When ACL is enabled, tokens listed in the config file get chat and operation
-restrictions. Tokens not listed keep full account access (backward compatible).
+When ACL is enabled, principals listed in the config file get chat and operation
+restrictions. Principals not listed keep full account access (backward compatible).
 """
 
 from __future__ import annotations
@@ -37,24 +37,24 @@ _WRITE_OPERATIONS = frozenset(
 _LIST_RESULT_OPERATIONS = frozenset({"find_chats", "search_messages_globally"})
 
 _EMPTY_LANE_DENY_MSG = (
-    "Session ACL: this token has an empty chat lane (chats: [] or chats omitted). "
-    "Add at least one chat id, @username, or me to the token entry in the ACL config."
+    "Session ACL: this principal has an empty chat lane (chats: [] or chats omitted). "
+    "Add at least one chat id, @username, or me to the principal entry under principals:."
 )
-_UNLISTED_TOKEN_DENY_MSG = (
-    "Session ACL: this Bearer token is not listed in the ACL config and "
-    "ACL_DENY_UNLISTED_TOKENS=true. Add a tokens: entry for this bearer or set "
-    "ACL_DENY_UNLISTED_TOKENS=false."
+_UNLISTED_PRINCIPAL_DENY_MSG = (
+    "Session ACL: this principal is not listed in the ACL config and "
+    "ACL_DENY_UNLISTED_PRINCIPALS=true. Add a principals: entry for this session's "
+    "principal identifier, or set ACL_DENY_UNLISTED_PRINCIPALS=false."
 )
 _MTPROTO_READ_ONLY_DENY_MSG = (
-    "Session ACL is read-only: raw MTProto access is not permitted for this token."
+    "Session ACL is read-only: raw MTProto access is not permitted for this principal."
 )
 _MTPROTO_GLOBAL_SEARCH_DENY_MSG = (
     "Session ACL: raw MTProto is not permitted when allow_global_search is false. "
     "Set allow_global_search: true or use in-lane tools instead."
 )
 _MTPROTO_NOT_ALLOWED_DENY_MSG = (
-    "Session ACL: raw MTProto is not permitted for this token (allow_mtproto is false). "
-    "Set allow_mtproto: true in the token entry to opt in."
+    "Session ACL: raw MTProto is not permitted for this principal (allow_mtproto is false). "
+    "Set allow_mtproto: true in the principal entry to opt in."
 )
 _KNOWN_TOKEN_ACL_KEYS = frozenset(
     {"chats", "read_only", "allow_global_search", "allow_mtproto"}
@@ -77,7 +77,7 @@ _blocked_peers_cache: frozenset[str | int] | None = None
 
 
 @dataclass(frozen=True)
-class TokenAclRule:
+class PrincipalAclRule:
     chats: frozenset[str | int] = field(default_factory=frozenset)
     read_only: bool = False
     allow_global_search: bool = True
@@ -85,7 +85,7 @@ class TokenAclRule:
     unlisted_deny: bool = False
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> TokenAclRule:
+    def from_dict(cls, data: dict[str, Any]) -> PrincipalAclRule:
         raw_chats = data.get("chats") or []
         chats: set[str | int] = set()
         for item in raw_chats:
@@ -118,25 +118,33 @@ class AclConfigError(ValueError):
 
 
 def _validate_acl_document(doc: dict[str, Any], path: Path) -> None:
-    """Fail-closed startup validation for token entries."""
-    tokens = doc.get("tokens") or {}
-    if not isinstance(tokens, dict):
-        raise AclConfigError(f"ACL config 'tokens' must be a mapping: {path}")
+    """Fail-closed startup validation for principal entries."""
+    legacy = doc.get("tokens")
+    if legacy:
+        raise AclConfigError(
+            "ACL config key 'tokens:' was renamed to 'principals:' in 0.23.0. "
+            f"Rename the top-level key in your acl.yaml; see SECURITY.md. ({path})"
+        )
 
-    for token_key, raw in tokens.items():
-        prefix = str(token_key)[:8]
+    principals = doc.get("principals") or {}
+    if not isinstance(principals, dict):
+        raise AclConfigError(f"ACL config 'principals' must be a mapping: {path}")
+
+    for principal_key, raw in principals.items():
+        prefix = str(principal_key)[:8]
         if not isinstance(raw, dict):
             raise AclConfigError(
-                f"ACL config entry for token prefix {prefix}... must be a mapping, "
-                f"not {type(raw).__name__}: {path}"
+                f"ACL config entry for principal identifier prefix {prefix}... must be "
+                f"a mapping, not {type(raw).__name__}: {path}"
             )
-        rule = TokenAclRule.from_dict(raw)
+        rule = PrincipalAclRule.from_dict(raw)
         if rule.read_only and not rule.chats:
             raise AclConfigError(
-                f"ACL token prefix {prefix}... has read_only: true but empty or missing "
-                f"chats. Analyst profile requires a non-empty chat lane: {path}"
+                f"ACL principal identifier prefix {prefix}... has read_only: true but "
+                f"empty or missing chats. Analyst profile requires a non-empty chat "
+                f"lane: {path}"
             )
-        _warn_token_acl_entry(token_key, raw, rule, path)
+        _warn_principal_acl_entry(principal_key, raw, rule, path)
 
     blocked = doc.get("blocked_peers")
     if blocked is None:
@@ -153,14 +161,14 @@ def _validate_acl_document(doc: dict[str, Any], path: Path) -> None:
             )
 
 
-def _warn_token_acl_entry(
-    token_key: str,
+def _warn_principal_acl_entry(
+    principal_key: str,
     raw: dict[str, Any],
-    rule: TokenAclRule,
+    rule: PrincipalAclRule,
     path: Path,
 ) -> None:
     """Log operator hygiene warnings (non-fatal)."""
-    prefix = str(token_key)[:8]
+    prefix = str(principal_key)[:8]
     unknown = {
         key
         for key in raw
@@ -168,27 +176,27 @@ def _warn_token_acl_entry(
     }
     if unknown:
         logger.warning(
-            "ACL config token prefix %s... has unknown key(s) %s (ignored): %s",
+            "ACL config principal identifier prefix %s... has unknown key(s) %s (ignored): %s",
             prefix,
             sorted(unknown),
             path,
         )
     if not rule.chats and "chats" not in raw:
         logger.warning(
-            "ACL config token prefix %s... has missing chats key (empty lane): %s",
+            "ACL config principal identifier prefix %s... has missing chats key (empty lane): %s",
             prefix,
             path,
         )
     if rule.allow_mtproto and rule.read_only:
         logger.warning(
-            "ACL config token prefix %s... has allow_mtproto: true with read_only: true "
-            "(read_only blocks MTProto at runtime): %s",
+            "ACL config principal identifier prefix %s... has allow_mtproto: true with "
+            "read_only: true (read_only blocks MTProto at runtime): %s",
             prefix,
             path,
         )
     if rule.allow_mtproto and not rule.allow_global_search:
         logger.warning(
-            "ACL config token prefix %s... has allow_mtproto: true with "
+            "ACL config principal identifier prefix %s... has allow_mtproto: true with "
             "allow_global_search: false (global search off blocks MTProto at runtime): %s",
             prefix,
             path,
@@ -265,9 +273,9 @@ def _load_acl_document() -> dict[str, Any]:
     _validate_acl_document(doc, path)
 
     config = get_config()
-    if config.acl_deny_unlisted_tokens:
+    if config.acl_deny_unlisted_principals:
         logger.info(
-            "Session ACL: unlisted Bearer tokens denied (ACL_DENY_UNLISTED_TOKENS=true)"
+            "Session ACL: unlisted principals denied (ACL_DENY_UNLISTED_PRINCIPALS=true)"
         )
 
     _acl_cache = doc
@@ -277,30 +285,31 @@ def _load_acl_document() -> dict[str, Any]:
     return _acl_cache
 
 
-def _rules_for_token(token: str | None) -> TokenAclRule | None:
-    if not token:
+def _rules_for_principal(principal_id: str | None) -> PrincipalAclRule | None:
+    if not principal_id:
         return None
     config = get_config()
     if not config.acl_enabled or config.disable_auth:
         return None
 
     doc = _load_acl_document()
-    tokens = doc.get("tokens") or {}
-    if not isinstance(tokens, dict):
+    principals = doc.get("principals") or {}
+    if not isinstance(principals, dict):
         return None
 
-    raw = tokens.get(token)
+    raw = principals.get(principal_id)
     if raw is None:
-        if config.acl_deny_unlisted_tokens:
-            return TokenAclRule(unlisted_deny=True)
+        if config.acl_deny_unlisted_principals:
+            return PrincipalAclRule(unlisted_deny=True)
         return None
     if not isinstance(raw, dict):
         logger.error(
-            "Invalid ACL entry for token prefix %s... (expected mapping); denying all tool access",
-            token[:8],
+            "Invalid ACL entry for principal identifier prefix %s... (expected mapping); "
+            "denying all tool access",
+            principal_id[:8],
         )
-        return TokenAclRule()
-    return TokenAclRule.from_dict(raw)
+        return PrincipalAclRule()
+    return PrincipalAclRule.from_dict(raw)
 
 
 def _normalize_chat_ref(value: Any) -> str | int:
@@ -533,36 +542,36 @@ def _filter_blocked_peers_from_result(operation: str, result: dict[str, Any]) ->
     return result
 
 
-def _is_empty_lane(rule: TokenAclRule) -> bool:
+def _is_empty_lane(rule: PrincipalAclRule) -> bool:
     return not rule.chats
 
 
-def _empty_lane_deny_msg(rule: TokenAclRule) -> str:
+def _empty_lane_deny_msg(rule: PrincipalAclRule) -> str:
     if rule.unlisted_deny:
-        return _UNLISTED_TOKEN_DENY_MSG
+        return _UNLISTED_PRINCIPAL_DENY_MSG
     return _EMPTY_LANE_DENY_MSG
 
 
-def _is_chat_allowed(chat_ref: Any, rule: TokenAclRule) -> bool:
+def _is_chat_allowed(chat_ref: Any, rule: PrincipalAclRule) -> bool:
     if _is_empty_lane(rule):
         return False
     normalized = _normalize_chat_ref(chat_ref)
     return any(_chat_ref_matches(a, normalized) for a in rule.chats)
 
 
-def _is_unlisted_synthetic_rule(rule: TokenAclRule) -> bool:
-    """True when rule was synthesized for ACL_DENY_UNLISTED_TOKENS (not from yaml)."""
+def _is_unlisted_synthetic_rule(rule: PrincipalAclRule) -> bool:
+    """True when rule was synthesized for ACL_DENY_UNLISTED_PRINCIPALS (not from yaml)."""
     return rule.unlisted_deny
 
 
 def _mtproto_denial_for_rule(
-    rule: TokenAclRule,
+    rule: PrincipalAclRule,
     operation: str,
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Return denial when raw MTProto is blocked for this token rule."""
+    """Return denial when raw MTProto is blocked for this principal rule."""
     if _is_unlisted_synthetic_rule(rule):
-        return _deny(operation, _UNLISTED_TOKEN_DENY_MSG, params=params)
+        return _deny(operation, _UNLISTED_PRINCIPAL_DENY_MSG, params=params)
     if rule.read_only:
         return _deny(operation, _MTPROTO_READ_ONLY_DENY_MSG, params=params)
     if not rule.allow_global_search:
@@ -606,7 +615,7 @@ def check_pre_tool_access(
         if blocked_denial := _check_blocked_peer_pre(operation_name, kwargs):
             return blocked_denial
 
-    rule = _rules_for_token(get_request_token())
+    rule = _rules_for_principal(get_request_token())
     if rule is None:
         return None
 
@@ -632,7 +641,7 @@ def check_pre_tool_access(
     if operation_name == "search_messages_globally" and not rule.allow_global_search:
         return _deny(
             operation_name,
-            "Session ACL disallows global message search for this token.",
+            "Session ACL disallows global message search for this principal.",
             params=kwargs,
         )
 
@@ -644,7 +653,7 @@ def check_pre_tool_access(
         if not _is_chat_allowed(chat_id, rule):
             return _deny(
                 operation_name,
-                "Session ACL: chat is not in the allowed list for this token.",
+                "Session ACL: chat is not in the allowed list for this principal.",
                 params={"chat_id": chat_id},
             )
 
@@ -683,7 +692,7 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
         if isinstance(result, dict) and result.get("ok") is False:
             return result
 
-    rule = _rules_for_token(get_request_token())
+    rule = _rules_for_principal(get_request_token())
     if rule is None:
         return result
 
@@ -718,7 +727,7 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
         if chat_id is not None and not _is_chat_allowed(chat_id, rule):
             return _deny(
                 operation_name,
-                "Session ACL: chat is not in the allowed list for this token.",
+                "Session ACL: chat is not in the allowed list for this principal.",
                 params={"chat_id": chat_id},
             )
 
@@ -781,7 +790,7 @@ def check_mtproto_api_access(
     token: str | None, *, allow_dangerous: bool
 ) -> dict[str, Any] | None:
     """ACL gate for HTTP MTProto bridge (http-auth only)."""
-    rule = _rules_for_token(token)
+    rule = _rules_for_principal(token)
     if rule is None:
         return None
     params = {"allow_dangerous": allow_dangerous}

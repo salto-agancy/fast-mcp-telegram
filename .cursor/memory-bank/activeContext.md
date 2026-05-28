@@ -1,13 +1,13 @@
 ## Current Work Focus
 
-**Trust lane — Session ACL (2026-05-27):** Phase 2 on branch `feature/acl-phase2-guardrails` (PR #58): `allow_mtproto`, unified MTProto gate, `ACL_DENY_UNLISTED_TOKENS`, config load warnings; plain-language operator docs. Phase 1.5 shipped as [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0) (`blocked_peers`). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
+**Trust lane — Session ACL (2026-05-29):** ACL terminology: `principals:` / **principal** / **principal identifier** (breaking vs `tokens:`); `ACL_DENY_UNLISTED_PRINCIPALS`; legacy `tokens:` fails at load. Phase 2 shipped [`0.22.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.22.0) (PR #58). Phase 1.5: [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0) (`blocked_peers`). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
 
-- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), [server_config.py](../src/config/server_config.py) (`ACL_DENY_UNLISTED_TOKENS`)
+- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), [server_config.py](../src/config/server_config.py) (`ACL_DENY_UNLISTED_PRINCIPALS`)
 - **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phase 3 chat metadata registry next)
-- **Next:** Merge PR #58; optional release; Phase 3 chat metadata registry
+- **Next:** Phase 3 chat metadata registry
 - **Other lanes:** Telemetry `feature/telemetry` *(planned)*; QA / Gategrid `feature/evals`
 
-**Shipped on `master` (2026-05-28):** Bot token runtime auth — PR #62 (`BOT_API_TOKEN` auto-auth for non-interactive bot setup). Server card from tool registry — PR #63. Published-resources tracking — PR #64.
+**Shipped on `master` (2026-05-28):** Session ACL Phase 2 — PR #58. Bot token runtime auth — PR #62. Server card from tool registry — PR #63. Published-resources tracking — PR #64.
 
 **Shipped (2026-05-25):** Session token validation refactor — PR #54 merged to `master` (no release).
 

@@ -11,7 +11,7 @@
 | **Telegram is multi-device**    | Humans use the account outside MCP; ACL does not “secure the account.”                                                                                        |
 | **MCP is an agent surface**     | Guardrails limit what **connected agents** can do via tools, not human clients.                                                                               |
 | **Lanes, not lockdown**         | Each Bearer token maps to an allowed **chat list** (`chats`) plus capability flags.                                                                         |
-| **Opt-in for personal hosting** | Unlisted tokens keep full tool access; avoids breaking demos and single-user setups.                                                                          |
+| **Opt-in for personal hosting** | Unlisted principals keep full tool access; avoids breaking demos and single-user setups.                                                                          |
 | **Shared hosting needs lanes**  | Team/automation tokens get explicit profiles so agents do not mix work and personal chats.                                                                    |
 | **Shared token, human threat**  | Teammates with the same Bearer token can abuse MCP tools; **sensitive peers** (login codes, BotFather) need a server denylist **outside** the chat allowlist. |
 
@@ -24,7 +24,7 @@
 | Field              | Content                                                                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Hypothesis**     | Static per-token lanes plus clear agent profiles prevent accidental cross-chat access and unintended send/MTProto actions without harming personal single-token deployments.                            |
-| **Success signal** | Operators run multiple agents on one http-auth host with confidence; ACL denials are understandable; no reported “empty chats leaked everything” or silent full-access regressions for unlisted tokens. |
+| **Success signal** | Operators run multiple agents on one http-auth host with confidence; ACL denials are understandable; no reported “empty chats leaked everything” or silent full-access regressions for unlisted principals. |
 | **Kill / stop**    | If guardrails require default-deny for all tokens to be safe, or if enforcement cannot be centralized without tool drift — narrow to Phase 1 correctness only and defer profile expansion.              |
 
 
@@ -49,7 +49,7 @@ Expressed as flags today; named profiles for operators:
 | **bot**                               | peer ids        | false       | false                 | false                     |
 
 
-Phase 2 adds `**allow_mtproto`** (default **false** for listed tokens). When `allow_global_search` is false, MTProto remains blocked for that profile even if `read_only` is false.
+Phase 2 adds `**allow_mtproto`** (default **false** for listed principals). When `allow_global_search` is false, MTProto remains blocked for that profile even if `read_only` is false.
 
 ### Sensitive peers = deployment denylist (Phase 1.5)
 
@@ -81,7 +81,7 @@ blocked_peers:
   - 93372553
   - "@BotFather"
 
-tokens:
+principals:
   "<bearer-token>":
     chats: [ ... ]
     read_only: false
@@ -112,7 +112,7 @@ Errors: `Session ACL: blocked peer (<ref>) is denied for this deployment. See SE
 | Variable      | Default       | Notes                                                                             |
 | ------------- | ------------- | --------------------------------------------------------------------------------- |
 | `ACL_ENABLED` | false         | Opt-in                                                                            |
-| `ACL_DENY_UNLISTED_TOKENS` | false | When true, Bearer tokens omitted from `tokens:` are denied; **not** recommended default for personal |
+| `ACL_DENY_UNLISTED_PRINCIPALS` | false | When true, Bearer tokens omitted from `principals:` are denied; **not** recommended default for personal |
 
 
 ## Configuration (current + planned)
@@ -120,13 +120,13 @@ Errors: `Session ACL: blocked peer (<ref>) is denied for this deployment. See SE
 Enable with `ACL_ENABLED=true`. Path: `ACL_CONFIG_PATH` or `{session_directory}/acl.yaml`. JSON supported.
 
 ```yaml
-# Agent guardrails: per-token lane + profile. Unlisted tokens = full_access.
+# Agent guardrails: per-token lane + profile. Unlisted principals = full_access.
 # Optional deployment denylist (shared hosts — see SECURITY.md):
 # blocked_peers:
 #   - 777000
 #   - 93372553
 
-tokens:
+principals:
   "<bearer-token>":
     chats:
       - me
@@ -134,7 +134,7 @@ tokens:
       - -1001234567890
     read_only: true
     allow_global_search: true
-    allow_mtproto: false   # default false when omitted on listed tokens
+    allow_mtproto: false   # default false when omitted on listed principals
 ```
 
 See [acl.yaml.example](../../acl.yaml.example).
@@ -199,8 +199,8 @@ Errors: MCP `ok: false` with actionable text; HTTP 403 on MTProto bridge.
 
 | Item                                 | Rationale                                               |
 | ------------------------------------ | ------------------------------------------------------- |
-| `ACL_DENY_UNLISTED_TOKENS` env       | Default false; true = deny unlisted Bearer tokens       |
-| `allow_mtproto`                      | Default false for listed tokens                         |
+| `ACL_DENY_UNLISTED_PRINCIPALS` env       | Default false; true = deny unlisted principals       |
+| `allow_mtproto`                      | Default false for listed principals                         |
 | `allow_global_search` blocks MTProto | Bot profile cannot bypass via raw MTProto               |
 | Unified MTProto gate                 | Single helper for tool + HTTP bridge                    |
 | Config load warnings                 | Unknown keys, empty lane, risky combos                  |

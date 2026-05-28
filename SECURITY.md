@@ -27,48 +27,58 @@
 - **Session Separation**: Each user gets their own authenticated session file
 - **Token Privacy**: Bearer tokens should be treated as passwords and kept secure
 - **Session Files**: Contain complete Telegram access for the associated token
-- **Account Access**: Anyone with a valid Bearer token can perform **ANY action** on that associated Telegram account **unless** opt-in session ACL applies to that token
+- **Account Access**: Anyone with a valid Bearer token can perform **ANY action** on that associated Telegram account **unless** opt-in session ACL applies to that principal
 
 ## Opt-in session ACL (http-auth)
 
-When **`ACL_ENABLED=true`**, operators can restrict **specific Bearer tokens** via a server-side config file (default `{session_directory}/acl.yaml`, override with **`ACL_CONFIG_PATH`**). See **`acl.yaml.example`**, [ADR 0001](docs/adr/0001-agent-scoped-session-acl.md), and [acl-design-brief.md](docs/research/acl-design-brief.md).
+When **`ACL_ENABLED=true`**, operators can restrict **specific principals** via a server-side config file (default `{session_directory}/acl.yaml`, override with **`ACL_CONFIG_PATH`**). See **`acl.yaml.example`**, [ADR 0001](docs/adr/0001-agent-scoped-session-acl.md), and [acl-design-brief.md](docs/research/acl-design-brief.md).
 
-**What ACL does:** Limits what **MCP tools** can do for specific Bearer tokens (which chats they may use, whether they may send messages or call raw Telegram APIs). It does **not** lock the Telegram account — people can still use the official Telegram apps.
+**What ACL does:** Limits what **MCP tools** can do for specific principals (which chats they may use, whether they may send messages or call raw Telegram APIs). It does **not** lock the Telegram account — people can still use the official Telegram apps.
+
+**Terminology**
+
+| Term | Meaning |
+| --- | --- |
+| **Principal** | One hosted MCP session: a Telegram account (human or bot) with lane rules in `acl.yaml`. |
+| **Principal identifier** | Key under `principals:` naming that session. **Today** = same string as the Bearer token and `{id}.session` filename. **Later** = `@username` or Telegram `user_id` (roadmap). |
+| **Bearer token** | What clients send in `Authorization: Bearer …`. HTTP credential only — not the ACL policy noun. |
+| **Chat ref** | Entry in `chats:` (id, `@handle`, `me`). Not a principal. |
 
 ### Enablement
 
 1. Set `ACL_ENABLED=true` in the server environment (http-auth only; not stdio or http-no-auth).
 2. Create the ACL file at the default path or set `ACL_CONFIG_PATH`.
 3. Restart the server (or redeploy). The server **refuses to start** if ACL is enabled but the file is missing or invalid.
-4. List only the Bearer tokens you want to restrict. **Unlisted tokens keep full tool access** unless `ACL_DENY_UNLISTED_TOKENS=true` (then any Bearer not listed under `tokens:` is denied).
+4. List only the **principals** you want to restrict under `principals:`. **Unlisted principals keep full tool access** unless `ACL_DENY_UNLISTED_PRINCIPALS=true` (then any principal not listed is denied).
+5. Use top-level **`principals:`**, not `tokens:` (renamed in 0.23.0; server errors if legacy `tokens:` is present).
 
-Treat the ACL file like a secret (contains bearer token strings). Restrict file permissions (e.g. `0600`).
+Treat the ACL file like a secret (contains principal identifier strings). Restrict file permissions (e.g. `0600`). Clients still authenticate with Bearer tokens in the HTTP header.
 
 ### Agent profiles (copy these patterns into `acl.yaml`)
 
 | Profile | Typical use | `chats` | `read_only` | `allow_global_search` | `allow_mtproto` |
 | --- | --- | --- | --- | --- | --- |
-| **full_access** *(default, unlisted token)* | Personal / demo | — | false | true | true *(unlisted)* |
+| **full_access** *(default, unlisted principal)* | Personal / demo | — | false | true | true *(unlisted)* |
 | **analyst** | Read only, specific chats | non-empty list | true | true | false |
 | **team_lane** | Work chats; may send | non-empty list | false | true | false |
 | **bot** | Channel automation only | channel ids | false | false | false |
-| **power-token** *(optional, see example)* | Needs raw Telegram API access | non-empty list | false | true | true |
+| **power-principal** *(optional, see example)* | Needs raw Telegram API access | non-empty list | false | true | true |
 
 `read_only: true` **requires** a non-empty `chats` list (the server rejects startup if an analyst-style entry has no chats).
 
-### Token settings
+### Principal lane settings
 
-- **`chats`**: Chat ids, `@username`, or `me` (Saved Messages) this Bearer may use.
-- **Listed token with empty `chats`** (`chats: []` or `chats` omitted): Chat tools are **rejected with an error** (not an empty result list). Applies to `find_chats`, `search_messages_globally`, reads/writes in any chat, and `send_message_to_phone`.
+- **`chats`**: Chat ids, `@username`, or `me` (Saved Messages) this principal may use.
+- **Listed principal with empty `chats`** (`chats: []` or `chats` omitted): Chat tools are **rejected with an error** (not an empty result list). Applies to `find_chats`, `search_messages_globally`, reads/writes in any chat, and `send_message_to_phone`.
 - **`read_only`**: Blocks send, edit, `invoke_mtproto`, and the HTTP MTProto bridge (`/mtproto-api/*`).
 - **`allow_global_search`**: When false, blocks `search_messages_globally` and raw MTProto.
-- **`allow_mtproto`**: When false (default for listed tokens), blocks `invoke_mtproto` and the HTTP MTProto bridge. Set `read_only: false` and `allow_global_search: true` as well to allow raw MTProto.
-- **`ACL_DENY_UNLISTED_TOKENS`**: When true, any Bearer not listed under `tokens:` is denied (error message names the env var). Default false.
+- **`allow_mtproto`**: When false (default for listed principals), blocks `invoke_mtproto` and the HTTP MTProto bridge. Set `read_only: false` and `allow_global_search: true` as well to allow raw MTProto.
+- **`ACL_DENY_UNLISTED_PRINCIPALS`**: When true, any principal not listed under `principals:` is denied (error message names the env var). Default false.
 - **Extra YAML keys**: Unknown keys log a warning at startup. Operator notes may use an `x_` prefix (for example `x_note`) to avoid warnings.
 
-### Sensitive peers every token must avoid (`blocked_peers`)
+### Sensitive peers every principal must avoid (`blocked_peers`)
 
-When **`blocked_peers`** is set (non-empty list in the ACL file), those peers are **blocked for every Bearer token** — listed and unlisted. A blocked peer stays blocked even if it appears in a token’s `chats` list.
+When **`blocked_peers`** is set (non-empty list in the ACL file), those peers are **blocked for every principal** — listed and unlisted. A blocked peer stays blocked even if it appears in a principal’s `chats` list.
 
 | Config | Behavior |
 | --- | --- |
@@ -96,9 +106,9 @@ When **`blocked_peers`** is set (non-empty list in the ACL file), those peers ar
 
 **Typical error:** `Session ACL: blocked peer (<ref>) is denied for this deployment. See SECURITY.md.`
 
-**Shared-host risk:** With `ACL_ENABLED=true` and no `blocked_peers`, teammates who share a Bearer token can still read login-code chats and BotFather via MCP. On shared hosts, copy the recommended blocklist from [`acl.yaml.example`](acl.yaml.example).
+**Shared-host risk:** With `ACL_ENABLED=true` and no `blocked_peers`, teammates who share a principal identifier can still read login-code chats and BotFather via MCP. On shared hosts, copy the recommended blocklist from [`acl.yaml.example`](acl.yaml.example).
 
-### What the server checks for listed tokens
+### What the server checks for listed principals
 
 | Surface | Behavior |
 | --- | --- |
@@ -107,32 +117,32 @@ When **`blocked_peers`** is set (non-empty list in the ACL file), those peers ar
 | `invoke_mtproto` | Allowed only if `allow_mtproto: true`, `allow_global_search: true`, and not `read_only` |
 | HTTP MTProto bridge (`/mtproto-api/*`) | Same rules as `invoke_mtproto` |
 
-Denials return MCP `ok: false` with actionable text (token, chat id, lane). HTTP bridge returns 403.
+Denials return MCP `ok: false` with actionable text (principal, chat id, lane). HTTP bridge returns 403.
 
-### Shared-token limits
+### Shared principal limits
 
-ACL reduces **accidental** access to the wrong chats and **misuse of MCP tools** when teammates share one Bearer token on an http-auth host. ACL does **not**:
+ACL reduces **accidental** access to the wrong chats and **misuse of MCP tools** when teammates share one principal on an http-auth host. ACL does **not**:
 
 - Stop someone with the raw Bearer token from calling Telegram outside this MCP server
 - Replace Telegram account security (2FA, session revocation in official clients)
 - Apply to stdio or http-no-auth deployments
 
-When **`blocked_peers`** is configured, the denylist applies on http-auth for **all** tokens (see above).
+When **`blocked_peers`** is configured, the denylist applies on http-auth for **all** principals (see above).
 
 ### Troubleshooting denials
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| “empty chat lane” | Token listed with `chats: []` or no `chats` key | Add at least one chat to the token entry |
-| “not in the allowed list” | Tool targets a chat outside the lane | Add chat id / `@username` to `chats` or use an unlisted token |
-| “read-only” | `read_only: true` on the token | Set `read_only: false` or use a write-capable profile |
+| “empty chat lane” | Principal listed with `chats: []` or no `chats` key | Add at least one chat to the `principals:` entry |
+| “not in the allowed list” | Tool targets a chat outside the lane | Add chat id / `@username` to `chats` or use an unlisted principal |
+| “read-only” | `read_only: true` on the principal | Set `read_only: false` or use a write-capable profile |
 | “global message search” | `allow_global_search: false` | Set `allow_global_search: true` or use `get_messages` in-lane |
-| “allow_mtproto is false” on MTProto | Listed token has not opted in to raw MTProto | Set `allow_mtproto: true` (and ensure `read_only: false`, `allow_global_search: true`) |
+| “allow_mtproto is false” on MTProto | Listed principal has not opted in to raw MTProto | Set `allow_mtproto: true` (and ensure `read_only: false`, `allow_global_search: true`) |
 | “allow_global_search is false” on MTProto | **bot** profile (`allow_global_search: false`) | Set `allow_global_search: true` or use `get_messages` in allowed chats |
-| Unlisted token denied everywhere | `ACL_DENY_UNLISTED_TOKENS=true` | Add token to `tokens:` with a lane, or set `ACL_DENY_UNLISTED_TOKENS=false` |
+| Unlisted principal denied everywhere | `ACL_DENY_UNLISTED_PRINCIPALS=true` | Add principal to `principals:` with a lane, or set `ACL_DENY_UNLISTED_PRINCIPALS=false` |
 | “blocked peer … denied for this deployment” | Peer is on `blocked_peers` denylist | Remove peer from tool args; adjust denylist if policy allows; see numeric-id guidance above |
 | “invalid params_json” with blocked_peers | Malformed JSON when denylist is active | Fix JSON or omit `params_json` |
-| Server refuses to start | Missing ACL file or invalid YAML | Create file; fix malformed token entries; ensure `read_only` has `chats`; fix `blocked_peers` list shape |
+| Server refuses to start | Missing ACL file, invalid YAML, or legacy `tokens:` key | Create file; rename `tokens:` → `principals:`; fix malformed entries; ensure `read_only` has `chats`; fix `blocked_peers` list shape |
 
 No MCP tool mutates ACL in v1 — edit the file on the server and restart.
 

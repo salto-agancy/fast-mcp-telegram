@@ -15,20 +15,20 @@ Prior research compared competitors (e.g. default-deny chat ACL in other MCP ser
 
 ## Decision
 
-**Session ACL** limits MCP and MTProto tool use per Bearer token (which chats and which capabilities), not account-wide lockdown.
+**Session ACL** limits MCP and MTProto tool use per **principal** (hosted MCP session with lane rules in `principals:`), not account-wide lockdown. Clients authenticate with Bearer tokens; principal identifiers in config name each session.
 
 | Lens | Meaning |
 | --- | --- |
-| **Scope** | **Chat allowlist** (`chats`): which chats a token may use via tools |
-| **Capabilities** | Agent **profiles**: read, write (send/edit), search, MTProto — expressed as `read_only`, `allow_global_search`, future `allow_mtproto`, etc. |
-| **Default for personal** | Opt-in ACL; tokens **omitted** from config keep full tool access (human Telegram use unchanged) |
-| **Default for multi-tenant** | `ACL_DENY_UNLISTED_TOKENS=true` may be used for strict hosts; **not** the recommended default for personal/demo hosting |
+| **Scope** | **Chat allowlist** (`chats`): which chats a principal may use via tools |
+| **Capabilities** | Agent **profiles**: read, write (send/edit), search, MTProto — expressed as `read_only`, `allow_global_search`, `allow_mtproto`, etc. |
+| **Default for personal** | Opt-in ACL; principals **omitted** from config keep full tool access (human Telegram use unchanged) |
+| **Default for multi-tenant** | `ACL_DENY_UNLISTED_PRINCIPALS=true` may be used for strict hosts; **not** the recommended default for personal/demo hosting |
 
 ACL applies only when **`ACL_ENABLED=true`** on **http-auth**. No ACL on stdio or http-no-auth in the current design.
 
 Human operators continue to use Telegram normally; guardrails reduce **accidental** cross-lane data mixup and **inadvertent** destructive tool actions by agents connected through this server, and — for shared tokens — **intentional** reads of security-sensitive peers via MCP tools.
 
-**Sensitive peer denylist:** When ACL is enabled and **`blocked_peers`** is configured (non-empty deployment list), those peers are **denied for all MCP tool access** for every Bearer token, even if a token’s `chats` allowlist would otherwise include them. Operators **own the full denylist** (add/remove any peer); recommended defaults live in [`acl.yaml.example`](../acl.yaml.example) and SECURITY.md only — not hardcoded at enforcement time. Omitting `blocked_peers` keeps lane-only ACL. This limits what teammates can reach **through this MCP server** when they share a Bearer token; it is not a substitute for rotating compromised tokens or Telegram-side 2FA.
+**Sensitive peer denylist:** When ACL is enabled and **`blocked_peers`** is configured (non-empty deployment list), those peers are **denied for all MCP tool access** for every principal, even if a principal’s `chats` allowlist would otherwise include them. Operators **own the full denylist** (add/remove any peer); recommended defaults live in [`acl.yaml.example`](../acl.yaml.example) and SECURITY.md only — not hardcoded at enforcement time. Omitting `blocked_peers` keeps lane-only ACL. This limits what teammates can reach **through this MCP server** when they share a principal identifier; it is not a substitute for rotating compromised credentials or Telegram-side 2FA.
 
 ## Consequences
 
@@ -42,7 +42,7 @@ Human operators continue to use Telegram normally; guardrails reduce **accidenta
 
 - **Phase 1 (merge blockers):** correctness and operator docs — empty `chats` leak fix, malformed token handling, `read_only` requires `chats` validation, SECURITY.md runbook, alignment with this ADR.
 - **Phase 1.5 (Trust lane):** **sensitive peer denylist** — operator-configured `blocked_peers` list when present; dual pre/post enforcement (including resolved id + username post-check); MTProto shallow param scan before lane gates; recommended defaults in example + SECURITY.md only. See [acl-design-brief.md](../research/acl-design-brief.md).
-- **Phase 2 (v1.5):** `ACL_DENY_UNLISTED_TOKENS` env (default false), `allow_mtproto` default false for listed tokens, `allow_global_search` blocks MTProto for agent profiles, unified MTProto gate, config load warnings.
+- **Phase 2 (v1.5):** `ACL_DENY_UNLISTED_PRINCIPALS` env (default false), `allow_mtproto` default false for listed principals, `allow_global_search` blocks MTProto for agent profiles, unified MTProto gate, config load warnings.
 - **Phase 3 (roadmap, deferred):** file-watch reload, external ACL store, per-chat permission matrix — lower priority than agent-profile guardrails.
 
 ### Documentation tone

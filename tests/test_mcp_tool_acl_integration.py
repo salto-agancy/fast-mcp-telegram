@@ -35,7 +35,7 @@ def acl_config(tmp_path: Path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
         """
-tokens:
+principals:
   token-readonly:
     chats:
       - me
@@ -140,7 +140,7 @@ async def test_chat_whitelist_allows_listed_chat_via_decorator_chain(acl_config)
 def empty_lane_acl_config(tmp_path: Path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
-        "tokens:\n  empty-lane:\n    chats: []\n    read_only: false\n",
+        "principals:\n  empty-lane:\n    chats: []\n    read_only: false\n",
         encoding="utf-8",
     )
     config = ServerConfig(_cli_parse_args=[])

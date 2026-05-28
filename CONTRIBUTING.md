@@ -143,7 +143,7 @@ ACL applies only in **http-auth** mode with `ACL_ENABLED=true`. Cursor MCP is a 
 - **stdio has no ACL** — `telegram-dev` bypasses bearer tokens and ACL entirely.
 - **Fixed Authorization header** — a URL MCP entry binds one Bearer token; switching profiles means editing `mcp.json` and reconnecting.
 - **URL MCP limitations** — local http-auth MCP connections can be unreliable; the server must already be running separately.
-- **Session per bearer** — each ACL profile needs its own `{token}.session` via `/setup`, not the stdio `telegram.session`.
+- **Session per principal** — each ACL profile needs its own `{id}.session` via `/setup` (principal identifier = Bearer string today), not the stdio `telegram.session`.
 - **Restart and cache issues** — code changes and session/env fixes require restarting both the HTTP server and the MCP client; stale MCP processes are easy to miss.
 
 Use these methods instead:
@@ -167,8 +167,8 @@ SERVER_MODE=http-auth HOST=127.0.0.1 PORT=8765 \
   python3 -m src.server
 ```
 
-3. Create one session per profile token at `http://127.0.0.1:8765/setup` (session files must match bearer names in `acl.dev.yaml`).
-4. Call tools with curl, swapping the Bearer token per profile:
+3. Create one session per profile at `http://127.0.0.1:8765/setup` (session files must match principal identifiers in `acl.dev.yaml`).
+4. Call tools with curl, swapping the Bearer token per profile (Bearer = HTTP credential; yaml keys = principal identifiers):
 
 ```bash
 TOKEN="dev_acl_readonly_abcdefghijklmnopqrstuvwxz0"  # from acl.dev.yaml
@@ -197,12 +197,12 @@ Optional wrapper: [`scripts/acl_mcp_smoke.sh`](scripts/acl_mcp_smoke.sh) runs th
 | Profile | Bearer token (example file) | Expect |
 | ------- | --------------------------- | ------ |
 | readonly | `dev_acl_readonly_…` | `send_message` denied; `get_messages` on `me` allowed |
-| empty-lane | `dev_acl_empty_lane_…` | `find_chats` denied (token has `chats: []`) |
+| empty-lane | `dev_acl_empty_lane_…` | `find_chats` denied (principal has `chats: []`) |
 | team | `dev_acl_team_lane__…` | Whitelisted chat only; other chats denied |
 
 #### 3. Session setup (`/setup`)
 
-Per-token sessions for http-auth (including ACL profiles) are created at `http://127.0.0.1:8765/setup` while the server above is running. Each bearer name in `acl.dev.yaml` needs a matching `{token}.session` under `~/.config/fast-mcp-telegram/`.
+Per-principal sessions for http-auth (including ACL profiles) are created at `http://127.0.0.1:8765/setup` while the server above is running. Each principal identifier in `acl.dev.yaml` needs a matching `{id}.session` under `~/.config/fast-mcp-telegram/`.
 
 **Credentials**
 

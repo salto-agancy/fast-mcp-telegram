@@ -16,7 +16,7 @@ from src.server_components.attachment_tickets import (
 )
 from src.server_components.session_acl import (
     AclConfigError,
-    TokenAclRule,
+    PrincipalAclRule,
     check_blocked_peer_mtproto_params,
     check_mtproto_api_access,
     check_pre_tool_access,
@@ -43,7 +43,7 @@ def acl_config(tmp_path: Path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
         """
-tokens:
+principals:
   token-readonly:
     chats:
       - me
@@ -118,7 +118,7 @@ def test_find_chats_post_filter(acl_config):
 
 def test_acl_disabled_skips_rules(tmp_path):
     acl_file = tmp_path / "acl.yaml"
-    acl_file.write_text("tokens:\n  t:\n    read_only: true\n", encoding="utf-8")
+    acl_file.write_text("principals:\n  t:\n    read_only: true\n", encoding="utf-8")
     config = ServerConfig(_cli_parse_args=[])
     config.server_mode = ServerMode.HTTP_AUTH
     config.acl_enabled = False
@@ -133,7 +133,7 @@ def test_json_acl_file(tmp_path):
     acl_file.write_text(
         json.dumps(
             {
-                "tokens": {
+                "principals": {
                     "json-token": {
                         "chats": ["me"],
                         "read_only": True,
@@ -153,7 +153,7 @@ def test_json_acl_file(tmp_path):
 
 
 def test_token_acl_rule_from_dict():
-    rule = TokenAclRule.from_dict(
+    rule = PrincipalAclRule.from_dict(
         {
             "chats": ["@Team", "me", -1001],
             "read_only": True,
@@ -170,7 +170,7 @@ def test_token_acl_rule_from_dict():
 
 
 def test_token_acl_rule_allow_mtproto_defaults_false():
-    rule = TokenAclRule.from_dict({"chats": ["me"]})
+    rule = PrincipalAclRule.from_dict({"chats": ["me"]})
     assert rule.allow_mtproto is False
 
 
@@ -187,7 +187,7 @@ def test_invoke_mtproto_blocked_when_chat_whitelist_configured(acl_config):
 def test_invoke_mtproto_read_only_blocks_even_without_chat_whitelist(tmp_path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
-        "tokens:\n  ro-no-chats:\n    chats:\n      - me\n    read_only: true\n",
+        "principals:\n  ro-no-chats:\n    chats:\n      - me\n    read_only: true\n",
         encoding="utf-8",
     )
     config = ServerConfig(_cli_parse_args=[])
@@ -204,7 +204,7 @@ def test_invoke_mtproto_read_only_blocks_even_without_chat_whitelist(tmp_path):
 def test_invoke_mtproto_blocked_when_empty_lane(tmp_path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
-        "tokens:\n  open-empty:\n    chats: []\n    read_only: false\n",
+        "principals:\n  open-empty:\n    chats: []\n    read_only: false\n",
         encoding="utf-8",
     )
     config = ServerConfig(_cli_parse_args=[])
@@ -275,7 +275,7 @@ async def test_get_messages_post_filter_revokes_minted_attachment_tickets(acl_co
 def empty_lane_config(tmp_path: Path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
-        "tokens:\n  empty-lane:\n    chats: []\n    read_only: false\n",
+        "principals:\n  empty-lane:\n    chats: []\n    read_only: false\n",
         encoding="utf-8",
     )
     config = ServerConfig(_cli_parse_args=[])
@@ -322,7 +322,7 @@ def test_empty_lane_find_chats_post_filter_hard_deny(empty_lane_config):
 def test_validate_acl_rejects_read_only_without_chats(tmp_path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
-        "tokens:\n  bad-analyst:\n    read_only: true\n",
+        "principals:\n  bad-analyst:\n    read_only: true\n",
         encoding="utf-8",
     )
     config = ServerConfig(_cli_parse_args=[])
@@ -334,9 +334,24 @@ def test_validate_acl_rejects_read_only_without_chats(tmp_path):
         validate_acl_config()
 
 
+def test_validate_acl_rejects_legacy_tokens_key(tmp_path):
+    acl_file = tmp_path / "acl.yaml"
+    acl_file.write_text(
+        "tokens:\n  legacy:\n    chats:\n      - me\n",
+        encoding="utf-8",
+    )
+    config = ServerConfig(_cli_parse_args=[])
+    config.server_mode = ServerMode.HTTP_AUTH
+    config.acl_enabled = True
+    config.acl_config_path = str(acl_file)
+    set_config(config)
+    with pytest.raises(AclConfigError, match="tokens:' was renamed to 'principals:'"):
+        validate_acl_config()
+
+
 def test_validate_acl_rejects_malformed_yaml(tmp_path):
     acl_file = tmp_path / "acl.yaml"
-    acl_file.write_text("tokens:\n  bad:\n    chats: [\n", encoding="utf-8")
+    acl_file.write_text("principals:\n  bad:\n    chats: [\n", encoding="utf-8")
     config = ServerConfig(_cli_parse_args=[])
     config.server_mode = ServerMode.HTTP_AUTH
     config.acl_enabled = True
@@ -348,7 +363,7 @@ def test_validate_acl_rejects_malformed_yaml(tmp_path):
 
 def test_validate_acl_rejects_malformed_json(tmp_path):
     acl_file = tmp_path / "acl.json"
-    acl_file.write_text('{"tokens": ', encoding="utf-8")
+    acl_file.write_text('{"principals": ', encoding="utf-8")
     config = ServerConfig(_cli_parse_args=[])
     config.server_mode = ServerMode.HTTP_AUTH
     config.acl_enabled = True
@@ -361,7 +376,7 @@ def test_validate_acl_rejects_malformed_json(tmp_path):
 def test_validate_acl_rejects_malformed_token_entry(tmp_path):
     acl_file = tmp_path / "acl.yaml"
     acl_file.write_text(
-        'tokens:\n  bad-token: "not-a-mapping"\n',
+        'principals:\n  bad-token: "not-a-mapping"\n',
         encoding="utf-8",
     )
     config = ServerConfig(_cli_parse_args=[])
@@ -397,7 +412,7 @@ def blocked_peers_base_config(tmp_path: Path):
         f"""
 blocked_peers:
   - {BOTFATHER_ID}
-tokens:
+principals:
   token-team:
     chats:
       - {BOTFATHER_ID}
@@ -411,7 +426,7 @@ def test_blocked_peers_omitted_no_blocking(tmp_path):
     _write_acl_config(
         tmp_path,
         f"""
-tokens:
+principals:
   t:
     chats:
       - {BOTFATHER_ID}
@@ -449,7 +464,7 @@ def test_blocked_peers_at_username_yaml_numeric_input_post_check_deny(tmp_path):
         """
 blocked_peers:
   - "@BotFather"
-tokens: {}
+principals: {}
 """,
     )
     set_request_token("unlisted-token")
@@ -468,7 +483,7 @@ def test_blocked_peers_at_username_input_pre_check_deny(tmp_path):
         """
 blocked_peers:
   - "@BotFather"
-tokens: {}
+principals: {}
 """,
     )
     set_request_token("unlisted-token")
@@ -539,7 +554,7 @@ def test_blocked_peers_get_chat_info_post_check_username_only(tmp_path):
         """
 blocked_peers:
   - "@BotFather"
-tokens: {}
+principals: {}
 """,
     )
     set_request_token("unlisted-token")
@@ -620,7 +635,7 @@ def test_validate_acl_rejects_malformed_blocked_peers(tmp_path):
 blocked_peers:
   extend:
     - 123
-tokens: {}
+principals: {}
 """,
     )
     with pytest.raises(AclConfigError, match="blocked_peers"):
@@ -633,7 +648,7 @@ def test_blocked_peers_skipped_when_acl_disabled(tmp_path):
         f"""
 blocked_peers:
   - {BOTFATHER_ID}
-tokens: {{}}
+principals: {{}}
 """,
         encoding="utf-8",
     )
@@ -650,7 +665,7 @@ def test_invoke_mtproto_allowed_when_flags_opt_in(tmp_path):
     _write_acl_config(
         tmp_path,
         """
-tokens:
+principals:
   power-user:
     chats:
       - me
@@ -674,7 +689,7 @@ def test_allow_mtproto_true_still_blocked_when_global_search_false(tmp_path):
     _write_acl_config(
         tmp_path,
         """
-tokens:
+principals:
   automation-token:
     chats:
       - -100999
@@ -693,7 +708,7 @@ def test_deny_unlisted_tokens_blocks_unlisted_bearer(tmp_path):
     _write_acl_config(
         tmp_path,
         """
-tokens:
+principals:
   listed-only:
     chats:
       - me
@@ -701,7 +716,7 @@ tokens:
 """,
     )
     config = get_config()
-    config.acl_deny_unlisted_tokens = True
+    config.acl_deny_unlisted_principals = True
     set_config(config)
     set_request_token("not-in-acl-file")
     denial = check_pre_tool_access("find_chats", {"query": "x"})
@@ -713,14 +728,14 @@ def test_deny_unlisted_tokens_blocks_invoke_mtproto(tmp_path):
     _write_acl_config(
         tmp_path,
         """
-tokens:
+principals:
   listed-only:
     chats:
       - me
 """,
     )
     config = get_config()
-    config.acl_deny_unlisted_tokens = True
+    config.acl_deny_unlisted_principals = True
     set_config(config)
     set_request_token("not-in-acl-file")
     denial = check_pre_tool_access("invoke_mtproto", {"params_json": "{}"})
@@ -732,14 +747,14 @@ def test_deny_unlisted_tokens_false_preserves_full_access(tmp_path):
     _write_acl_config(
         tmp_path,
         """
-tokens:
+principals:
   listed-only:
     chats:
       - me
 """,
     )
     config = get_config()
-    config.acl_deny_unlisted_tokens = False
+    config.acl_deny_unlisted_principals = False
     set_config(config)
     set_request_token("not-in-acl-file")
     assert check_pre_tool_access("send_message", {"chat_id": -1}) is None
@@ -751,7 +766,7 @@ def test_allow_mtproto_does_not_bypass_blocked_peers(tmp_path):
         f"""
 blocked_peers:
   - {BOTFATHER_ID}
-tokens:
+principals:
   power-user:
     chats:
       - me
@@ -775,7 +790,7 @@ def test_acl_load_ignores_x_prefixed_token_keys(tmp_path, caplog):
     _write_acl_config(
         tmp_path,
         """
-tokens:
+principals:
   warn-token:
     chats:
       - me
@@ -795,7 +810,7 @@ def test_acl_load_warns_on_unknown_token_keys(tmp_path, caplog):
     _write_acl_config(
         tmp_path,
         """
-tokens:
+principals:
   warn-token:
     chats:
       - me

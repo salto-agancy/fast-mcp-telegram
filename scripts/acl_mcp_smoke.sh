@@ -3,7 +3,7 @@
 # Requires http-auth server with ACL_ENABLED=true and acl.dev.yaml (see CONTRIBUTING.md).
 #
 # Token resolution (in order):
-#   1. ACL_CONFIG_PATH (default: acl.dev.yaml) — profile keys from tokens: block
+#   1. ACL_CONFIG_PATH (default: acl.dev.yaml) — profile keys from principals: block
 #   2. BEARER_TOKEN_FOR_TESTING — overrides readonly profile when set
 #   3. Example placeholders from acl.dev.yaml.example when config file is missing
 set -euo pipefail
@@ -29,19 +29,19 @@ DEFAULTS = {
     "team": "dev_acl_team_lane__abcdefghijklmnopqrstuvwx",
 }
 
-def pick_by_prefix(tokens: dict, prefix: str, fallback: str) -> str:
-    for key in tokens:
+def pick_by_prefix(principals: dict, prefix: str, fallback: str) -> str:
+    for key in principals:
         if key.startswith(prefix):
             return key
     return fallback
 
-def pick_by_shape(tokens: dict) -> dict[str, str]:
+def pick_by_shape(principals: dict) -> dict[str, str]:
     profiles = dict(DEFAULTS)
     readonly_env = os.environ.get("BEARER_TOKEN_FOR_TESTING", "").strip()
     if readonly_env:
         profiles["readonly"] = readonly_env
 
-    for key, cfg in tokens.items():
+    for key, cfg in principals.items():
         if not isinstance(cfg, dict):
             continue
         chats = cfg.get("chats") or []
@@ -53,9 +53,9 @@ def pick_by_shape(tokens: dict) -> dict[str, str]:
         elif not read_only and chats:
             profiles["team"] = key
 
-    profiles["readonly"] = pick_by_prefix(tokens, "dev_acl_readonly", profiles["readonly"])
-    profiles["empty_lane"] = pick_by_prefix(tokens, "dev_acl_empty_lane", profiles["empty_lane"])
-    profiles["team"] = pick_by_prefix(tokens, "dev_acl_team_lane", profiles["team"])
+    profiles["readonly"] = pick_by_prefix(principals, "dev_acl_readonly", profiles["readonly"])
+    profiles["empty_lane"] = pick_by_prefix(principals, "dev_acl_empty_lane", profiles["empty_lane"])
+    profiles["team"] = pick_by_prefix(principals, "dev_acl_team_lane", profiles["team"])
     if readonly_env:
         profiles["readonly"] = readonly_env
     return profiles
@@ -63,10 +63,10 @@ def pick_by_shape(tokens: dict) -> dict[str, str]:
 config_path = Path(sys.argv[1])
 if config_path.is_file():
     data = yaml.safe_load(config_path.read_text()) or {}
-    tokens = data.get("tokens") or {}
-    if not isinstance(tokens, dict):
-        tokens = {}
-    profiles = pick_by_shape(tokens)
+    principals_map = data.get("principals") or {}
+    if not isinstance(principals_map, dict):
+        principals_map = {}
+    profiles = pick_by_shape(principals_map)
 else:
     profiles = dict(DEFAULTS)
     readonly_env = os.environ.get("BEARER_TOKEN_FOR_TESTING", "").strip()

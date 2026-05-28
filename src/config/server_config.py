@@ -226,15 +226,15 @@ class ServerConfig(BaseSettings):
         ),
     )
 
-    acl_deny_unlisted_tokens: bool = Field(
+    acl_deny_unlisted_principals: bool = Field(
         default=False,
         validation_alias=AliasChoices(
-            "acl_deny_unlisted_tokens", "ACL_DENY_UNLISTED_TOKENS"
+            "acl_deny_unlisted_principals", "ACL_DENY_UNLISTED_PRINCIPALS"
         ),
         description=(
-            "When ACL is enabled, deny all tool access for Bearer tokens omitted "
-            "from the ACL tokens map (synthetic empty lane). Default false preserves "
-            "full access for unlisted tokens."
+            "When ACL is enabled, deny all tool access for principals omitted "
+            "from the ACL principals map (synthetic empty lane). Default false "
+            "preserves full access for unlisted principals."
         ),
     )
 
