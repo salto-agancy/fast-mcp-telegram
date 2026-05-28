@@ -147,6 +147,7 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 | ACL v2 permission matrix | Trust | Prgebish-style read/send per chat |
 | Prompt-injection scanner | Trust | After ACL + QA coverage |
 | OAuth2 / IdP | Enterprise | Federation path |
+| **External session storage** (PostgreSQL / Redis) | Infrastructure | Persistent Telethon sessions for ephemeral deployments (Smithery hosted). Options: PostgreSQL-backed session store or Redis-based StringSession cache. Unblocks userbot scenarios in hosted Docker environments. See [research/session-storage-design.md](research/session-storage-design.md) |
 | Stdio path sandbox | Trust | Local stdio users |
 | Multi-replica attachment tickets | Ops | Shared ticket store |
 | Media OCR pipeline | Features | Beyond voice transcription |
