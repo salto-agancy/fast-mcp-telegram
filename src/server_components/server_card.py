@@ -15,6 +15,8 @@ in ``src.server_components.tools_register``.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from functools import lru_cache
 
 from starlette.responses import JSONResponse
@@ -338,6 +340,14 @@ def _build_card() -> dict:
 
 
 @lru_cache(maxsize=1)
+def _etag() -> str:
+    """Content-based ETag: MD5 of the canonical JSON representation."""
+    card = get_server_card()
+    raw = json.dumps(card, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return hashlib.md5(raw).hexdigest()
+
+
+@lru_cache(maxsize=1)
 def get_server_card() -> dict:
     """Return the server card dict (cached after first call).
 
@@ -355,11 +365,11 @@ def register_server_card_route(mcp_app):
     """
 
     @mcp_app.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
-    async def server_card(request):
+    async def server_card(_):
         return JSONResponse(
             get_server_card(),
             headers={
                 "Cache-Control": "public, max-age=3600",
-                "ETag": f'"{__version__}"',
+                "ETag": _etag(),
             },
         )
