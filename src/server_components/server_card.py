@@ -7,6 +7,10 @@ start a real Telegram session (which requires API_ID / API_HASH).
 The card data is embedded directly in this module to avoid file I/O at
 runtime and to work reliably when the package is installed from PyPI
 (via uv, pip, etc.).
+
+Tool entries below (``_CARD_TOOLS``) are the single source of truth for
+the discovery card.  Keep them in sync with the actual tool registrations
+in ``src.server_components.tools_register``.
 """
 
 from __future__ import annotations
@@ -17,19 +21,12 @@ from starlette.responses import JSONResponse
 
 from src._version import __version__
 
+# ---------------------------------------------------------------------------
+# Tool card entries — single source of truth for the discovery card.
+# When adding or changing tools in tools_register.py update this list too.
+# ---------------------------------------------------------------------------
 
-def _build_card() -> dict:
-    """Construct the full server card dict with the current package version."""
-    return {
-        "serverInfo": {
-            "name": "fast-mcp-telegram",
-            "version": __version__,
-        },
-        "authentication": {
-            "required": False,
-            "schemes": ["bearer"],
-        },
-        "tools": [
+_CARD_TOOLS: list[dict] = [
             {
                 "name": "search_messages_globally",
                 "description": "Search all Telegram chats at once. Comma-separated query terms; optional filters by date, chat kind, and public username. Global search ignores include_total_count.",
@@ -320,7 +317,21 @@ def _build_card() -> dict:
                     "required": ["method_full_name", "params_json"],
                 },
             },
-        ],
+    ]
+
+
+def _build_card() -> dict:
+    """Construct the full server card dict with the current package version."""
+    return {
+        "serverInfo": {
+            "name": "fast-mcp-telegram",
+            "version": __version__,
+        },
+        "authentication": {
+            "required": False,
+            "schemes": ["bearer"],
+        },
+        "tools": _CARD_TOOLS,
         "resources": [],
         "prompts": [],
     }
@@ -345,4 +356,10 @@ def register_server_card_route(mcp_app):
 
     @mcp_app.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
     async def server_card(request):
-        return JSONResponse(get_server_card())
+        return JSONResponse(
+            get_server_card(),
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "ETag": f'"{__version__}"',
+            },
+        )
