@@ -380,7 +380,7 @@ Create a bot session using the CLI setup tool:
 
 ```bash
 # Create a bot session (replace with your bot token from BotFather)
-python -m src.cli_setup --api-id <your_api_id> --api-hash <your_api_hash> --bot-token <bot_token_from_botfather>
+python -m src.cli_setup --api-id <your_api_id> --api-hash <your_api_hash> --bot-api-token <bot_token_from_botfather>
 
 # The command will print a Bearer token - this identifies your bot
 # Example output:
@@ -415,18 +415,18 @@ Bot accounts have the following restrictions:
 
 To use multiple bots:
 
-1. Create a separate session for each bot using `--bot-token`
+1. Create a separate session for each bot using `--bot-api-token`
 2. Each bot gets its own unique Bearer token
 3. Use the appropriate Bearer token for each bot in your requests
 4. Each bot operates independently with its own session
 
 ```bash
 # Bot 1
-python -m src.cli_setup --api-id <id> --api-hash <hash> --bot-token <bot1_token>
+python -m src.cli_setup --api-id <id> --api-hash <hash> --bot-api-token <bot1_token>
 # Bearer Token: token1_abc123...
 
 # Bot 2
-python -m src.cli_setup --api-id <id> --api-hash <hash> --bot-token <bot2_token>
+python -m src.cli_setup --api-id <id> --api-hash <hash> --bot-api-token <bot2_token>
 # Bearer Token: token2_def456...
 
 # Use Bot 1

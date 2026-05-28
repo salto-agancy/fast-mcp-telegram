@@ -34,7 +34,7 @@ uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
   --bot-token="1234567890:ABCdef..."
 ```
 
-Or skip the setup step entirely — just add `BOT_TOKEN` to your env and the server auto-authenticates on startup when no session file exists.
+Or skip the setup step entirely — just add `BOT_API_TOKEN` to your env and the server auto-authenticates on startup when no session file exists.
 
 **Step 2 — Configure your MCP client:**
 
@@ -232,7 +232,7 @@ Listed tokens cannot use `invoke_mtproto` or `/mtproto-api/*` in Phase 1.
 API_ID=your_api_id
 API_HASH=your_api_hash
 # — Bot account (no phone, no OTP):
-# BOT_TOKEN=1234567890:ABCdef...
+# BOT_API_TOKEN=1234567890:ABCdef...
 
 # Optional
 SERVER_MODE=http-auth             # stdio (default) or http-auth for remote

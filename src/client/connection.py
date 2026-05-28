@@ -211,11 +211,11 @@ async def _connect_client_and_verify_or_cleanup(
         auth_key = getattr(client.session, "auth_key", None)
         if not auth_key:
             cfg = get_config()
-            if cfg.bot_token:
+            if cfg.bot_api_token:
                 logger.info(
                     "No existing session — authenticating with bot token..."
                 )
-                result = client.start(bot_token=cfg.bot_token)
+                result = client.start(bot_token=cfg.bot_api_token)
                 if asyncio.iscoroutine(result):
                     await result
                 logger.info("Bot token authentication succeeded!")

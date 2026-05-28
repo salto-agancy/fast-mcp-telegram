@@ -75,7 +75,7 @@ uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
   --bot-token="1234567890:ABCdef..."
 ```
 
-No OTP, no verification code. Or skip the setup step entirely — just add `BOT_TOKEN` to your env and the server auto-authenticates on startup.
+No OTP, no verification code. Or skip the setup step entirely — just add `BOT_API_TOKEN` to your env and the server auto-authenticates on startup.
 
 ### 2. Configure MCP Client
 

@@ -45,7 +45,7 @@ class SetupConfig(ServerConfig):
         description="Automatically overwrite existing session without prompting",
     )
 
-    bot_token: str = Field(
+    bot_api_token: str = Field(
         default="",
         description="Bot token from BotFather (for bot account setup)",
     )
@@ -62,7 +62,7 @@ class SetupConfig(ServerConfig):
             )
 
         # Either phone number (for user account) or bot token (for bot account) is required
-        if not self.bot_token and not self.phone_number:
+        if not self.bot_api_token and not self.phone_number:
             raise ValueError(
                 "Either phone number (for user account) or bot token (for bot account) is required. "
                 "Provide via --phone-number or --bot-token argument, or corresponding environment variables."
@@ -135,7 +135,7 @@ async def setup_telegram_session(
     print("\nStarting Telegram session setup...")
     print(f"API ID: {setup_config.api_id}")
 
-    if setup_config.bot_token:
+    if setup_config.bot_api_token:
         print("Bot token: [REDACTED]")
         print("Account type: Bot")
     else:
@@ -180,11 +180,11 @@ async def setup_telegram_session(
     try:
         await client.connect()
 
-        if setup_config.bot_token:
+        if setup_config.bot_api_token:
             # Bot authentication
             print("Authenticating as bot...")
             # Telethon's start() may return coroutine when event loop is running
-            result = client.start(bot_token=setup_config.bot_token)
+            result = client.start(bot_token=setup_config.bot_api_token)
             if asyncio.iscoroutine(result):
                 await result
             print("Successfully authenticated as bot!")
@@ -310,7 +310,7 @@ async def main():
         )
 
         # Display account type specific information
-        if setup_config.bot_token:
+        if setup_config.bot_api_token:
             print("\n🤖 Bot setup complete! You can now use the MTProto bridge:")
             print("   - Use /mtproto-api/... endpoints for bot operations")
             print(

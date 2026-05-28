@@ -132,7 +132,7 @@ class ServerConfig(BaseSettings):
         description="Phone number for Telegram authentication (include country code)",
     )
 
-    bot_token: str = Field(
+    bot_api_token: str = Field(
         default="",
         description=(
             "Bot token from @BotFather. Alternative to phone+OTP setup. "
