@@ -12,13 +12,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse, Response
+from starlette.requests import Request
 
 from src._version import __version__
 
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
 
-def register_server_card_route(mcp_app):
+
+def register_server_card_route(mcp_app: FastMCP) -> None:
     """Register the ``/.well-known/mcp/server-card.json`` HTTP route.
 
     Available only in HTTP transport mode.  Smithery.ai and similar tools
@@ -31,7 +36,7 @@ def register_server_card_route(mcp_app):
     _card_cache: dict | None = None
 
     @mcp_app.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
-    async def server_card(request):
+    async def server_card(request: Request):
         nonlocal _card_cache
 
         if _card_cache is None:
@@ -42,6 +47,8 @@ def register_server_card_route(mcp_app):
                     "version": __version__,
                 },
                 "authentication": {
+                    # Per MCP server card spec: `required = false` means optional.
+                    # `schemes` is a list of supported auth scheme identifiers.
                     "required": False,
                     "schemes": ["bearer"],
                 },
