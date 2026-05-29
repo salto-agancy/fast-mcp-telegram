@@ -134,7 +134,10 @@ When **`blocked_peers`** is configured, the denylist applies on http-auth for **
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | “empty chat lane” | Principal listed with `chats: []` or no `chats` key | Add at least one chat to the `principals:` entry |
+| “empty chat lane” on `get_messages` / `get_chat_info` | Same as above (empty or missing `chats`) | Add at least one chat ref to the principal entry |
 | “not in the allowed list” | Tool targets a chat outside the lane | Add chat id / `@username` to `chats` or use an unlisted principal |
+| Lane lists `@handle` but numeric `chat_id` denied | Enforcement matches lane refs to the ref you pass; `@handle` lanes do not auto-match numeric ids in tool args | Pass `@username` in `chat_id` for tools, or add the numeric id to `chats`; future release may resolve handles — see [Roadmap](docs/Roadmap.md) Trust lane |
+| “allow_mtproto is false” on `invoke_mtproto` with empty `chats` | Default `allow_mtproto: false` for listed principals (not the “empty chat lane” string) | Add chats and opt in with `allow_mtproto: true`, or fix empty lane |
 | “read-only” | `read_only: true` on the principal | Set `read_only: false` or use a write-capable profile |
 | “global message search” | `allow_global_search: false` | Set `allow_global_search: true` or use `get_messages` in-lane |
 | “allow_mtproto is false” on MTProto | Listed principal has not opted in to raw MTProto | Set `allow_mtproto: true` (and ensure `read_only: false`, `allow_global_search: true`) |

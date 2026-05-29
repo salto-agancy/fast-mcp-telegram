@@ -54,6 +54,7 @@ principals:
   # "power-principal-id":
   #   chats:
   #     - me
+  #     # When the lane lists @handle only, pass @handle in tool chat_id args (not numeric id alone).
   #     - "@workgroup"
   #   read_only: false
   #   allow_global_search: true

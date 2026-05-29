@@ -151,7 +151,7 @@ Use these methods instead:
 #### 1. pytest (primary regression)
 
 ```bash
-pytest tests/test_session_acl.py tests/test_mcp_tool_acl_integration.py -q
+pytest tests/test_session_acl.py tests/test_mcp_tool_acl_integration.py tests/test_mtproto_api_acl.py -q
 ```
 
 Full suite: `pytest tests/ -q`.
