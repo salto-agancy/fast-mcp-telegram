@@ -6,6 +6,13 @@ from starlette.responses import JSONResponse
 from src.client.connection import set_request_token
 from src.config.server_config import get_config
 from src.server_components.auth import extract_bearer_token_from_request
+from src.server_components.session_acl import (
+    INVALID_MTPROTO_JSON_DENY_MSG,
+    blocked_peers_configured,
+    check_blocked_peer_mtproto_params,
+    check_mtproto_api_access,
+    merge_mtproto_request_params,
+)
 from src.tools.mtproto import DANGEROUS_METHODS, invoke_mtproto_impl
 from src.utils.error_handling import log_and_build_error
 from src.utils.helpers import normalize_method_name
@@ -70,13 +77,6 @@ def register_mtproto_api_routes(mcp_app) -> None:
         if config.require_auth:
             import json
 
-            from src.server_components.session_acl import (
-                blocked_peers_configured,
-                check_blocked_peer_mtproto_params,
-                check_mtproto_api_access,
-                merge_mtproto_request_params,
-            )
-
             token = extract_bearer_token_from_request(request)
             if blocked_peers_configured():
                 try:
@@ -85,10 +85,6 @@ def register_mtproto_api_routes(mcp_app) -> None:
                         params_json,
                     )
                 except json.JSONDecodeError:
-                    from src.server_components.session_acl import (
-                        INVALID_MTPROTO_JSON_DENY_MSG,
-                    )
-
                     error = log_and_build_error(
                         operation="mtproto_api",
                         error_message=INVALID_MTPROTO_JSON_DENY_MSG,
