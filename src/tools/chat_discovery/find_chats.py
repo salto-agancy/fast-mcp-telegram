@@ -147,26 +147,23 @@ async def _find_chats_global_multi_term(
     public: bool | None,
 ) -> dict[str, Any]:
     """
-    Multi-term global search using parallel gather.
+    Multi-term global search using parallel gather + round-robin merge.
 
     Runs all SearchRequest calls concurrently via asyncio.gather(),
-    then merges and deduplicates results by entity ID.
-
-    Each term is limited to `limit` results from Telegram to limit memory,
-    and the final result is also capped at `limit`.
+    then merges results in round-robin across terms for fairness
+    (avoids earlier terms dominating the output).
+    Deduplicates by entity ID.
     """
     try:
-        # Launch all search requests in parallel
         tasks = [
             _search_contacts_as_list(term, limit, chat_type, public)
             for term in terms
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        merged: list[dict[str, Any]] = []
-        seen_ids: set[Any] = set()
+        # Separate valid results from errors
+        term_results: list[list[dict[str, Any]]] = []
         errors: list[str] = []
-
         for term, result in zip(terms, results):
             if isinstance(result, Exception):
                 errors.append(f"'{term}': {result}")
@@ -175,17 +172,9 @@ async def _find_chats_global_multi_term(
             if not isinstance(result, list):
                 errors.append(f"'{term}': unexpected result type {type(result).__name__}")
                 continue
-            for item in result:
-                entity_id = item.get("id")
-                if entity_id is not None and entity_id not in seen_ids:
-                    seen_ids.add(entity_id)
-                    merged.append(item)
-                    if len(merged) >= limit:
-                        break
-            if len(merged) >= limit:
-                break
+            term_results.append(result)
 
-        if not merged:
+        if not term_results:
             error_detail = "; ".join(errors) if errors else "no results from any term"
             query_str = ", ".join(terms)
             return log_and_build_error(
@@ -201,6 +190,25 @@ async def _find_chats_global_multi_term(
                 },
                 exception=ValueError(f"No contacts found: {error_detail}"),
             )
+
+        # Round-robin interleaving across all term result lists
+        merged: list[dict[str, Any]] = []
+        seen_ids: set[Any] = set()
+        max_len = max(len(r) for r in term_results)
+
+        for position in range(max_len):
+            if len(merged) >= limit:
+                break
+            for i in range(len(term_results)):
+                if len(merged) >= limit:
+                    break
+                if position < len(term_results[i]):
+                    item = term_results[i][position]
+                    if isinstance(item, dict):
+                        entity_id = item.get("id")
+                        if entity_id is not None and entity_id not in seen_ids:
+                            seen_ids.add(entity_id)
+                            merged.append(item)
 
         return {"chats": merged[:limit]}
 

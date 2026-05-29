@@ -1,0 +1,174 @@
+{
+  "timestamp": "2026-05-29T21:10:58Z",
+  "python_version": "3.14.5 (main, May 11 2026, 23:08:05) [GCC 15.2.0]",
+  "scenarios": {
+    "global_single": {
+      "mean_s": 0.28,
+      "min_s": 0.2026,
+      "max_s": 0.354,
+      "median_s": 0.2833,
+      "p90_s": 0.354,
+      "durations_s": [
+        0.354,
+        0.2833,
+        0.2026
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "flood_waits": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "global_multi": {
+      "mean_s": 0.5358,
+      "min_s": 0.4093,
+      "max_s": 0.6876,
+      "median_s": 0.5106,
+      "p90_s": 0.6876,
+      "durations_s": [
+        0.5106,
+        0.4093,
+        0.6876
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "flood_waits": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_browse": {
+      "mean_s": 1.5346,
+      "min_s": 1.4159,
+      "max_s": 1.7095,
+      "median_s": 1.4784,
+      "p90_s": 1.7095,
+      "durations_s": [
+        1.4159,
+        1.4784,
+        1.7095
+      ],
+      "results_counts": [
+        20,
+        20,
+        20
+      ],
+      "flood_waits": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_search": {
+      "mean_s": 1.3665,
+      "min_s": 1.2191,
+      "max_s": 1.5762,
+      "median_s": 1.3043,
+      "p90_s": 1.5762,
+      "durations_s": [
+        1.3043,
+        1.2191,
+        1.5762
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "flood_waits": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "No chats found matching 'alex' until 2026-04-29",
+        "No chats found matching 'alex' until 2026-04-29",
+        "No chats found matching 'alex' until 2026-04-29"
+      ],
+      "all_ok": false
+    },
+    "folder_include": {
+      "mean_s": 3.3322,
+      "min_s": 3.0965,
+      "max_s": 3.4784,
+      "median_s": 3.4217,
+      "p90_s": 3.4784,
+      "durations_s": [
+        3.4217,
+        3.0965,
+        3.4784
+      ],
+      "results_counts": [
+        20,
+        20,
+        20
+      ],
+      "flood_waits": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "folder_flags": {
+      "mean_s": 5.3034,
+      "min_s": 1.6044,
+      "max_s": 12.6938,
+      "median_s": 1.6121,
+      "p90_s": 12.6938,
+      "durations_s": [
+        1.6044,
+        12.6938,
+        1.6121
+      ],
+      "results_counts": [
+        4,
+        4,
+        4
+      ],
+      "flood_waits": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    }
+  }
+}
