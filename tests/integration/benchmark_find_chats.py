@@ -369,7 +369,6 @@ async def main() -> int:
                     n_iterations=0,
                     durations_s=[],
                     results_counts=[],
-                    flood_waits=[],
                     errors=[f"timeout_{timeout_s}s"],
                 )
             )
@@ -389,7 +388,7 @@ async def main() -> int:
     for s in compact["scenarios"].values():
         del s["durations_s"]
         del s["results_counts"]
-        del s["flood_waits"]
+        # flood_waits removed — not tracked
         del s["errors"]
     print(json.dumps(compact, indent=2, ensure_ascii=False))
 
