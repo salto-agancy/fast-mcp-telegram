@@ -1,5 +1,7 @@
 """find_chats tool implementation: global search, dialogs, and folder filters."""
 
+import asyncio
+import logging
 from typing import Any
 
 from src.client.connection import get_connected_client
@@ -8,11 +10,13 @@ from src.utils.entity import get_dialog_filters
 from src.utils.error_handling import log_and_build_error
 
 from .constants import AVAILABLE_FILTERS_MAX_SHOW
-from .contact_search import _search_contacts_as_list, search_contacts_native
+from .contact_search import _search_contacts_as_list
 from .dialog_filters import _get_filter_by_name
 from .dialog_search import search_dialogs_impl
 from .filter_flags import _find_chats_by_filter_flags
 from .include_peers import _find_chats_by_include_peers
+
+logger = logging.getLogger(__name__)
 
 
 async def find_chats_impl(
@@ -133,51 +137,80 @@ async def _find_chats_global(
         )
         return {"chats": result} if isinstance(result, list) else result
 
+    return await _find_chats_global_multi_term(terms, limit, chat_type, public)
+
+
+async def _find_chats_global_multi_term(
+    terms: list[str],
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+) -> dict[str, Any]:
+    """
+    Multi-term global search using parallel gather.
+
+    Runs all SearchRequest calls concurrently via asyncio.gather(),
+    then merges and deduplicates results by entity ID.
+
+    Each term is limited to `limit` results from Telegram to limit memory,
+    and the final result is also capped at `limit`.
+    """
     try:
-        generators = [
-            search_contacts_native(term, limit, chat_type, public) for term in terms
+        # Launch all search requests in parallel
+        tasks = [
+            _search_contacts_as_list(term, limit, chat_type, public)
+            for term in terms
         ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         merged: list[dict[str, Any]] = []
         seen_ids: set[Any] = set()
-        active_gens = list(enumerate(generators))
+        errors: list[str] = []
 
-        while active_gens and len(merged) < limit:
-            next_active = []
-
-            for i, gen in active_gens:
-                try:
-                    item = await gen.__anext__()
-                    entity_id = item.get("id") if isinstance(item, dict) else None
-                    if entity_id and entity_id not in seen_ids:
-                        seen_ids.add(entity_id)
-                        merged.append(item)
-                        if len(merged) >= limit:
-                            break
-                    next_active.append((i, gen))
-                except Exception:
-                    continue
-            active_gens = next_active
+        for term, result in zip(terms, results):
+            if isinstance(result, Exception):
+                errors.append(f"'{term}': {result}")
+                logger.warning("Multi-term search failed for %s: %s", term, result)
+                continue
+            if not isinstance(result, list):
+                errors.append(f"'{term}': unexpected result type {type(result).__name__}")
+                continue
+            for item in result:
+                entity_id = item.get("id")
+                if entity_id is not None and entity_id not in seen_ids:
+                    seen_ids.add(entity_id)
+                    merged.append(item)
+                    if len(merged) >= limit:
+                        break
+            if len(merged) >= limit:
+                break
 
         if not merged:
+            error_detail = "; ".join(errors) if errors else "no results from any term"
+            query_str = ", ".join(terms)
             return log_and_build_error(
                 operation="search_contacts_multi",
-                error_message=f"No contacts found matching query '{query}'",
+                error_message=(
+                    f"No contacts found matching query '{query_str}': {error_detail}"
+                ),
                 params={
-                    "query": query,
+                    "query": query_str,
                     "limit": limit,
                     "chat_type": chat_type,
                     "public": public,
                 },
-                exception=ValueError(f"No contacts found matching query '{query}'"),
+                exception=ValueError(f"No contacts found: {error_detail}"),
             )
+
         return {"chats": merged[:limit]}
+
     except Exception as e:
+        query_str = ", ".join(terms)
         return log_and_build_error(
             operation="search_contacts_multi",
             error_message=f"Failed multi-term contact search: {e!s}",
             params={
-                "query": query,
+                "query": query_str,
                 "limit": limit,
                 "chat_type": chat_type,
                 "public": public,
