@@ -328,6 +328,19 @@ def test_find_chats_post_filter_username_lane(acl_config):
     assert filtered["chats"][0]["username"] == "workgroup"
 
 
+def test_find_chats_post_filter_chat_id_field(acl_config):
+    set_request_token("token-team")
+    result = {
+        "chats": [
+            {"chat_id": -1001234567890, "title": "Work"},
+            {"chat_id": -1000000, "title": "Other"},
+        ]
+    }
+    filtered = filter_tool_result("find_chats", result)
+    assert len(filtered["chats"]) == 1
+    assert filtered["chats"][0]["chat_id"] == -1001234567890
+
+
 def test_empty_lane_find_chats_post_filter_hard_deny(empty_lane_config):
     """Empty lane must hard-deny find_chats, not return an empty list (leak prevention)."""
     set_request_token("empty-lane")

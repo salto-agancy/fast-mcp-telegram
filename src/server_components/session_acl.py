@@ -566,9 +566,9 @@ def _is_chat_allowed(chat_ref: Any, rule: PrincipalAclRule) -> bool:
 
 
 def _is_chat_dict_lane_allowed(chat: dict[str, Any], rule: PrincipalAclRule) -> bool:
-    """True when chat row id or username matches the principal lane."""
-    chat_id = chat.get("id")
-    if chat_id is not None and _is_chat_allowed(chat_id, rule):
+    """True when chat row id, chat_id, or username matches the principal lane."""
+    peer_ref = chat.get("id") if chat.get("id") is not None else chat.get("chat_id")
+    if peer_ref is not None and _is_chat_allowed(peer_ref, rule):
         return True
     username = chat.get("username")
     return username is not None and _is_chat_allowed(username, rule)
