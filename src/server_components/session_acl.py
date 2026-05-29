@@ -35,6 +35,15 @@ _WRITE_OPERATIONS = frozenset(
     }
 )
 _LIST_RESULT_OPERATIONS = frozenset({"find_chats", "search_messages_globally"})
+_EMPTY_LANE_CHAT_SCOPED_OPERATIONS = frozenset({"get_messages", "get_chat_info"})
+_EMPTY_LANE_PRE_DENY_OPERATIONS = (
+    _LIST_RESULT_OPERATIONS
+    | _EMPTY_LANE_CHAT_SCOPED_OPERATIONS
+    | frozenset({"send_message_to_phone"})
+)
+_EMPTY_LANE_POST_DENY_OPERATIONS = (
+    _LIST_RESULT_OPERATIONS | _EMPTY_LANE_CHAT_SCOPED_OPERATIONS
+)
 
 _EMPTY_LANE_DENY_MSG = (
     "Session ACL: this principal has an empty chat lane (chats: [] or chats omitted). "
@@ -634,11 +643,7 @@ def check_pre_tool_access(
 
     if _is_empty_lane(rule):
         lane_msg = _empty_lane_deny_msg(rule)
-        if operation_name in _LIST_RESULT_OPERATIONS:
-            return _deny(operation_name, lane_msg, params=kwargs)
-        if operation_name == "send_message_to_phone":
-            return _deny(operation_name, lane_msg, params=kwargs)
-        if operation_name in {"get_messages", "get_chat_info"}:
+        if operation_name in _EMPTY_LANE_PRE_DENY_OPERATIONS:
             return _deny(operation_name, lane_msg, params=kwargs)
 
     if operation_name == "invoke_mtproto" and (
@@ -705,9 +710,7 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
         return result
 
     if _is_empty_lane(rule):
-        if operation_name in _LIST_RESULT_OPERATIONS:
-            return _deny(operation_name, _empty_lane_deny_msg(rule))
-        if operation_name in {"get_messages", "get_chat_info"}:
+        if operation_name in _EMPTY_LANE_POST_DENY_OPERATIONS:
             return _deny(operation_name, _empty_lane_deny_msg(rule))
         return result
 
