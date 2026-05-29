@@ -1,6 +1,6 @@
 ### 2026-05-29
-- **ACL terminology (principal):** Breaking rename `tokens:` → `principals:`; `ACL_DENY_UNLISTED_PRINCIPALS`; `PrincipalAclRule`; legacy `tokens:` fails at load; operator glossary in SECURITY.md.
-- **0.22.0 — Session ACL Phase 2 + bot auto-auth + MCP server card:** GitHub release `0.22.0`; PyPI publish green. Phase 2 ACL profiles, `BOT_API_TOKEN` startup auth, `/.well-known/mcp/server-card.json` from tool registry.
+- **0.23.0 — Session ACL principals terminology:** Breaking rename `tokens:` → `principals:`; `ACL_DENY_UNLISTED_PRINCIPALS`; legacy `tokens:` fails at load; operator glossary in SECURITY.md. GitHub release + PyPI + Telegram posted; CI green.
+- **ACL review follow-up (branch):** Empty-lane denial for `get_messages` / `get_chat_info`; `find_chats` whitelist matches `username`; HTTP MTProto route ACL tests; shared `INVALID_MTPROTO_JSON_DENY_MSG`; SECURITY/Roadmap docs; chat-ref resolution deferred on Roadmap.
 
 ### 2026-05-28
 - **Session ACL Phase 2 (PR #58 merged):** `allow_mtproto` per listed token (default false); `allow_global_search: false` blocks raw MTProto; unified `_mtproto_denial_for_rule` for tool + HTTP bridge; `ACL_DENY_UNLISTED_TOKENS` for strict multi-tenant; config load warnings; plain-language operator docs.

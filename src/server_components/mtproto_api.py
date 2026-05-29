@@ -85,12 +85,13 @@ def register_mtproto_api_routes(mcp_app) -> None:
                         params_json,
                     )
                 except json.JSONDecodeError:
+                    from src.server_components.session_acl import (
+                        INVALID_MTPROTO_JSON_DENY_MSG,
+                    )
+
                     error = log_and_build_error(
                         operation="mtproto_api",
-                        error_message=(
-                            "Session ACL: invalid params_json when blocked_peers is configured. "
-                            "Provide valid JSON or omit params_json. See SECURITY.md."
-                        ),
+                        error_message=INVALID_MTPROTO_JSON_DENY_MSG,
                         params={"params_json": params_json[:80] if params_json else ""},
                         error_code=-32007,
                     )

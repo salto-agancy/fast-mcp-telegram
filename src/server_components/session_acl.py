@@ -66,6 +66,7 @@ _INVALID_MTPROTO_JSON_DENY_MSG = (
     "Session ACL: invalid params_json when blocked_peers is configured. "
     "Provide valid JSON or omit params_json. See SECURITY.md."
 )
+INVALID_MTPROTO_JSON_DENY_MSG = _INVALID_MTPROTO_JSON_DENY_MSG
 _MTPROTO_PEER_ID_KEYS = frozenset({"user_id", "chat_id", "channel_id", "peer_id", "id"})
 _CHAT_SCOPED_OPERATIONS = frozenset(
     {"get_messages", "get_chat_info", "send_message", "edit_message"}
@@ -357,10 +358,6 @@ def blocked_peers_configured() -> bool:
     return bool(_load_blocked_peers())
 
 
-def _blocked_peers_active() -> bool:
-    return bool(_load_blocked_peers())
-
-
 def _is_blocked_peer(ref: Any) -> bool:
     normalized = _normalize_chat_ref(ref)
     if normalized == "":
@@ -489,7 +486,7 @@ def _check_blocked_peer_pre(
             except json.JSONDecodeError:
                 return _deny(
                     operation,
-                    _INVALID_MTPROTO_JSON_DENY_MSG,
+                    INVALID_MTPROTO_JSON_DENY_MSG,
                     params=kwargs,
                 )
         else:
@@ -559,6 +556,15 @@ def _is_chat_allowed(chat_ref: Any, rule: PrincipalAclRule) -> bool:
     return any(_chat_ref_matches(a, normalized) for a in rule.chats)
 
 
+def _is_chat_dict_lane_allowed(chat: dict[str, Any], rule: PrincipalAclRule) -> bool:
+    """True when chat row id or username matches the principal lane."""
+    chat_id = chat.get("id")
+    if chat_id is not None and _is_chat_allowed(chat_id, rule):
+        return True
+    username = chat.get("username")
+    return username is not None and _is_chat_allowed(username, rule)
+
+
 def _is_unlisted_synthetic_rule(rule: PrincipalAclRule) -> bool:
     """True when rule was synthesized for ACL_DENY_UNLISTED_PRINCIPALS (not from yaml)."""
     return rule.unlisted_deny
@@ -611,7 +617,7 @@ def check_pre_tool_access(
     if not config.acl_enabled or config.disable_auth:
         return None
 
-    if _blocked_peers_active():
+    if blocked_peers_configured():
         if blocked_denial := _check_blocked_peer_pre(operation_name, kwargs):
             return blocked_denial
 
@@ -631,6 +637,8 @@ def check_pre_tool_access(
         if operation_name in _LIST_RESULT_OPERATIONS:
             return _deny(operation_name, lane_msg, params=kwargs)
         if operation_name == "send_message_to_phone":
+            return _deny(operation_name, lane_msg, params=kwargs)
+        if operation_name in {"get_messages", "get_chat_info"}:
             return _deny(operation_name, lane_msg, params=kwargs)
 
     if operation_name == "invoke_mtproto" and (
@@ -687,7 +695,7 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
         return result
 
     config = get_config()
-    if config.acl_enabled and not config.disable_auth and _blocked_peers_active():
+    if config.acl_enabled and not config.disable_auth and blocked_peers_configured():
         result = _filter_blocked_peers_from_result(operation_name, result)
         if isinstance(result, dict) and result.get("ok") is False:
             return result
@@ -699,14 +707,15 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
     if _is_empty_lane(rule):
         if operation_name in _LIST_RESULT_OPERATIONS:
             return _deny(operation_name, _empty_lane_deny_msg(rule))
+        if operation_name in {"get_messages", "get_chat_info"}:
+            return _deny(operation_name, _empty_lane_deny_msg(rule))
         return result
 
     if operation_name == "find_chats" and isinstance(result.get("chats"), list):
         filtered = [
             chat
             for chat in result["chats"]
-            if isinstance(chat, dict)
-            and _is_chat_allowed(chat.get("id") or chat.get("chat_id"), rule)
+            if isinstance(chat, dict) and _is_chat_dict_lane_allowed(chat, rule)
         ]
         return {**result, "chats": filtered}
 

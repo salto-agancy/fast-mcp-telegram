@@ -305,7 +305,27 @@ def test_empty_lane_blocks_get_messages(empty_lane_config):
     set_request_token("empty-lane")
     denial = check_pre_tool_access("get_messages", {"chat_id": -100123})
     assert denial is not None
-    assert "not in the allowed list" in denial["error"]
+    assert "empty chat lane" in denial["error"].lower()
+
+
+def test_empty_lane_blocks_get_chat_info_without_chat_id(empty_lane_config):
+    set_request_token("empty-lane")
+    denial = check_pre_tool_access("get_chat_info", {})
+    assert denial is not None
+    assert "empty chat lane" in denial["error"].lower()
+
+
+def test_find_chats_post_filter_username_lane(acl_config):
+    set_request_token("token-team")
+    result = {
+        "chats": [
+            {"id": -999, "username": "workgroup", "title": "By handle"},
+            {"id": -1000000, "title": "Other"},
+        ]
+    }
+    filtered = filter_tool_result("find_chats", result)
+    assert len(filtered["chats"]) == 1
+    assert filtered["chats"][0]["username"] == "workgroup"
 
 
 def test_empty_lane_find_chats_post_filter_hard_deny(empty_lane_config):
