@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from itertools import zip_longest
 from typing import Any
 
 from src.client.connection import get_connected_client
@@ -140,6 +141,69 @@ async def _find_chats_global(
     return await _find_chats_global_multi_term(terms, limit, chat_type, public)
 
 
+async def _gather_term_results(
+    terms: list[str],
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+) -> tuple[list[list[dict[str, Any]]] | None, tuple[str, ...]]:
+    """Execute all term searches in parallel via asyncio.gather.
+
+    Returns (term_results, errors) where term_results is None if no term succeeded.
+    """
+    tasks = [
+        _search_contacts_as_list(term, limit, chat_type, public)
+        for term in terms
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    term_results: list[list[dict[str, Any]]] = []
+    errors: list[str] = []
+    for term, result in zip(terms, results):
+        if isinstance(result, Exception):
+            errors.append(f"'{term}': {result}")
+            logger.warning(
+                "Multi-term search failed for '%s': %s",
+                term,
+                result,
+                exc_info=(type(result), result, result.__traceback__),
+            )
+            continue
+        if not isinstance(result, list):
+            errors.append(f"'{term}': unexpected result type {type(result).__name__}")
+            continue
+        term_results.append(result)
+
+    if not term_results:
+        return None, tuple(errors)
+    return term_results, tuple(errors)
+
+
+def _merge_results_round_robin(
+    term_results: list[list[dict[str, Any]]], limit: int
+) -> list[dict[str, Any]]:
+    """Round-robin across term result lists with dedup by entity ID."""
+    merged: list[dict[str, Any]] = []
+    seen_ids: set[Any] = set()
+
+    for items in zip_longest(*term_results):
+        if len(merged) >= limit:
+            break
+        for item in items:
+            if item is None:
+                continue
+            if not isinstance(item, dict):
+                continue
+            entity_id = item.get("id")
+            if entity_id is not None and entity_id not in seen_ids:
+                seen_ids.add(entity_id)
+                merged.append(item)
+                if len(merged) >= limit:
+                    break
+
+    return merged[:limit]
+
+
 async def _find_chats_global_multi_term(
     terms: list[str],
     limit: int,
@@ -154,83 +218,29 @@ async def _find_chats_global_multi_term(
     (avoids earlier terms dominating the output).
     Deduplicates by entity ID.
     """
-    try:
-        tasks = [
-            _search_contacts_as_list(term, limit, chat_type, public)
-            for term in terms
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Separate valid results from errors
-        term_results: list[list[dict[str, Any]]] = []
-        errors: list[str] = []
-        for term, result in zip(terms, results):
-            if isinstance(result, Exception):
-                errors.append(f"'{term}': {result}")
-                # exc_info with manual tuple is required: result holds the exception
-                # object but there's no active exception context (gather return_exceptions).
-                logger.warning(
-                    "Multi-term search failed for '%s': %s",
-                    term, result,
-                    exc_info=(type(result), result, result.__traceback__),
-                )
-                continue
-            if not isinstance(result, list):
-                errors.append(f"'{term}': unexpected result type {type(result).__name__}")
-                continue
-            term_results.append(result)
-
-        if not term_results:
-            error_detail = "; ".join(errors) if errors else "no results from any term"
-            query_str = ", ".join(terms)
-            return log_and_build_error(
-                operation="search_contacts_multi",
-                error_message=(
-                    f"No contacts found matching query '{query_str}': {error_detail}"
-                ),
-                params={
-                    "query": query_str,
-                    "limit": limit,
-                    "chat_type": chat_type,
-                    "public": public,
-                },
-                exception=ValueError(f"No contacts found: {error_detail}"),
-            )
-
-        # Round-robin interleaving across all term result lists
-        merged: list[dict[str, Any]] = []
-        seen_ids: set[Any] = set()
-        max_len = max(len(r) for r in term_results)
-
-        for position in range(max_len):
-            if len(merged) >= limit:
-                break
-            for i in range(len(term_results)):
-                if len(merged) >= limit:
-                    break
-                if position < len(term_results[i]):
-                    item = term_results[i][position]
-                    if isinstance(item, dict):
-                        entity_id = item.get("id")
-                        if entity_id is not None and entity_id not in seen_ids:
-                            seen_ids.add(entity_id)
-                            merged.append(item)
-
-        return {"chats": merged[:limit]}
-
-    except Exception as e:
+    term_results, failed_terms = await _gather_term_results(
+        terms, limit, chat_type, public
+    )
+    if term_results is None:
+        error_detail = (
+            "; ".join(failed_terms) if failed_terms else "no results from any term"
+        )
         query_str = ", ".join(terms)
         return log_and_build_error(
             operation="search_contacts_multi",
-            error_message=f"Failed multi-term contact search: {e!s}",
+            error_message=(
+                f"No contacts found matching query '{query_str}': {error_detail}"
+            ),
             params={
                 "query": query_str,
                 "limit": limit,
                 "chat_type": chat_type,
                 "public": public,
             },
-            exception=e,
+            exception=ValueError(f"No contacts found: {error_detail}"),
         )
+
+    return {"chats": _merge_results_round_robin(term_results, limit)}
 
 
 async def _find_chats_by_dialogs(
