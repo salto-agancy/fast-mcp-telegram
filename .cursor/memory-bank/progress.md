@@ -1,6 +1,6 @@
 ### 2026-05-29
+- **0.23.1 — Session ACL hardening:** PR #68 merged; empty-lane denial copy for `get_messages` / `get_chat_info`; `find_chats` lane filter on id/chat_id/username; HTTP MTProto ACL route tests; SECURITY/Roadmap docs. GitHub release + Telegram posted; CI/deploy green.
 - **0.23.0 — Session ACL principals terminology:** Breaking rename `tokens:` → `principals:`; `ACL_DENY_UNLISTED_PRINCIPALS`; legacy `tokens:` fails at load; operator glossary in SECURITY.md. GitHub release + PyPI + Telegram posted; CI green.
-- **ACL review follow-up (branch):** Empty-lane denial for `get_messages` / `get_chat_info`; `find_chats` whitelist matches `username`; HTTP MTProto route ACL tests; shared `INVALID_MTPROTO_JSON_DENY_MSG`; SECURITY/Roadmap docs; chat-ref resolution deferred on Roadmap.
 
 ### 2026-05-28
 - **Session ACL Phase 2 (PR #58 merged):** `allow_mtproto` per listed token (default false); `allow_global_search: false` blocks raw MTProto; unified `_mtproto_denial_for_rule` for tool + HTTP bridge; `ACL_DENY_UNLISTED_TOKENS` for strict multi-tenant; config load warnings; plain-language operator docs.

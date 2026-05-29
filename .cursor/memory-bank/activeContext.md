@@ -1,10 +1,10 @@
 ## Current Work Focus
 
-**Trust lane — Session ACL (2026-05-29):** `0.23.0` principals terminology on master. **In flight:** ACL review follow-up (empty-lane denial copy, `find_chats` username lane filter, HTTP `/mtproto-api` ACL tests, Roadmap chat-ref resolution). Phase 1.5 [`0.21.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.21.0) (`blocked_peers`). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
+**Trust lane — Session ACL (2026-05-29):** Shipped [`0.23.1`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.23.1) hardening (PR #68). Principals terminology in [`0.23.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.23.0). [ADR 0001](../docs/adr/0001-agent-scoped-session-acl.md).
 
-- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), [mtproto_api.py](../src/server_components/mtproto_api.py), [tests/test_mtproto_api_acl.py](../tests/test_mtproto_api_acl.py)
-- **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md) (Phase 3 chat metadata registry next)
-- **Next:** Merge ACL hardening PR; Phase 3 chat metadata registry
+- **Implementation:** [session_acl.py](../src/server_components/session_acl.py), [mtproto_api.py](../src/server_components/mtproto_api.py)
+- **Design:** [acl-design-brief.md](../docs/research/acl-design-brief.md); Roadmap: ACL chat ref resolution (@handle ↔ numeric id)
+- **Next:** Phase 3 chat metadata registry
 - **Other lanes:** Telemetry `feature/telemetry` *(planned)*; QA / Gategrid `feature/evals`
 
 **Shipped on `master` (2026-05-28):** Session ACL Phase 2 — PR #58. Bot token runtime auth — PR #62. Server card from tool registry — PR #63. Published-resources tracking — PR #64.
