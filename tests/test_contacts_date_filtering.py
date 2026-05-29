@@ -577,7 +577,7 @@ async def test_find_chats_global_multi_term_merges_results():
         yield {"id": 3, "title": "Chat Gamma"}
 
     with patch(
-        "src.tools.chat_discovery.find_chats.search_contacts_native",
+        "src.tools.chat_discovery.contact_search.search_contacts_native",
         new=MagicMock(side_effect=[mock_gen_1(), mock_gen_2()]),
     ):
         result = await _find_chats_global("alpha,beta", 10, None, None)
@@ -597,7 +597,7 @@ async def test_find_chats_global_multi_term_no_results_returns_error():
             yield  # async generator that produces no items
 
     with patch(
-        "src.tools.chat_discovery.find_chats.search_contacts_native",
+        "src.tools.chat_discovery.contact_search.search_contacts_native",
         new=MagicMock(side_effect=[mock_gen_empty(), mock_gen_empty()]),
     ):
         result = await _find_chats_global("nonexistent1,nonexistent2", 10, None, None)

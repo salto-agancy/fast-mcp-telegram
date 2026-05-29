@@ -1,5 +1,8 @@
 """find_chats tool implementation: global search, dialogs, and folder filters."""
 
+import asyncio
+import logging
+from itertools import zip_longest
 from typing import Any
 
 from src.client.connection import get_connected_client
@@ -8,11 +11,13 @@ from src.utils.entity import get_dialog_filters
 from src.utils.error_handling import log_and_build_error
 
 from .constants import AVAILABLE_FILTERS_MAX_SHOW
-from .contact_search import _search_contacts_as_list, search_contacts_native
+from .contact_search import _search_contacts_as_list
 from .dialog_filters import _get_filter_by_name
 from .dialog_search import search_dialogs_impl
 from .filter_flags import _find_chats_by_filter_flags
 from .include_peers import _find_chats_by_include_peers
+
+logger = logging.getLogger(__name__)
 
 
 async def find_chats_impl(
@@ -133,57 +138,109 @@ async def _find_chats_global(
         )
         return {"chats": result} if isinstance(result, list) else result
 
-    try:
-        generators = [
-            search_contacts_native(term, limit, chat_type, public) for term in terms
-        ]
+    return await _find_chats_global_multi_term(terms, limit, chat_type, public)
 
-        merged: list[dict[str, Any]] = []
-        seen_ids: set[Any] = set()
-        active_gens = list(enumerate(generators))
 
-        while active_gens and len(merged) < limit:
-            next_active = []
+async def _gather_term_results(
+    terms: list[str],
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+) -> tuple[list[list[dict[str, Any]]] | None, tuple[str, ...]]:
+    """Execute all term searches in parallel via asyncio.gather.
 
-            for i, gen in active_gens:
-                try:
-                    item = await gen.__anext__()
-                    entity_id = item.get("id") if isinstance(item, dict) else None
-                    if entity_id and entity_id not in seen_ids:
-                        seen_ids.add(entity_id)
-                        merged.append(item)
-                        if len(merged) >= limit:
-                            break
-                    next_active.append((i, gen))
-                except Exception:
-                    continue
-            active_gens = next_active
+    Returns (term_results, errors) where term_results is None if no term succeeded.
+    """
+    tasks = [
+        _search_contacts_as_list(term, limit, chat_type, public)
+        for term in terms
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        if not merged:
-            return log_and_build_error(
-                operation="search_contacts_multi",
-                error_message=f"No contacts found matching query '{query}'",
-                params={
-                    "query": query,
-                    "limit": limit,
-                    "chat_type": chat_type,
-                    "public": public,
-                },
-                exception=ValueError(f"No contacts found matching query '{query}'"),
+    term_results: list[list[dict[str, Any]]] = []
+    errors: list[str] = []
+    for term, result in zip(terms, results):
+        if isinstance(result, Exception):
+            errors.append(f"'{term}': {result}")
+            logger.warning(
+                "Multi-term search failed for '%s': %s",
+                term,
+                result,
+                exc_info=(type(result), result, result.__traceback__),
             )
-        return {"chats": merged[:limit]}
-    except Exception as e:
+            continue
+        if not isinstance(result, list):
+            errors.append(f"'{term}': unexpected result type {type(result).__name__}")
+            continue
+        term_results.append(result)
+
+    if not term_results:
+        return None, tuple(errors)
+    return term_results, tuple(errors)
+
+
+def _merge_results_round_robin(
+    term_results: list[list[dict[str, Any]]], limit: int
+) -> list[dict[str, Any]]:
+    """Round-robin across term result lists with dedup by entity ID."""
+    merged: list[dict[str, Any]] = []
+    seen_ids: set[Any] = set()
+
+    for items in zip_longest(*term_results):
+        if len(merged) >= limit:
+            break
+        for item in items:
+            if item is None:
+                continue
+            if not isinstance(item, dict):
+                continue
+            entity_id = item.get("id")
+            if entity_id is not None and entity_id not in seen_ids:
+                seen_ids.add(entity_id)
+                merged.append(item)
+                if len(merged) >= limit:
+                    break
+
+    return merged[:limit]
+
+
+async def _find_chats_global_multi_term(
+    terms: list[str],
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+) -> dict[str, Any]:
+    """
+    Multi-term global search using parallel gather + round-robin merge.
+
+    Runs all SearchRequest calls concurrently via asyncio.gather(),
+    then merges results in round-robin across terms for fairness
+    (avoids earlier terms dominating the output).
+    Deduplicates by entity ID.
+    """
+    term_results, failed_terms = await _gather_term_results(
+        terms, limit, chat_type, public
+    )
+    if term_results is None:
+        error_detail = (
+            "; ".join(failed_terms) if failed_terms else "no results from any term"
+        )
+        query_str = ", ".join(terms)
         return log_and_build_error(
             operation="search_contacts_multi",
-            error_message=f"Failed multi-term contact search: {e!s}",
+            error_message=(
+                f"No contacts found matching query '{query_str}': {error_detail}"
+            ),
             params={
-                "query": query,
+                "query": query_str,
                 "limit": limit,
                 "chat_type": chat_type,
                 "public": public,
             },
-            exception=e,
+            exception=ValueError(f"No contacts found: {error_detail}"),
         )
+
+    return {"chats": _merge_results_round_robin(term_results, limit)}
 
 
 async def _find_chats_by_dialogs(
