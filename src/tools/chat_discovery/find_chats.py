@@ -167,7 +167,7 @@ async def _find_chats_global_multi_term(
         for term, result in zip(terms, results):
             if isinstance(result, Exception):
                 errors.append(f"'{term}': {result}")
-                logger.warning("Multi-term search failed for %s: %s", term, result)
+                logger.warning("Multi-term search failed for '%s'", term, exc_info=result)
                 continue
             if not isinstance(result, list):
                 errors.append(f"'{term}': unexpected result type {type(result).__name__}")

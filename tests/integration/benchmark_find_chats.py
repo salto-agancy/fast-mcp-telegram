@@ -51,7 +51,6 @@ class BenchmarkResult:
     duration_s: float
     results_count: int
     api_calls: int | None = None  # estimated, not always measurable
-    flood_waits: int = 0
     error: str | None = None
 
 
@@ -63,7 +62,8 @@ class BenchmarkReport:
     n_iterations: int
     durations_s: list[float] = field(default_factory=list)
     results_counts: list[int] = field(default_factory=list)
-    flood_waits: list[int] = field(default_factory=list)
+    # removed flood_waits — not tracked without Telegram FloodWaitError instrumentation
+    # flood_waits: list[int] = field(default_factory=list)
     errors: list[str | None] = field(default_factory=list)
 
     @property
@@ -93,10 +93,6 @@ class BenchmarkReport:
         s = sorted(self.durations_s)
         idx = min(math.ceil(0.90 * len(s)) - 1, len(s) - 1)
         return s[max(0, idx)]
-
-    @property
-    def total_flood_waits(self) -> int:
-        return sum(self.flood_waits)
 
     @property
     def all_ok(self) -> bool:
@@ -195,7 +191,7 @@ async def _run_single_scenario(
         start = time.monotonic()
         error: str | None = None
         results_count = 0
-        flood_count = 0
+        flood_count = 0  # placeholder — implement real FloodWait tracking when needed
 
         try:
             result = await scenario_fn()
@@ -213,7 +209,7 @@ async def _run_single_scenario(
 
         report.durations_s.append(duration)
         report.results_counts.append(results_count)
-        report.flood_waits.append(flood_count)
+        # report.flood_waits.append(flood_count)
         report.errors.append(error)
 
         logger.info(
@@ -222,7 +218,7 @@ async def _run_single_scenario(
             i + 1,
             duration,
             results_count,
-            f" (flood: {flood_count})" if flood_count else "",
+            "",
         )
 
     return report
@@ -231,7 +227,7 @@ async def _run_single_scenario(
 def _report_table(reports: list[BenchmarkReport]) -> str:
     """Render a text table of benchmark results."""
     lines = []
-    lines.append(f"{'Scenario':30s} {'Mean':>8s} {'Min':>8s} {'Max':>8s} {'P90':>8s} {'Results':>7s} {'Flood':>5s} {'Status':>10s}")
+    lines.append(f"{'Scenario':30s} {'Mean':>8s} {'Min':>8s} {'Max':>8s} {'P90':>8s} {'Results':>7s} {'Flood':>5s} {'Status':>10s}")  # noqa: flood column placeholder
     lines.append("-" * 85)
 
     for r in reports:
@@ -243,7 +239,7 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
         )
         lines.append(
             f"{r.scenario:30s} {r.mean_s:>8.3f} {r.min_s:>8.3f} {r.max_s:>8.3f} "
-            f"{r.p90_s:>8.3f} {results_str:>7s} {r.total_flood_waits:>5d} {ok:>10s}"
+            f"{r.p90_s:>8.3f} {results_str:>7s} {'N/A':>5s} {ok:>10s}"
         )
 
     return "\n".join(lines)
@@ -263,7 +259,7 @@ def _report_json(reports: list[BenchmarkReport]) -> dict:
                 "p90_s": round(r.p90_s, 4),
                 "durations_s": [round(d, 4) for d in r.durations_s],
                 "results_counts": r.results_counts,
-                "flood_waits": r.flood_waits,
+                # "flood_waits": r.flood_waits,
                 "errors": [str(e) if e else None for e in r.errors],
                 "all_ok": r.all_ok,
             }
