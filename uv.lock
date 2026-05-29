@@ -442,7 +442,7 @@ wheels = [
 
 [[package]]
 name = "fast-mcp-telegram"
-version = "0.23.1"
+version = "0.24.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp-slim", extra = ["server"] },

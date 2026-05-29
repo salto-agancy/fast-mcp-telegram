@@ -62,8 +62,7 @@ class BenchmarkReport:
     n_iterations: int
     durations_s: list[float] = field(default_factory=list)
     results_counts: list[int] = field(default_factory=list)
-    # removed flood_waits — not tracked without Telegram FloodWaitError instrumentation
-    # flood_waits: list[int] = field(default_factory=list)
+    # (flood_waits removed — not tracked without FloodWaitError instrumentation)
     errors: list[str | None] = field(default_factory=list)
 
     @property
@@ -259,7 +258,7 @@ def _report_json(reports: list[BenchmarkReport]) -> dict:
                 "p90_s": round(r.p90_s, 4),
                 "durations_s": [round(d, 4) for d in r.durations_s],
                 "results_counts": r.results_counts,
-                # "flood_waits": r.flood_waits,
+
                 "errors": [str(e) if e else None for e in r.errors],
                 "all_ok": r.all_ok,
             }
