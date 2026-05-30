@@ -32,6 +32,8 @@ logger = logging.getLogger("benchmark_search")
 from src.client.connection import get_connected_client, set_request_token
 from src.tools.search import search_messages_impl
 
+from telethon.errors import FloodWaitError
+
 
 # ── Data types ────────────────────────────────────────────────────────────
 
@@ -55,6 +57,9 @@ class BenchmarkReport:
     results_counts: list[int] = field(default_factory=list)
     errors: list[str | None] = field(default_factory=list)
     config: dict[str, Any] = field(default_factory=dict)
+    n_clean: int = 0
+    n_skipped: int = 0
+    n_floodwait_exceeded: int = 0
 
     @property
     def mean_s(self) -> float:
@@ -193,8 +198,15 @@ async def _run_single_scenario(
     scenario_fn: Any,
     iterations: int,
     config: dict[str, Any],
+    floodwait_max_retry: int = 3,
+    floodwait_cap: int = 60,
 ) -> BenchmarkReport:
-    """Run a single scenario `iterations` times and aggregate results."""
+    """Run a single scenario `iterations` times and aggregate results.
+
+    On FloodWaitError ≤ cap: sleeps required time, retries the scenario.
+    If a retry was needed, the iteration is SKIPPED from measurement (n_skipped += 1).
+    On FloodWaitError > cap or max retries exhausted: iteration is marked as exceeded.
+    """
     report = BenchmarkReport(scenario=name, n_iterations=iterations, config=config)
 
     logger.info("Running scenario: %s (%d iterations)", name, iterations)
@@ -203,40 +215,67 @@ async def _run_single_scenario(
         start = time.monotonic()
         error: str | None = None
         results_count = 0
+        floodwait_retries = 0
 
-        try:
-            result = await scenario_fn()
-            if isinstance(result, dict):
-                if "error" in result:
-                    error = result["error"]
-                    logger.warning("  [%s] iter %d: %s", name, i + 1, error)
-                else:
-                    results_count = len(result.get("messages", []))
-                    if result.get("warning"):
-                        logger.warning(
-                            "  [%s] iter %d ASSERTION WARNING: %s",
-                            name,
-                            i + 1,
-                            result["warning"],
-                        )
-        except Exception as e:
-            error = f"{type(e).__name__}: {e}"
-            logger.warning("  [%s] iter %d exception: %s", name, i + 1, error)
+        while True:
+            try:
+                result = await scenario_fn()
+                if isinstance(result, dict):
+                    if "error" in result:
+                        error = result["error"]
+                        logger.warning("  [%s] iter %d: %s", name, i + 1, error)
+                    else:
+                        results_count = len(result.get("messages", []))
+                        if result.get("warning"):
+                            logger.warning(
+                                "  [%s] iter %d ASSERTION WARNING: %s",
+                                name,
+                                i + 1,
+                                result["warning"],
+                            )
+                break  # success, exit retry loop
+            except FloodWaitError as e:
+                floodwait_retries += 1
+                wait = e.seconds + 1
+                if wait > floodwait_cap or floodwait_retries > floodwait_max_retry:
+                    error = f"FloodWaitExceeded:{e.seconds}s>cap:{floodwait_cap}s"
+                    report.n_floodwait_exceeded += 1
+                    logger.warning(
+                        "  [%s] iter %d: %s (cap %ds, retries %d/%d)",
+                        name, i + 1, error, floodwait_cap,
+                        floodwait_retries - 1, floodwait_max_retry,
+                    )
+                    break
+                logger.warning(
+                    "  [%s] iter %d: FloodWait %ds, sleeping (retry %d/%d)",
+                    name, i + 1, wait, floodwait_retries, floodwait_max_retry,
+                )
+                await asyncio.sleep(wait)
+                # Loop back to retry
+            except Exception as e:
+                error = f"{type(e).__name__}: {e}"
+                logger.warning("  [%s] iter %d exception: %s", name, i + 1, error)
+                break
 
         duration = time.monotonic() - start
 
-        report.durations_s.append(duration)
-        report.results_counts.append(results_count)
-        report.errors.append(error)
-
-        logger.info(
-            "  [%s] iter %d: %.3fs, %d results%s",
-            name,
-            i + 1,
-            duration,
-            results_count,
-            "",
-        )
+        if floodwait_retries == 0:
+            # Clean run — record in measurement
+            report.durations_s.append(duration)
+            report.results_counts.append(results_count)
+            report.errors.append(error)
+            report.n_clean += 1
+            logger.info(
+                "  [%s] iter %d: %.3fs, %d results%s",
+                name, i + 1, duration, results_count, "",
+            )
+        else:
+            # Skipped — FloodWait was involved (recovered or exceeded)
+            report.n_skipped += 1
+            logger.info(
+                "  [%s] iter %d: SKIPPED (FloodWait retries=%d, %.3fs wasted)",
+                name, i + 1, floodwait_retries, duration,
+            )
 
     return report
 
@@ -246,9 +285,9 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
     lines = []
     lines.append(
         f"{'Scenario':30s} {'Mean':>8s} {'Min':>8s} {'Max':>8s} "
-        f"{'P90':>8s} {'Results':>7s} {'Status':>10s}"
+        f"{'P90':>8s} {'Results':>7s} {'Clean/Skp':>10s} {'Status':>10s}"
     )
-    lines.append("-" * 78)
+    lines.append("-" * 88)
 
     for r in reports:
         ok = "✅" if r.all_ok else "⚠️"
@@ -257,9 +296,10 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
             if min(r.results_counts) != max(r.results_counts)
             else str(r.results_counts[0]) if r.results_counts else "0"
         )
+        clean_skip = f"{r.n_clean}/{r.n_skipped}"
         lines.append(
             f"{r.scenario:30s} {r.mean_s:>8.3f} {r.min_s:>8.3f} {r.max_s:>8.3f} "
-            f"{r.p90_s:>8.3f} {results_str:>7s} {ok:>10s}"
+            f"{r.p90_s:>8.3f} {results_str:>7s} {clean_skip:>10s} {ok:>10s}"
         )
 
     return "\n".join(lines)
@@ -283,6 +323,9 @@ def _report_json(reports: list[BenchmarkReport]) -> dict:
                 "results_counts": r.results_counts,
                 "errors": [str(e) if e else None for e in r.errors],
                 "all_ok": r.all_ok,
+                "n_clean": r.n_clean,
+                "n_skipped": r.n_skipped,
+                "n_floodwait_exceeded": r.n_floodwait_exceeded,
             }
             for r in reports
         },
@@ -356,6 +399,18 @@ async def main() -> int:
         default=1.0,
         help="Delay in seconds between scenarios to let FloodWait cool down (default: 1.0)",
     )
+    parser.add_argument(
+        "--floodwait-max-retry",
+        type=int,
+        default=3,
+        help="Max retries per iteration on FloodWaitError (default: 3)",
+    )
+    parser.add_argument(
+        "--floodwait-cap",
+        type=int,
+        default=60,
+        help="Max FloodWait seconds to tolerate before giving up (default: 60)",
+    )
     args = parser.parse_args()
     skip = set(args.skip)
     only = set(args.only)
@@ -413,7 +468,11 @@ async def main() -> int:
         # ── Measured run ──
         try:
             report = await asyncio.wait_for(
-                _run_single_scenario(name, scenario_fn, args.iterations, config),
+                _run_single_scenario(
+                    name, scenario_fn, args.iterations, config,
+                    floodwait_max_retry=args.floodwait_max_retry,
+                    floodwait_cap=args.floodwait_cap,
+                ),
                 timeout=timeout_s,
             )
             reports.append(report)
