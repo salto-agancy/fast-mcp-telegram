@@ -31,8 +31,8 @@ async def find_chats_impl(
     min_date: str | None = None,
     max_date: str | None = None,
     folder: str | None = None,
-    max_concurrent: int | None = None,
-    search_timeout: float | None = None,
+    max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
+    search_timeout: float | None = _DEFAULT_SEARCH_TIMEOUT,
 ) -> dict[str, Any]:
     """
     High-level contacts search with support for comma-separated multi-term queries.
@@ -136,8 +136,8 @@ async def _find_chats_global(
     limit: int,
     chat_type: str | None,
     public: bool | None,
-    max_concurrent: int | None = None,
-    search_timeout: float | None = None,
+    max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
+    search_timeout: float | None = _DEFAULT_SEARCH_TIMEOUT,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     """Global Telegram search without date filtering."""
     normalized_query = query or ""
@@ -157,8 +157,8 @@ async def _gather_term_results(
     limit: int,
     chat_type: str | None,
     public: bool | None,
-    max_concurrent: int | None = None,
-    search_timeout: float | None = None,
+    max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
+    search_timeout: float | None = _DEFAULT_SEARCH_TIMEOUT,
 ) -> tuple[list[list[dict[str, Any]]] | None, tuple[str, ...]]:
     """Execute all term searches with optional concurrency limit and per-request timeout.
 
@@ -242,8 +242,8 @@ async def _find_chats_global_multi_term(
     limit: int,
     chat_type: str | None,
     public: bool | None,
-    max_concurrent: int | None = None,
-    search_timeout: float | None = None,
+    max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
+    search_timeout: float | None = _DEFAULT_SEARCH_TIMEOUT,
 ) -> dict[str, Any]:
     """
     Multi-term global search using parallel gather + round-robin merge.
