@@ -29,10 +29,17 @@ if str(REPO_ROOT) not in sys.path:
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("benchmark_search")
 
-from src.client.connection import get_connected_client, set_request_token
-from src.tools.search import search_messages_impl
-
-from telethon.errors import FloodWaitError
+# ── Protect sys.argv from fastmcp's import-time arg parsing ──────────────
+# fastmcp-slim ≥3.3 creates an argparser and calls parse_args() at import
+# time, choking on custom benchmark CLI args. We stash argv before importing.
+_saved_argv_for_fastmcp: list[str] = sys.argv[:]
+sys.argv = [sys.argv[0] if sys.argv else "benchmark"]
+try:
+    from src.client.connection import get_connected_client, set_request_token
+    from src.tools.search import search_messages_impl
+    from telethon.errors import FloodWaitError
+finally:
+    sys.argv = _saved_argv_for_fastmcp
 
 
 # ── Data types ────────────────────────────────────────────────────────────
