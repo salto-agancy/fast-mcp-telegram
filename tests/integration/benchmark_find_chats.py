@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import math
+import random
 import signal
 import sys
 import time
@@ -503,6 +504,12 @@ async def main() -> int:
         default=None,
         help="Per-request timeout in seconds for multi-term queries (default: no timeout)",
     )
+    parser.add_argument(
+        "--randomize-order",
+        action="store_true",
+        default=False,
+        help="Randomize scenario execution order (default: false)",
+    )
     args = parser.parse_args()
     skip = set(args.skip)
     only = set(args.only)
@@ -540,6 +547,10 @@ async def main() -> int:
     if not scenarios:
         print("No scenarios to run (all filtered out)")
         return 0
+
+    if args.randomize_order:
+        random.shuffle(scenarios)
+        print(f"Scenarios randomized: {[n for n, _ in scenarios]}")
 
     # ── Run ─────────────────────────────────────────────────────────────
     reports: list[BenchmarkReport] = []
