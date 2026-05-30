@@ -108,21 +108,39 @@ async def _warmup(client) -> None:
     # Practice search to warm MTProto cache
     try:
         from src.tools.chat_discovery.find_chats import find_chats_impl
-        result = await find_chats_impl(query="test", limit=1)
+        result = await find_chats_impl(query="Андрей", limit=1)
         logger.info("Warmup search: %s", "OK" if "error" not in result else result.get("error"))
     except Exception as e:
         logger.info("Warmup search (optional): %s", e)
 
 
-async def scenario_global_single(query: str = "alexey", limit: int = 10) -> dict:
+async def scenario_global_single(
+    query: str = "Андрей",
+    limit: int = 10,
+    max_concurrent: int | None = None,
+    search_timeout: float | None = None,
+) -> dict:
     """Standard single-term global Telegram search."""
-    result = await find_chats_impl(query=query, limit=limit)
+    result = await find_chats_impl(
+        query=query, limit=limit,
+        max_concurrent=max_concurrent,
+        search_timeout=search_timeout,
+    )
     return result
 
 
-async def scenario_global_multi(query: str = "alexey,test,bot", limit: int = 10) -> dict:
-    """Multi-term global Telegram search — the P0 optimization target."""
-    result = await find_chats_impl(query=query, limit=limit)
+async def scenario_global_multi(
+    query: str = "Андрей, Сергей, Роман",
+    limit: int = 10,
+    max_concurrent: int | None = None,
+    search_timeout: float | None = None,
+) -> dict:
+    """Multi-term global Telegram search — the parallelization optimization target."""
+    result = await find_chats_impl(
+        query=query, limit=limit,
+        max_concurrent=max_concurrent,
+        search_timeout=search_timeout,
+    )
     return result
 
 
@@ -139,7 +157,7 @@ async def scenario_date_search(limit: int = 10) -> dict:
     from datetime import datetime, timedelta, UTC
     month_ago = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d")
     result = await find_chats_impl(
-        query="alex", limit=limit, max_date=month_ago
+        query="Андрей", limit=limit, max_date=month_ago
     )
     return result
 
@@ -188,15 +206,20 @@ async def scenario_folder_flags(folder_name: str | None = None, limit: int = 10)
 
 
 async def scenario_multi_dedup(
-    query: str = "alexey, alex, alexander",
+    query: str = "Андрей, a",
     limit: int = 10,
+    max_concurrent: int | None = None,
+    search_timeout: float | None = None,
 ) -> dict:
     """Multi-term search — validate no duplicate IDs from overlapping terms.
 
-    Terms like "alexey", "alex", "alexander" often match the same chats.
-    The round-robin merge MUST deduplicate by chat ID.
+    Uses overlapping first letter 'a' to test dedup.
     """
-    result = await find_chats_impl(query=query, limit=limit)
+    result = await find_chats_impl(
+        query=query, limit=limit,
+        max_concurrent=max_concurrent,
+        search_timeout=search_timeout,
+    )
     if "error" in result:
         return result
     chats = result.get("chats", [])
@@ -216,16 +239,21 @@ async def scenario_multi_dedup(
 
 
 async def scenario_multi_fairness(
-    query: str = "test, channel, bot",
+    query: str = "Роман, Кирилл, Евгений",
     limit: int = 15,
+    max_concurrent: int | None = None,
+    search_timeout: float | None = None,
 ) -> dict:
     """Multi-term search — validate results from ALL terms present.
 
-    A multi-term query like "test, channel, bot" should return chats
-    matching each term, not just the first one. Asserts that at least
-    one result from each term appears (or the term genuinely has no results).
+    Uses distinct real Russian first names to ensure each term has its own results.
+    Checks that all individual term results appear in the combined output.
     """
-    result = await find_chats_impl(query=query, limit=limit)
+    result = await find_chats_impl(
+        query=query, limit=limit,
+        max_concurrent=max_concurrent,
+        search_timeout=search_timeout,
+    )
     if "error" in result:
         return result
     chats = result.get("chats", [])
@@ -259,16 +287,21 @@ async def scenario_multi_fairness(
 
 
 async def scenario_multi_partial(
-    query: str = "asdfghjkl12345xyz999, alexey",
+    query: str = "asdfghjkl12345xyz999, Андрей",
     limit: int = 10,
+    max_concurrent: int | None = None,
+    search_timeout: float | None = None,
 ) -> dict:
     """Multi-term search with one failing term — validate graceful degradation.
 
     The first term is random gibberish (should return 0 results or error).
-    The second term is real. The merged result should still contain results
-    from the real term, not fail entirely.
+    The second is a real Russian contact name.
     """
-    result = await find_chats_impl(query=query, limit=limit)
+    result = await find_chats_impl(
+        query=query, limit=limit,
+        max_concurrent=max_concurrent,
+        search_timeout=search_timeout,
+    )
     if "error" in result:
         # Partial failure is OK if the good term's results are present
         # Check by running the good term alone
@@ -382,11 +415,15 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
     return "\n".join(lines)
 
 
-def _report_json(reports: list[BenchmarkReport]) -> dict:
+def _report_json(reports: list[BenchmarkReport], *, max_concurrent: int | None = None, search_timeout: float | None = None) -> dict:
     """Convert reports to a JSON-serializable dict."""
     return {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "python_version": sys.version,
+        "config": {
+            "max_concurrent": max_concurrent,
+            "search_timeout": search_timeout,
+        },
         "scenarios": {
             r.scenario: {
                 "mean_s": round(r.mean_s, 4),
@@ -454,6 +491,18 @@ async def main() -> int:
         default=None,
         help="Explicit folder name for folder_include/folder_flags scenarios",
     )
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=None,
+        help="Maximum concurrent search requests for multi-term queries (default: no limit)",
+    )
+    parser.add_argument(
+        "--search-timeout",
+        type=float,
+        default=None,
+        help="Per-request timeout in seconds for multi-term queries (default: no timeout)",
+    )
     args = parser.parse_args()
     skip = set(args.skip)
     only = set(args.only)
@@ -472,15 +521,15 @@ async def main() -> int:
 
     # ── Scenario factory ────────────────────────────────────────────────
     scenarios = [
-        ("global_single", lambda: scenario_global_single(limit=10)),
-        ("global_multi", lambda: scenario_global_multi(limit=10)),
+        ("global_single", lambda: scenario_global_single(limit=10, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
+        ("global_multi", lambda: scenario_global_multi(limit=10, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
         ("date_browse", lambda: scenario_date_browse(limit=20)),
         ("date_search", lambda: scenario_date_search(limit=10)),
         ("folder_include", lambda: scenario_folder_include(folder_name=args.folder_name, limit=20)),
         ("folder_flags", lambda: scenario_folder_flags(folder_name=args.folder_name, limit=10)),
-        ("multi_dedup", lambda: scenario_multi_dedup(limit=10)),
-        ("multi_fairness", lambda: scenario_multi_fairness(limit=15)),
-        ("multi_partial", lambda: scenario_multi_partial(limit=10)),
+        ("multi_dedup", lambda: scenario_multi_dedup(limit=10, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
+        ("multi_fairness", lambda: scenario_multi_fairness(limit=15, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
+        ("multi_partial", lambda: scenario_multi_partial(limit=10, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
     ]
 
     # Filter
@@ -525,7 +574,7 @@ async def main() -> int:
     print(f"{'='*60}\n")
     print(_report_table(reports))
 
-    json_data = _report_json(reports)
+    json_data = _report_json(reports, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)
     print(f"\n{'='*60}")
     print("JSON summary")
     print(f"{'='*60}")

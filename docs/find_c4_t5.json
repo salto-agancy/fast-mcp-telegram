@@ -1,0 +1,217 @@
+{
+  "timestamp": "2026-05-30T16:51:48Z",
+  "python_version": "3.14.5 (main, May 11 2026, 23:08:05) [GCC 15.2.0]",
+  "config": {
+    "max_concurrent": 4,
+    "search_timeout": 5.0
+  },
+  "scenarios": {
+    "global_single": {
+      "mean_s": 0.1331,
+      "min_s": 0.1171,
+      "max_s": 0.1617,
+      "median_s": 0.1207,
+      "p90_s": 0.1617,
+      "durations_s": [
+        0.1207,
+        0.1171,
+        0.1617
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "global_multi": {
+      "mean_s": 0.3667,
+      "min_s": 0.3443,
+      "max_s": 0.3833,
+      "median_s": 0.3727,
+      "p90_s": 0.3833,
+      "durations_s": [
+        0.3443,
+        0.3727,
+        0.3833
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_browse": {
+      "mean_s": 1.4001,
+      "min_s": 1.2238,
+      "max_s": 1.5746,
+      "median_s": 1.4019,
+      "p90_s": 1.5746,
+      "durations_s": [
+        1.2238,
+        1.4019,
+        1.5746
+      ],
+      "results_counts": [
+        20,
+        20,
+        20
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_search": {
+      "mean_s": 1.5016,
+      "min_s": 1.2704,
+      "max_s": 1.9352,
+      "median_s": 1.2993,
+      "p90_s": 1.9352,
+      "durations_s": [
+        1.9352,
+        1.2704,
+        1.2993
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "No chats found matching 'Андрей' until 2026-04-30",
+        "No chats found matching 'Андрей' until 2026-04-30",
+        "No chats found matching 'Андрей' until 2026-04-30"
+      ],
+      "all_ok": false
+    },
+    "folder_include": {
+      "mean_s": 0.0128,
+      "min_s": 0.0014,
+      "max_s": 0.0349,
+      "median_s": 0.0022,
+      "p90_s": 0.0349,
+      "durations_s": [
+        0.0349,
+        0.0022,
+        0.0014
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "no_suitable_folder_found",
+        "no_suitable_folder_found",
+        "no_suitable_folder_found"
+      ],
+      "all_ok": false
+    },
+    "folder_flags": {
+      "mean_s": 0.0013,
+      "min_s": 0.0006,
+      "max_s": 0.0018,
+      "median_s": 0.0015,
+      "p90_s": 0.0018,
+      "durations_s": [
+        0.0006,
+        0.0018,
+        0.0015
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "no_suitable_folder_for_flags",
+        "no_suitable_folder_for_flags",
+        "no_suitable_folder_for_flags"
+      ],
+      "all_ok": false
+    },
+    "multi_dedup": {
+      "mean_s": 0.2927,
+      "min_s": 0.1876,
+      "max_s": 0.3808,
+      "median_s": 0.3098,
+      "p90_s": 0.3808,
+      "durations_s": [
+        0.1876,
+        0.3808,
+        0.3098
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "multi_fairness": {
+      "mean_s": 3.8489,
+      "min_s": 0.4608,
+      "max_s": 10.6034,
+      "median_s": 0.4824,
+      "p90_s": 10.6034,
+      "durations_s": [
+        10.6034,
+        0.4824,
+        0.4608
+      ],
+      "results_counts": [
+        15,
+        15,
+        15
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "multi_partial": {
+      "mean_s": 7.0161,
+      "min_s": 0.3561,
+      "max_s": 20.3264,
+      "median_s": 0.3659,
+      "p90_s": 20.3264,
+      "durations_s": [
+        0.3659,
+        0.3561,
+        20.3264
+      ],
+      "results_counts": [
+        10,
+        10,
+        0
+      ],
+      "errors": [
+        null,
+        null,
+        "PARTIAL_FAIL: bad term killed good term 'Андрей' results. Multi-term returned error but single-term works fine."
+      ],
+      "all_ok": false
+    }
+  }
+}

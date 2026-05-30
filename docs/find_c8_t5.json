@@ -1,0 +1,217 @@
+{
+  "timestamp": "2026-05-30T16:53:33Z",
+  "python_version": "3.14.5 (main, May 11 2026, 23:08:05) [GCC 15.2.0]",
+  "config": {
+    "max_concurrent": 8,
+    "search_timeout": 5.0
+  },
+  "scenarios": {
+    "global_single": {
+      "mean_s": 0.1975,
+      "min_s": 0.1899,
+      "max_s": 0.2024,
+      "median_s": 0.2003,
+      "p90_s": 0.2024,
+      "durations_s": [
+        0.2024,
+        0.1899,
+        0.2003
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "global_multi": {
+      "mean_s": 0.3433,
+      "min_s": 0.2337,
+      "max_s": 0.4125,
+      "median_s": 0.3838,
+      "p90_s": 0.4125,
+      "durations_s": [
+        0.4125,
+        0.3838,
+        0.2337
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_browse": {
+      "mean_s": 1.5019,
+      "min_s": 1.2371,
+      "max_s": 1.7685,
+      "median_s": 1.5001,
+      "p90_s": 1.7685,
+      "durations_s": [
+        1.7685,
+        1.5001,
+        1.2371
+      ],
+      "results_counts": [
+        20,
+        20,
+        20
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_search": {
+      "mean_s": 1.3997,
+      "min_s": 1.1327,
+      "max_s": 1.5659,
+      "median_s": 1.5006,
+      "p90_s": 1.5659,
+      "durations_s": [
+        1.5006,
+        1.5659,
+        1.1327
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "No chats found matching 'Андрей' until 2026-04-30",
+        "No chats found matching 'Андрей' until 2026-04-30",
+        "No chats found matching 'Андрей' until 2026-04-30"
+      ],
+      "all_ok": false
+    },
+    "folder_include": {
+      "mean_s": 0.0263,
+      "min_s": 0.0007,
+      "max_s": 0.0759,
+      "median_s": 0.0023,
+      "p90_s": 0.0759,
+      "durations_s": [
+        0.0759,
+        0.0023,
+        0.0007
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "no_suitable_folder_found",
+        "no_suitable_folder_found",
+        "no_suitable_folder_found"
+      ],
+      "all_ok": false
+    },
+    "folder_flags": {
+      "mean_s": 0.0025,
+      "min_s": 0.0023,
+      "max_s": 0.0027,
+      "median_s": 0.0026,
+      "p90_s": 0.0027,
+      "durations_s": [
+        0.0027,
+        0.0023,
+        0.0026
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "no_suitable_folder_for_flags",
+        "no_suitable_folder_for_flags",
+        "no_suitable_folder_for_flags"
+      ],
+      "all_ok": false
+    },
+    "multi_dedup": {
+      "mean_s": 0.3359,
+      "min_s": 0.2248,
+      "max_s": 0.479,
+      "median_s": 0.3039,
+      "p90_s": 0.479,
+      "durations_s": [
+        0.3039,
+        0.479,
+        0.2248
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "multi_fairness": {
+      "mean_s": 3.4533,
+      "min_s": 0.5236,
+      "max_s": 5.0289,
+      "median_s": 4.8073,
+      "p90_s": 5.0289,
+      "durations_s": [
+        0.5236,
+        5.0289,
+        4.8073
+      ],
+      "results_counts": [
+        15,
+        0,
+        15
+      ],
+      "errors": [
+        null,
+        "No contacts found matching query 'Роман, Кирилл, Евгений': 'Роман': ; 'Кирилл': ; 'Евгений': ",
+        null
+      ],
+      "all_ok": false
+    },
+    "multi_partial": {
+      "mean_s": 0.3824,
+      "min_s": 0.3202,
+      "max_s": 0.4808,
+      "median_s": 0.3462,
+      "p90_s": 0.4808,
+      "durations_s": [
+        0.3202,
+        0.4808,
+        0.3462
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    }
+  }
+}

@@ -1,0 +1,217 @@
+{
+  "timestamp": "2026-05-30T16:45:09Z",
+  "python_version": "3.14.5 (main, May 11 2026, 23:08:05) [GCC 15.2.0]",
+  "config": {
+    "max_concurrent": null,
+    "search_timeout": null
+  },
+  "scenarios": {
+    "global_single": {
+      "mean_s": 0.1467,
+      "min_s": 0.1404,
+      "max_s": 0.1522,
+      "median_s": 0.1476,
+      "p90_s": 0.1522,
+      "durations_s": [
+        0.1404,
+        0.1522,
+        0.1476
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "global_multi": {
+      "mean_s": 0.2469,
+      "min_s": 0.2091,
+      "max_s": 0.2972,
+      "median_s": 0.2345,
+      "p90_s": 0.2972,
+      "durations_s": [
+        0.2345,
+        0.2091,
+        0.2972
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_browse": {
+      "mean_s": 1.4667,
+      "min_s": 1.1075,
+      "max_s": 1.688,
+      "median_s": 1.6045,
+      "p90_s": 1.688,
+      "durations_s": [
+        1.6045,
+        1.688,
+        1.1075
+      ],
+      "results_counts": [
+        20,
+        20,
+        20
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_search": {
+      "mean_s": 1.4311,
+      "min_s": 1.2134,
+      "max_s": 1.5986,
+      "median_s": 1.4813,
+      "p90_s": 1.5986,
+      "durations_s": [
+        1.4813,
+        1.5986,
+        1.2134
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "No chats found matching 'Андрей' until 2026-04-30",
+        "No chats found matching 'Андрей' until 2026-04-30",
+        "No chats found matching 'Андрей' until 2026-04-30"
+      ],
+      "all_ok": false
+    },
+    "folder_include": {
+      "mean_s": 0.024,
+      "min_s": 0.0025,
+      "max_s": 0.0669,
+      "median_s": 0.0026,
+      "p90_s": 0.0669,
+      "durations_s": [
+        0.0669,
+        0.0026,
+        0.0025
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "no_suitable_folder_found",
+        "no_suitable_folder_found",
+        "no_suitable_folder_found"
+      ],
+      "all_ok": false
+    },
+    "folder_flags": {
+      "mean_s": 0.0024,
+      "min_s": 0.0021,
+      "max_s": 0.0025,
+      "median_s": 0.0025,
+      "p90_s": 0.0025,
+      "durations_s": [
+        0.0025,
+        0.0021,
+        0.0025
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "no_suitable_folder_for_flags",
+        "no_suitable_folder_for_flags",
+        "no_suitable_folder_for_flags"
+      ],
+      "all_ok": false
+    },
+    "multi_dedup": {
+      "mean_s": 0.2656,
+      "min_s": 0.2173,
+      "max_s": 0.3096,
+      "median_s": 0.2699,
+      "p90_s": 0.3096,
+      "durations_s": [
+        0.2173,
+        0.3096,
+        0.2699
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "multi_fairness": {
+      "mean_s": 3.8514,
+      "min_s": 0.4279,
+      "max_s": 10.6206,
+      "median_s": 0.5058,
+      "p90_s": 10.6206,
+      "durations_s": [
+        0.4279,
+        10.6206,
+        0.5058
+      ],
+      "results_counts": [
+        15,
+        15,
+        15
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "multi_partial": {
+      "mean_s": 6.6442,
+      "min_s": 0.2827,
+      "max_s": 19.3649,
+      "median_s": 0.285,
+      "p90_s": 19.3649,
+      "durations_s": [
+        0.2827,
+        0.285,
+        19.3649
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    }
+  }
+}
