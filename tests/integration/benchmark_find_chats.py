@@ -102,9 +102,16 @@ class BenchmarkReport:
 
 
 async def _warmup(client) -> None:
-    """Warm up connection before benchmarks."""
+    """Warm up connection and API cache before benchmarks."""
     me = await client.get_me()
     logger.info("Connected as: %s (@%s)", me.first_name or "", me.username or "?")
+    # Practice search to warm MTProto cache
+    try:
+        from src.tools.chat_discovery.find_chats import find_chats_impl
+        result = await find_chats_impl(query="test", limit=1)
+        logger.info("Warmup search: %s", "OK" if "error" not in result else result.get("error"))
+    except Exception as e:
+        logger.info("Warmup search (optional): %s", e)
 
 
 async def scenario_global_single(query: str = "alexey", limit: int = 10) -> dict:
@@ -139,38 +146,164 @@ async def scenario_date_search(limit: int = 10) -> dict:
 
 async def scenario_folder_include(folder_name: str | None = None, limit: int = 20) -> dict:
     """Folder with include_peers — the GetPeerDialogs path."""
-    # Try common folder names. Fall back to the first available folder.
-    names_to_try = [
-        folder_name,
-        "Без каналов",
-        "Nearby",
-        "Ответить",
-    ]
+    if folder_name:
+        result = await find_chats_impl(query=None, limit=limit, folder=folder_name)
+        if "error" in result:
+            return {"error": f"folder '{folder_name}' not found: {result['error']}", **result}
+        return result
+
+    # No explicit folder: try common names, warn about ambiguity
+    names_to_try = ["Без каналов", "Nearby", "Ответить"]
     for name in names_to_try:
-        if not name:
-            continue
         result = await find_chats_impl(query=None, limit=limit, folder=name)
         if "error" not in result:
+            logger.warning(
+                "folder_include: no --folder-name given, guessed '%s' "
+                "— results may not test include_peers path",
+                name,
+            )
             return result
-    # Last resort: whatever-folder with no include_peers won't test the right path.
-    return result if "error" not in result else {"error": "no_suitable_folder", **result}
+    return {"error": "no_suitable_folder_found"}
 
 
 async def scenario_folder_flags(folder_name: str | None = None, limit: int = 10) -> dict:
     """Folder with flag-based filtering — the iter_dialogs + flags path."""
-    names_to_try = [
-        folder_name,
-        "Ответить",
-        "Каналы",
-        "Без каналов",
-    ]
+    if folder_name:
+        result = await find_chats_impl(query=None, limit=limit, folder=folder_name)
+        if "error" in result:
+            return {"error": f"folder '{folder_name}' not found: {result['error']}", **result}
+        return result
+
+    # No explicit folder: try common names, warn about ambiguity
+    names_to_try = ["Ответить", "Каналы", "Без каналов"]
     for name in names_to_try:
-        if not name:
-            continue
         result = await find_chats_impl(query=None, limit=limit, folder=name)
         if "error" not in result:
+            logger.warning(
+                "folder_flags: no --folder-name given, guessed '%s'",
+                name,
+            )
             return result
     return {"error": "no_suitable_folder_for_flags"}
+
+
+async def scenario_multi_dedup(
+    query: str = "alexey, alex, alexander",
+    limit: int = 10,
+) -> dict:
+    """Multi-term search — validate no duplicate IDs from overlapping terms.
+
+    Terms like "alexey", "alex", "alexander" often match the same chats.
+    The round-robin merge MUST deduplicate by chat ID.
+    """
+    result = await find_chats_impl(query=query, limit=limit)
+    if "error" in result:
+        return result
+    chats = result.get("chats", [])
+    ids = [c.get("id") for c in chats]
+    if len(ids) != len(set(ids)):
+        dupes = [id_ for id_ in ids if ids.count(id_) > 1]
+        return {
+            **result,
+            "error": f"DEDUP_FAIL: {len(ids)} results but {len(ids) - len(set(ids))} duplicates "
+                      f"(ids: {sorted(set(dupes))})",
+            "_assertion_ok": False,
+            "_assertion_type": "multi_dedup",
+        }
+    result["_assertion_ok"] = True
+    result["_assertion_type"] = "multi_dedup"
+    return result
+
+
+async def scenario_multi_fairness(
+    query: str = "test, channel, bot",
+    limit: int = 15,
+) -> dict:
+    """Multi-term search — validate results from ALL terms present.
+
+    A multi-term query like "test, channel, bot" should return chats
+    matching each term, not just the first one. Asserts that at least
+    one result from each term appears (or the term genuinely has no results).
+    """
+    result = await find_chats_impl(query=query, limit=limit)
+    if "error" in result:
+        return result
+    chats = result.get("chats", [])
+
+    terms = [t.strip() for t in query.split(",")]
+    # Get per-term results to check fairness
+    per_term = {}
+    for term in terms:
+        tr = await find_chats_impl(query=term, limit=limit)
+        if "error" not in tr:
+            term_ids = {c.get("id") for c in tr.get("chats", [])}
+            per_term[term] = term_ids
+
+    combined_ids = {c.get("id") for c in chats}
+    missing_terms = []
+    for term, term_ids in per_term.items():
+        if term_ids and not term_ids.intersection(combined_ids):
+            missing_terms.append(term)
+
+    if missing_terms:
+        return {
+            **result,
+            "warning": f"FAIRNESS: terms [{', '.join(missing_terms)}] have results but none "
+                       f"appear in multi-term output. May be expected if limit < per-term counts.",
+            "_assertion_type": "multi_fairness",
+            "_assertion_ok": False,
+        }
+    result["_assertion_ok"] = True
+    result["_assertion_type"] = "multi_fairness"
+    return result
+
+
+async def scenario_multi_partial(
+    query: str = "asdfghjkl12345xyz999, alexey",
+    limit: int = 10,
+) -> dict:
+    """Multi-term search with one failing term — validate graceful degradation.
+
+    The first term is random gibberish (should return 0 results or error).
+    The second term is real. The merged result should still contain results
+    from the real term, not fail entirely.
+    """
+    result = await find_chats_impl(query=query, limit=limit)
+    if "error" in result:
+        # Partial failure is OK if the good term's results are present
+        # Check by running the good term alone
+        good_term = query.split(",")[-1].strip()
+        good_result = await find_chats_impl(query=good_term, limit=limit)
+        if "error" not in good_result and good_result.get("chats"):
+            return {
+                **result,
+                "_assertion_type": "multi_partial",
+                "_assertion_ok": False,
+                "error": f"PARTIAL_FAIL: bad term killed good term '{good_term}' results. "
+                         f"Multi-term returned error but single-term works fine.",
+            }
+        # Both terms failing is expected — no assertion issue
+        result["_assertion_ok"] = True
+        result["_assertion_type"] = "multi_partial"
+        return result
+
+    chats = result.get("chats", [])
+    good_term = query.split(",")[-1].strip()
+    good_result = await find_chats_impl(query=good_term, limit=limit)
+    good_ids = {c.get("id") for c in good_result.get("chats", [])}
+    combined_ids = {c.get("id") for c in chats}
+
+    if good_ids and not good_ids.intersection(combined_ids):
+        return {
+            **result,
+            "warning": f"PARTIAL: bad term suppressed good term '{good_term}' — "
+                       f"0/{len(good_ids)} good-term results in combined output.",
+            "_assertion_type": "multi_partial",
+            "_assertion_ok": False,
+        }
+    result["_assertion_ok"] = True
+    result["_assertion_type"] = "multi_partial"
+    return result
 
 
 # ── Benchmark runner ──────────────────────────────────────────────────────
@@ -190,7 +323,6 @@ async def _run_single_scenario(
         start = time.monotonic()
         error: str | None = None
         results_count = 0
-        flood_count = 0  # placeholder — implement real FloodWait tracking when needed
 
         try:
             result = await scenario_fn()
@@ -200,6 +332,13 @@ async def _run_single_scenario(
                     logger.warning("  [%s] iter %d: %s", name, i + 1, error)
                 else:
                     results_count = len(result.get("chats", []))
+                    if result.get("warning"):
+                        logger.warning(
+                            "  [%s] iter %d ASSERTION WARNING: %s",
+                            name,
+                            i + 1,
+                            result["warning"],
+                        )
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
             logger.warning("  [%s] iter %d exception: %s", name, i + 1, error)
@@ -208,7 +347,6 @@ async def _run_single_scenario(
 
         report.durations_s.append(duration)
         report.results_counts.append(results_count)
-        # report.flood_waits.append(flood_count)
         report.errors.append(error)
 
         logger.info(
@@ -226,8 +364,8 @@ async def _run_single_scenario(
 def _report_table(reports: list[BenchmarkReport]) -> str:
     """Render a text table of benchmark results."""
     lines = []
-    lines.append(f"{'Scenario':30s} {'Mean':>8s} {'Min':>8s} {'Max':>8s} {'P90':>8s} {'Results':>7s} {'Flood':>5s} {'Status':>10s}")  # noqa: flood column placeholder
-    lines.append("-" * 85)
+    lines.append(f"{'Scenario':30s} {'Mean':>8s} {'Min':>8s} {'Max':>8s} {'P90':>8s} {'Results':>7s} {'Status':>10s}")
+    lines.append("-" * 78)
 
     for r in reports:
         ok = "✅" if r.all_ok else "⚠️"
@@ -238,7 +376,7 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
         )
         lines.append(
             f"{r.scenario:30s} {r.mean_s:>8.3f} {r.min_s:>8.3f} {r.max_s:>8.3f} "
-            f"{r.p90_s:>8.3f} {results_str:>7s} {'N/A':>5s} {ok:>10s}"
+            f"{r.p90_s:>8.3f} {results_str:>7s} {ok:>10s}"
         )
 
     return "\n".join(lines)
@@ -310,6 +448,12 @@ async def main() -> int:
         default=None,
         help="Bearer token for session lookup (from BEARER_TOKEN_FOR_TESTING in .env)",
     )
+    parser.add_argument(
+        "--folder-name",
+        type=str,
+        default=None,
+        help="Explicit folder name for folder_include/folder_flags scenarios",
+    )
     args = parser.parse_args()
     skip = set(args.skip)
     only = set(args.only)
@@ -332,8 +476,11 @@ async def main() -> int:
         ("global_multi", lambda: scenario_global_multi(limit=10)),
         ("date_browse", lambda: scenario_date_browse(limit=20)),
         ("date_search", lambda: scenario_date_search(limit=10)),
-        ("folder_include", lambda: scenario_folder_include(limit=20)),
-        ("folder_flags", lambda: scenario_folder_flags(limit=10)),
+        ("folder_include", lambda: scenario_folder_include(folder_name=args.folder_name, limit=20)),
+        ("folder_flags", lambda: scenario_folder_flags(folder_name=args.folder_name, limit=10)),
+        ("multi_dedup", lambda: scenario_multi_dedup(limit=10)),
+        ("multi_fairness", lambda: scenario_multi_fairness(limit=15)),
+        ("multi_partial", lambda: scenario_multi_partial(limit=10)),
     ]
 
     # Filter

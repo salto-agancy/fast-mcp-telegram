@@ -1,0 +1,213 @@
+{
+  "timestamp": "2026-05-29T23:43:20Z",
+  "python_version": "3.14.5 (main, May 11 2026, 23:08:05) [GCC 15.2.0]",
+  "scenarios": {
+    "global_single": {
+      "mean_s": 0.2115,
+      "min_s": 0.1619,
+      "max_s": 0.2642,
+      "median_s": 0.2084,
+      "p90_s": 0.2642,
+      "durations_s": [
+        0.2642,
+        0.1619,
+        0.2084
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "global_multi": {
+      "mean_s": 0.5336,
+      "min_s": 0.4225,
+      "max_s": 0.657,
+      "median_s": 0.5214,
+      "p90_s": 0.657,
+      "durations_s": [
+        0.4225,
+        0.5214,
+        0.657
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_browse": {
+      "mean_s": 1.3056,
+      "min_s": 1.1291,
+      "max_s": 1.3942,
+      "median_s": 1.3935,
+      "p90_s": 1.3942,
+      "durations_s": [
+        1.1291,
+        1.3942,
+        1.3935
+      ],
+      "results_counts": [
+        20,
+        20,
+        20
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "date_search": {
+      "mean_s": 1.2993,
+      "min_s": 1.0806,
+      "max_s": 1.4242,
+      "median_s": 1.3931,
+      "p90_s": 1.4242,
+      "durations_s": [
+        1.0806,
+        1.3931,
+        1.4242
+      ],
+      "results_counts": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "No chats found matching 'alex' until 2026-04-29",
+        "No chats found matching 'alex' until 2026-04-29",
+        "No chats found matching 'alex' until 2026-04-29"
+      ],
+      "all_ok": false
+    },
+    "folder_include": {
+      "mean_s": 3.1041,
+      "min_s": 2.9195,
+      "max_s": 3.3364,
+      "median_s": 3.0565,
+      "p90_s": 3.3364,
+      "durations_s": [
+        3.0565,
+        3.3364,
+        2.9195
+      ],
+      "results_counts": [
+        20,
+        20,
+        20
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "folder_flags": {
+      "mean_s": 5.3631,
+      "min_s": 1.0931,
+      "max_s": 13.5943,
+      "median_s": 1.4019,
+      "p90_s": 13.5943,
+      "durations_s": [
+        1.4019,
+        13.5943,
+        1.0931
+      ],
+      "results_counts": [
+        4,
+        4,
+        4
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "multi_dedup": {
+      "mean_s": 0.53,
+      "min_s": 0.4193,
+      "max_s": 0.7022,
+      "median_s": 0.4684,
+      "p90_s": 0.7022,
+      "durations_s": [
+        0.7022,
+        0.4684,
+        0.4193
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "multi_fairness": {
+      "mean_s": 6.6619,
+      "min_s": 0.6848,
+      "max_s": 18.5913,
+      "median_s": 0.7097,
+      "p90_s": 18.5913,
+      "durations_s": [
+        0.7097,
+        0.6848,
+        18.5913
+      ],
+      "results_counts": [
+        15,
+        15,
+        15
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "multi_partial": {
+      "mean_s": 0.5196,
+      "min_s": 0.3477,
+      "max_s": 0.7513,
+      "median_s": 0.4598,
+      "p90_s": 0.7513,
+      "durations_s": [
+        0.3477,
+        0.7513,
+        0.4598
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    }
+  }
+}
