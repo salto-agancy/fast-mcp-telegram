@@ -25,7 +25,6 @@ def _build_search_params(
     auto_expand_batches: int,
     include_total_count: bool,
     max_concurrent: int | None = None,
-    search_timeout: float | None = None,
 ) -> dict[str, Any]:
     return {
         "query": query,
@@ -41,7 +40,6 @@ def _build_search_params(
         "auto_expand_batches": auto_expand_batches,
         "include_total_count": include_total_count,
         "max_concurrent": max_concurrent,
-        "search_timeout": search_timeout,
         "is_global_search": chat_id is None,
         "has_query": bool(query and query.strip()),
         "has_date_filter": bool(min_date or max_date),
@@ -150,7 +148,6 @@ async def search_messages_impl(
     include_total_count: bool = False,
     thread_scope: ThreadScope = "auto",
     max_concurrent: int | None = None,
-    search_timeout: float | None = None,
 ) -> dict[str, Any]:
     """
     Unified message retrieval: search, browse, read by IDs, or list replies.
@@ -161,7 +158,6 @@ async def search_messages_impl(
 
     Args:
         max_concurrent: Max parallel SearchGlobal requests (None = full gather).
-        search_timeout: Per-request timeout in seconds (None = no timeout).
     """
     params = _build_search_params(
         query=query,
@@ -177,7 +173,6 @@ async def search_messages_impl(
         auto_expand_batches=auto_expand_batches,
         include_total_count=include_total_count,
         max_concurrent=max_concurrent,
-        search_timeout=search_timeout,
     )
 
     if thread_scope in ("full", "direct") and reply_to_id is None:

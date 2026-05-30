@@ -6,12 +6,6 @@ Tests performance of comma-separated multi-term queries in both
 global search (SearchGlobalRequest) and in-chat search (iter_messages).
 
 Supports configurable semaphore (--max-concurrent) and per-request timeout
-(--search-timeout) for the gather-based parallelization.
-
-Usage:
-    uv run python3 tests/integration/benchmark_search_global.py
-    uv run python3 tests/integration/benchmark_search_global.py \
-        --max-concurrent 4 --search-timeout 10 --output results.json
     uv run python3 tests/integration/benchmark_search_global.py --iterations 5
 """
 import argparse
@@ -97,24 +91,22 @@ class BenchmarkReport:
 # ── Scenario factory ────────────────────────────────────────────────────────
 
 
-def _make_scenario(query: str, limit: int, max_concurrent: int | None,
-                   search_timeout: float | None):
+def _make_scenario(query: str, limit: int, max_concurrent: int | None):
     """Create a callable that returns a search coroutine."""
     return lambda: search_messages_impl(
         query=query, limit=limit,
         max_concurrent=max_concurrent,
-        search_timeout=search_timeout,
     )
 
 
-def _build_scenarios(max_concurrent: int | None, search_timeout: float | None) -> list[tuple[str, Any]]:
+def _build_scenarios(max_concurrent: int | None) -> list[tuple[str, Any]]:
     """Build list of (name, callable) pairs for all benchmark scenarios."""
     scenarios = [
-        ("single_term", _make_scenario("недвижимость", 10, max_concurrent, search_timeout)),
-        ("two_terms", _make_scenario("недвижимость, инвестиции", 10, max_concurrent, search_timeout)),
-        ("three_terms", _make_scenario("недвижимость, инвестиции, сделка", 10, max_concurrent, search_timeout)),
-        ("five_terms", _make_scenario("недвижимость, инвестиции, объект, проект, сделка", 10, max_concurrent, search_timeout)),
-        ("three_terms_large", _make_scenario("недвижимость, инвестиции, сделка", 50, max_concurrent, search_timeout)),
+        ("single_term", _make_scenario("недвижимость", 10, max_concurrent)),
+        ("two_terms", _make_scenario("недвижимость, инвестиции", 10, max_concurrent)),
+        ("three_terms", _make_scenario("недвижимость, инвестиции, сделка", 10, max_concurrent)),
+        ("five_terms", _make_scenario("недвижимость, инвестиции, объект, проект, сделка", 10, max_concurrent)),
+        ("three_terms_large", _make_scenario("недвижимость, инвестиции, сделка", 50, max_concurrent)),
     ]
 
     # Dedup check — validates no duplicate IDs from overlapping terms
@@ -122,7 +114,7 @@ def _build_scenarios(max_concurrent: int | None, search_timeout: float | None) -
         result = await search_messages_impl(
             query="недвижимость, сделка, недвижимость", limit=15,
             max_concurrent=max_concurrent,
-            search_timeout=search_timeout,
+
         )
         if "error" in result:
             return result
@@ -147,7 +139,7 @@ def _build_scenarios(max_concurrent: int | None, search_timeout: float | None) -
         result = await search_messages_impl(
             query="недвижимость, инвестиции, сделка", limit=20,
             max_concurrent=max_concurrent,
-            search_timeout=search_timeout,
+
         )
         if "error" in result:
             return result
@@ -354,101 +346,3 @@ async def main() -> int:
         default=None,
         help="Max parallel SearchGlobal requests (default: None = full gather without semaphore)",
     )
-    parser.add_argument(
-        "--search-timeout",
-        type=float,
-        default=None,
-        help="Per-request timeout in seconds (default: None = no timeout)",
-    )
-    args = parser.parse_args()
-    skip = set(args.skip)
-    only = set(args.only)
-
-    config = {
-        "max_concurrent": args.max_concurrent,
-        "search_timeout": args.search_timeout,
-    }
-
-    # ── Connect ────────────────────────────────────────────────────────
-    print("Connecting to Telegram...", end=" ", flush=True)
-    try:
-        if args.bearer_token:
-            set_request_token(args.bearer_token)
-        client = await get_connected_client()
-        await _warmup(client)
-        print("OK")
-    except Exception as e:
-        print(f"FAILED: {e}")
-        return 1
-
-    # ── Build scenarios with config ───────────────────────────────────
-    scenario_fns = _build_scenarios(
-        max_concurrent=args.max_concurrent,
-        search_timeout=args.search_timeout,
-    )
-
-    # Filter
-    if only:
-        scenario_fns = [(n, fn) for n, fn in scenario_fns if n in only]
-    scenario_fns = [(n, fn) for n, fn in scenario_fns if n not in skip]
-
-    if not scenario_fns:
-        print("No scenarios to run (all filtered out)")
-        return 0
-
-    # ── Run ─────────────────────────────────────────────────────────────
-    reports: list[BenchmarkReport] = []
-    timeout_s = args.timeout
-
-    for name, scenario_fn in scenario_fns:
-        print(f"\n{'='*60}")
-        print(f"Scenario: {name}")
-        print(f"{'='*60}")
-
-        try:
-            report = await asyncio.wait_for(
-                _run_single_scenario(name, scenario_fn, args.iterations, config),
-                timeout=timeout_s,
-            )
-            reports.append(report)
-        except asyncio.TimeoutError:
-            print(f"  TIMEOUT after {timeout_s}s — skipping")
-            reports.append(
-                BenchmarkReport(
-                    scenario=name,
-                    n_iterations=0,
-                    durations_s=[],
-                    results_counts=[],
-                    errors=[f"timeout_{timeout_s}s"],
-                    config=config,
-                )
-            )
-
-    # ── Report ──────────────────────────────────────────────────────────
-    print(f"\n{'='*60}")
-    print(f"BENCHMARK RESULTS (max_concurrent={args.max_concurrent}, "
-          f"search_timeout={args.search_timeout})")
-    print(f"{'='*60}\n")
-    print(_report_table(reports))
-
-    json_data = _report_json(reports)
-    print(f"\n{'='*60}")
-    print("JSON summary")
-    print(f"{'='*60}")
-    compact = deepcopy(json_data)
-    for s in compact["scenarios"].values():
-        del s["durations_s"]
-        del s["results_counts"]
-        del s["errors"]
-    print(json.dumps(compact, indent=2, ensure_ascii=False))
-
-    if args.output:
-        out_path = Path(args.output)
-        out_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False))
-        print(f"\nFull report saved to: {out_path.resolve()}")
-
-    return 0
-
-
-if __name__ == "__main__":
-    exit(asyncio.run(main()))

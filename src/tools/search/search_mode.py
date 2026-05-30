@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 # Default semaphore limits for global search parallelization
 _DEFAULT_MAX_CONCURRENT: int = 2
-_DEFAULT_SEARCH_TIMEOUT: float = 10.0
 
 
 async def _execute_parallel_searches_generators(
@@ -58,13 +57,12 @@ async def _gather_global_batch(
     min_datetime: datetime | None,
     max_datetime: datetime | None,
     semaphore: asyncio.Semaphore | None = None,
-    timeout: float | None = None,
 ) -> list[tuple[int, Any]]:
     """Execute SearchGlobalRequest for all active terms in parallel.
 
-    Uses optional semaphore to limit concurrency and optional per-request
-    timeout. Returns list of (term_index, response) for successful responses.
-    Failed or exhausted terms are skipped. Updates terms' offset_id/has_more.
+    Uses optional semaphore to limit concurrency. Returns list of
+    (term_index, response) for successful responses. Failed or exhausted
+    terms are skipped. Updates terms' offset_id/has_more.
     """
     requests = []
     term_indices = []
@@ -91,13 +89,8 @@ async def _gather_global_batch(
     async def _run_with_limits(coro) -> Any:
         if semaphore:
             async with semaphore:
-                if timeout:
-                    return await asyncio.wait_for(coro, timeout=timeout)
                 return await coro
-        else:
-            if timeout:
-                return await asyncio.wait_for(coro, timeout=timeout)
-            return await coro
+        return await coro
 
     wrapped = [_run_with_limits(r) for r in requests]
     responses = await asyncio.gather(*wrapped, return_exceptions=True)
@@ -207,7 +200,6 @@ async def _collect_messages_global(
     seen_keys: set[Any],
     include_chat_entity: bool = True,
     max_concurrent: int | None = None,
-    search_timeout: float | None = None,
 ) -> None:
     """P0-style parallel gather for multi-term global search.
 
@@ -217,7 +209,7 @@ async def _collect_messages_global(
 
     Args:
         max_concurrent: Max parallel requests (None = no semaphore).
-        search_timeout: Per-request timeout in seconds (None = no timeout).
+
     """
     terms = [
         {"query": q, "offset_id": 0, "has_more": True}
@@ -243,7 +235,7 @@ async def _collect_messages_global(
         # Gather search results from all active terms in parallel
         batch_results = await _gather_global_batch(
             client, terms, batch_limit, min_datetime, max_datetime,
-            semaphore=semaphore, timeout=search_timeout,
+            semaphore=semaphore,
         )
 
         if not batch_results:
@@ -375,7 +367,6 @@ async def _handle_query_mode(
                 )
         else:
             max_concurrent = params.get("max_concurrent")
-            search_timeout = params.get("search_timeout")
 
             try:
                 await _collect_messages_global(
@@ -391,7 +382,6 @@ async def _handle_query_mode(
                     seen_keys,
                     include_chat_entity=True,
                     max_concurrent=max_concurrent,
-                    search_timeout=search_timeout,
                 )
             except Exception as e:
                 return _connection_error_or_build(
