@@ -1,0 +1,171 @@
+{
+  "timestamp": "2026-05-30T13:31:18Z",
+  "python_version": "3.14.5 (main, May 11 2026, 23:08:05) [GCC 15.2.0]",
+  "config": {
+    "max_concurrent": 2,
+    "search_timeout": 10.0
+  },
+  "scenarios": {
+    "single_term": {
+      "mean_s": 0.9173,
+      "min_s": 0.6643,
+      "max_s": 1.3213,
+      "median_s": 0.7664,
+      "p90_s": 1.3213,
+      "durations_s": [
+        1.3213,
+        0.6643,
+        0.7664
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "two_terms": {
+      "mean_s": 1.3182,
+      "min_s": 1.1529,
+      "max_s": 1.5563,
+      "median_s": 1.2455,
+      "p90_s": 1.5563,
+      "durations_s": [
+        1.1529,
+        1.2455,
+        1.5563
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "three_terms": {
+      "mean_s": 1.6591,
+      "min_s": 1.3322,
+      "max_s": 2.3125,
+      "median_s": 1.3328,
+      "p90_s": 2.3125,
+      "durations_s": [
+        2.3125,
+        1.3322,
+        1.3328
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "five_terms": {
+      "mean_s": 1.767,
+      "min_s": 1.5563,
+      "max_s": 1.9165,
+      "median_s": 1.8282,
+      "p90_s": 1.9165,
+      "durations_s": [
+        1.8282,
+        1.9165,
+        1.5563
+      ],
+      "results_counts": [
+        10,
+        10,
+        10
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "three_terms_large": {
+      "mean_s": 4.7152,
+      "min_s": 3.9508,
+      "max_s": 5.8779,
+      "median_s": 4.3169,
+      "p90_s": 5.8779,
+      "durations_s": [
+        3.9508,
+        4.3169,
+        5.8779
+      ],
+      "results_counts": [
+        50,
+        50,
+        50
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "dedup_check": {
+      "mean_s": 1.9275,
+      "min_s": 1.7986,
+      "max_s": 2.1352,
+      "median_s": 1.8488,
+      "p90_s": 2.1352,
+      "durations_s": [
+        1.7986,
+        1.8488,
+        2.1352
+      ],
+      "results_counts": [
+        15,
+        15,
+        15
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    },
+    "fairness_check": {
+      "mean_s": 7.7487,
+      "min_s": 6.7764,
+      "max_s": 9.3582,
+      "median_s": 7.1116,
+      "p90_s": 9.3582,
+      "durations_s": [
+        9.3582,
+        7.1116,
+        6.7764
+      ],
+      "results_counts": [
+        20,
+        20,
+        20
+      ],
+      "errors": [
+        null,
+        null,
+        null
+      ],
+      "all_ok": true
+    }
+  }
+}

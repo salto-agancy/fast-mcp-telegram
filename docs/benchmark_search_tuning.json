@@ -1,0 +1,710 @@
+{
+  "analysis_timestamp": "2026-05-30T11:00:00Z",
+  "baseline": {
+    "single_term": 0.891,
+    "two_terms": 1.036,
+    "three_terms": 1.3178,
+    "five_terms": 1.723,
+    "three_terms_large": 4.0851,
+    "dedup_check": 2.1799,
+    "fairness_check": 8.2204
+  },
+  "configs": {
+    "concurrent=2, timeout=10.0": {
+      "single_term": {
+        "median_s": 0.717,
+        "baseline_median_s": 0.891,
+        "improvement_pct": 19.5,
+        "all_ok": true,
+        "durations_s": [
+          0.667,
+          0.717,
+          0.883
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "two_terms": {
+        "median_s": 0.802,
+        "baseline_median_s": 1.036,
+        "improvement_pct": 22.6,
+        "all_ok": true,
+        "durations_s": [
+          0.73,
+          1.819,
+          0.802
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms": {
+        "median_s": 1.15,
+        "baseline_median_s": 1.318,
+        "improvement_pct": 12.7,
+        "all_ok": true,
+        "durations_s": [
+          1.15,
+          0.777,
+          1.468
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "five_terms": {
+        "median_s": 1.708,
+        "baseline_median_s": 1.723,
+        "improvement_pct": 0.9,
+        "all_ok": true,
+        "durations_s": [
+          2.432,
+          1.708,
+          1.603
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms_large": {
+        "median_s": 3.244,
+        "baseline_median_s": 4.085,
+        "improvement_pct": 20.6,
+        "all_ok": true,
+        "durations_s": [
+          3.244,
+          3.145,
+          4.097
+        ],
+        "results_counts": [
+          50,
+          50,
+          50
+        ]
+      },
+      "dedup_check": {
+        "median_s": 1.28,
+        "baseline_median_s": 2.18,
+        "improvement_pct": 41.3,
+        "all_ok": true,
+        "durations_s": [
+          1.4,
+          1.28,
+          1.205
+        ],
+        "results_counts": [
+          15,
+          15,
+          15
+        ]
+      },
+      "fairness_check": {
+        "median_s": 6.115,
+        "baseline_median_s": 8.22,
+        "improvement_pct": 25.6,
+        "all_ok": true,
+        "durations_s": [
+          5.901,
+          6.115,
+          6.919
+        ],
+        "results_counts": [
+          20,
+          20,
+          20
+        ]
+      }
+    },
+    "concurrent=2, timeout=5.0": {
+      "single_term": {
+        "median_s": 0.633,
+        "baseline_median_s": 0.891,
+        "improvement_pct": 28.9,
+        "all_ok": true,
+        "durations_s": [
+          0.633,
+          0.633,
+          0.871
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "two_terms": {
+        "median_s": 0.834,
+        "baseline_median_s": 1.036,
+        "improvement_pct": 19.5,
+        "all_ok": true,
+        "durations_s": [
+          0.716,
+          0.834,
+          0.841
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms": {
+        "median_s": 0.958,
+        "baseline_median_s": 1.318,
+        "improvement_pct": 27.3,
+        "all_ok": true,
+        "durations_s": [
+          0.958,
+          1.007,
+          0.734
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "five_terms": {
+        "median_s": 1.309,
+        "baseline_median_s": 1.723,
+        "improvement_pct": 24.1,
+        "all_ok": true,
+        "durations_s": [
+          1.595,
+          1.309,
+          1.242
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms_large": {
+        "median_s": 3.273,
+        "baseline_median_s": 4.085,
+        "improvement_pct": 19.9,
+        "all_ok": true,
+        "durations_s": [
+          3.373,
+          3.273,
+          2.922
+        ],
+        "results_counts": [
+          50,
+          50,
+          50
+        ]
+      },
+      "dedup_check": {
+        "median_s": 1.478,
+        "baseline_median_s": 2.18,
+        "improvement_pct": 32.2,
+        "all_ok": true,
+        "durations_s": [
+          1.478,
+          1.323,
+          1.956
+        ],
+        "results_counts": [
+          15,
+          15,
+          15
+        ]
+      },
+      "fairness_check": {
+        "median_s": 7.743,
+        "baseline_median_s": 8.22,
+        "improvement_pct": 5.8,
+        "all_ok": true,
+        "durations_s": [
+          7.743,
+          7.977,
+          6.127
+        ],
+        "results_counts": [
+          20,
+          20,
+          20
+        ]
+      }
+    },
+    "concurrent=4, timeout=10.0": {
+      "single_term": {
+        "median_s": 1.021,
+        "baseline_median_s": 0.891,
+        "improvement_pct": -14.6,
+        "all_ok": true,
+        "durations_s": [
+          1.041,
+          0.752,
+          1.021
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "two_terms": {
+        "median_s": 1.108,
+        "baseline_median_s": 1.036,
+        "improvement_pct": -6.9,
+        "all_ok": true,
+        "durations_s": [
+          2.135,
+          0.981,
+          1.108
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms": {
+        "median_s": 1.278,
+        "baseline_median_s": 1.318,
+        "improvement_pct": 3.0,
+        "all_ok": true,
+        "durations_s": [
+          1.139,
+          1.554,
+          1.278
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "five_terms": {
+        "median_s": 1.542,
+        "baseline_median_s": 1.723,
+        "improvement_pct": 10.5,
+        "all_ok": true,
+        "durations_s": [
+          1.542,
+          1.268,
+          2.307
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms_large": {
+        "median_s": 4.183,
+        "baseline_median_s": 4.085,
+        "improvement_pct": -2.4,
+        "all_ok": true,
+        "durations_s": [
+          3.667,
+          4.6,
+          4.183
+        ],
+        "results_counts": [
+          50,
+          50,
+          50
+        ]
+      },
+      "dedup_check": {
+        "median_s": 1.475,
+        "baseline_median_s": 2.18,
+        "improvement_pct": 32.3,
+        "all_ok": true,
+        "durations_s": [
+          1.427,
+          1.709,
+          1.475
+        ],
+        "results_counts": [
+          15,
+          15,
+          15
+        ]
+      },
+      "fairness_check": {
+        "median_s": 6.476,
+        "baseline_median_s": 8.22,
+        "improvement_pct": 21.2,
+        "all_ok": true,
+        "durations_s": [
+          6.476,
+          6.34,
+          6.888
+        ],
+        "results_counts": [
+          20,
+          20,
+          20
+        ]
+      }
+    },
+    "concurrent=4, timeout=5.0": {
+      "single_term": {
+        "median_s": 0.809,
+        "baseline_median_s": 0.891,
+        "improvement_pct": 9.2,
+        "all_ok": true,
+        "durations_s": [
+          0.809,
+          0.824,
+          0.806
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "two_terms": {
+        "median_s": 1.194,
+        "baseline_median_s": 1.036,
+        "improvement_pct": -15.2,
+        "all_ok": true,
+        "durations_s": [
+          1.016,
+          1.194,
+          1.336
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms": {
+        "median_s": 0.953,
+        "baseline_median_s": 1.318,
+        "improvement_pct": 27.7,
+        "all_ok": true,
+        "durations_s": [
+          0.84,
+          1.058,
+          0.953
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "five_terms": {
+        "median_s": 1.794,
+        "baseline_median_s": 1.723,
+        "improvement_pct": -4.1,
+        "all_ok": true,
+        "durations_s": [
+          2.046,
+          1.655,
+          1.794
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms_large": {
+        "median_s": 4.778,
+        "baseline_median_s": 4.085,
+        "improvement_pct": -17.0,
+        "all_ok": true,
+        "durations_s": [
+          4.836,
+          4.778,
+          4.516
+        ],
+        "results_counts": [
+          50,
+          50,
+          50
+        ]
+      },
+      "dedup_check": {
+        "median_s": 2.155,
+        "baseline_median_s": 2.18,
+        "improvement_pct": 1.1,
+        "all_ok": true,
+        "durations_s": [
+          1.948,
+          2.204,
+          2.155
+        ],
+        "results_counts": [
+          15,
+          15,
+          15
+        ]
+      },
+      "fairness_check": {
+        "median_s": 10.066,
+        "baseline_median_s": 8.22,
+        "improvement_pct": -22.5,
+        "all_ok": true,
+        "durations_s": [
+          8.274,
+          11.869,
+          10.066
+        ],
+        "results_counts": [
+          20,
+          20,
+          20
+        ]
+      }
+    },
+    "concurrent=8, timeout=10.0": {
+      "single_term": {
+        "median_s": 0.732,
+        "baseline_median_s": 0.891,
+        "improvement_pct": 17.9,
+        "all_ok": true,
+        "durations_s": [
+          0.735,
+          0.732,
+          0.567
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "two_terms": {
+        "median_s": 0.775,
+        "baseline_median_s": 1.036,
+        "improvement_pct": 25.2,
+        "all_ok": true,
+        "durations_s": [
+          0.721,
+          0.775,
+          1.012
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms": {
+        "median_s": 0.744,
+        "baseline_median_s": 1.318,
+        "improvement_pct": 43.6,
+        "all_ok": true,
+        "durations_s": [
+          0.744,
+          0.972,
+          0.703
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "five_terms": {
+        "median_s": 1.076,
+        "baseline_median_s": 1.723,
+        "improvement_pct": 37.5,
+        "all_ok": true,
+        "durations_s": [
+          0.971,
+          1.076,
+          1.177
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms_large": {
+        "median_s": 3.693,
+        "baseline_median_s": 4.085,
+        "improvement_pct": 9.6,
+        "all_ok": true,
+        "durations_s": [
+          3.068,
+          3.708,
+          3.693
+        ],
+        "results_counts": [
+          50,
+          50,
+          50
+        ]
+      },
+      "dedup_check": {
+        "median_s": 1.553,
+        "baseline_median_s": 2.18,
+        "improvement_pct": 28.8,
+        "all_ok": true,
+        "durations_s": [
+          1.265,
+          1.645,
+          1.553
+        ],
+        "results_counts": [
+          15,
+          15,
+          15
+        ]
+      },
+      "fairness_check": {
+        "median_s": 6.665,
+        "baseline_median_s": 8.22,
+        "improvement_pct": 18.9,
+        "all_ok": true,
+        "durations_s": [
+          6.6,
+          6.665,
+          8.009
+        ],
+        "results_counts": [
+          20,
+          20,
+          20
+        ]
+      }
+    },
+    "concurrent=8, timeout=5.0": {
+      "single_term": {
+        "median_s": 0.873,
+        "baseline_median_s": 0.891,
+        "improvement_pct": 2.0,
+        "all_ok": true,
+        "durations_s": [
+          0.873,
+          1.2,
+          0.849
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "two_terms": {
+        "median_s": 1.104,
+        "baseline_median_s": 1.036,
+        "improvement_pct": -6.6,
+        "all_ok": true,
+        "durations_s": [
+          1.104,
+          1.244,
+          0.95
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms": {
+        "median_s": 0.982,
+        "baseline_median_s": 1.318,
+        "improvement_pct": 25.5,
+        "all_ok": true,
+        "durations_s": [
+          0.982,
+          1.295,
+          0.958
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "five_terms": {
+        "median_s": 1.796,
+        "baseline_median_s": 1.723,
+        "improvement_pct": -4.3,
+        "all_ok": true,
+        "durations_s": [
+          1.182,
+          1.996,
+          1.796
+        ],
+        "results_counts": [
+          10,
+          10,
+          10
+        ]
+      },
+      "three_terms_large": {
+        "median_s": 3.854,
+        "baseline_median_s": 4.085,
+        "improvement_pct": 5.7,
+        "all_ok": true,
+        "durations_s": [
+          5.334,
+          3.412,
+          3.854
+        ],
+        "results_counts": [
+          50,
+          50,
+          50
+        ]
+      },
+      "dedup_check": {
+        "median_s": 1.59,
+        "baseline_median_s": 2.18,
+        "improvement_pct": 27.1,
+        "all_ok": true,
+        "durations_s": [
+          1.771,
+          1.59,
+          1.408
+        ],
+        "results_counts": [
+          15,
+          15,
+          15
+        ]
+      },
+      "fairness_check": {
+        "median_s": 6.416,
+        "baseline_median_s": 8.22,
+        "improvement_pct": 21.9,
+        "all_ok": true,
+        "durations_s": [
+          7.826,
+          6.416,
+          5.699
+        ],
+        "results_counts": [
+          20,
+          20,
+          20
+        ]
+      }
+    }
+  },
+  "ranking": [
+    "concurrent=8, timeout=10.0",
+    "concurrent=2, timeout=5.0",
+    "concurrent=2, timeout=10.0",
+    "concurrent=8, timeout=5.0",
+    "concurrent=4, timeout=10.0",
+    "concurrent=4, timeout=5.0"
+  ],
+  "recommended_defaults": {
+    "max_concurrent": 8,
+    "search_timeout": 10.0
+  }
+}
