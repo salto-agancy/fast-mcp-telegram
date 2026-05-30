@@ -67,6 +67,7 @@ class BenchmarkReport:
     n_clean: int = 0
     n_skipped: int = 0
     n_floodwait_exceeded: int = 0
+    unreliable: bool = False  # n_clean < n_iterations / 2 → results unreliable
 
     @property
     def mean_s(self) -> float:
@@ -114,6 +115,7 @@ def _make_scenario(query: str, limit: int, max_concurrent: int | None):
 def _build_scenarios(max_concurrent: int | None) -> list[tuple[str, Any]]:
     """Build list of (name, callable) pairs for all benchmark scenarios."""
     scenarios = [
+        ("baseline", _make_scenario("__z__", 1, max_concurrent)),
         ("single_term", _make_scenario("недвижимость", 10, max_concurrent)),
         ("two_terms", _make_scenario("недвижимость, инвестиции", 10, max_concurrent)),
         ("three_terms", _make_scenario("недвижимость, инвестиции, сделка", 10, max_concurrent)),
@@ -284,6 +286,14 @@ async def _run_single_scenario(
                 name, i + 1, floodwait_retries, duration,
             )
 
+    # ── Reliability check: >50% iterations must be clean ──
+    if report.n_clean < report.n_iterations / 2:
+        report.unreliable = True
+        logger.warning(
+            "  [%s] UNCLEAN: %d/%d clean iterations — RESULTS UNRELIABLE",
+            name, report.n_clean, report.n_iterations,
+        )
+
     return report
 
 
@@ -298,6 +308,8 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
 
     for r in reports:
         ok = "✅" if r.all_ok else "⚠️"
+        if r.unreliable:
+            ok = "⚠️UNCLEAN"
         results_str = (
             f"{min(r.results_counts)}-{max(r.results_counts)}"
             if min(r.results_counts) != max(r.results_counts)
@@ -333,10 +345,37 @@ def _report_json(reports: list[BenchmarkReport]) -> dict:
                 "n_clean": r.n_clean,
                 "n_skipped": r.n_skipped,
                 "n_floodwait_exceeded": r.n_floodwait_exceeded,
+                "unreliable": r.unreliable,
             }
             for r in reports
         },
     }
+
+
+def _report_cross_run(run_jsons: list[dict]) -> None:
+    """Compare median latencies across multiple runs (run-to-run variance)."""
+    scenarios = list(run_jsons[0]["scenarios"].keys())
+
+    print(f"{'Scenario':30s} {'Runs':>5s} {'Mean(med)':>10s} {'StDev':>7s} {'Min':>7s} {'Max':>7s} {'Spread':>7s}")
+    print("-" * 80)
+
+    for sc in scenarios:
+        medians = []
+        for rj in run_jsons:
+            s = rj["scenarios"].get(sc)
+            if s and s.get("n_clean", 0) > 0:
+                medians.append(s["median_s"])
+
+        if not medians:
+            print(f"{sc:30s} {'0':>5s} {'-':>10s} {'-':>7s} {'-':>7s} {'-':>7s} {'-':>7s}")
+        elif len(medians) == 1:
+            print(f"{sc:30s} {'1':>5d} {medians[0]:>10.4f} {'-':>7s} {'-':>7s} {'-':>7s} {'-':>7s}")
+        else:
+            mean_m = sum(medians) / len(medians)
+            variance = sum((m - mean_m) ** 2 for m in medians) / len(medians)
+            stdev = math.sqrt(variance)
+            spread = max(medians) - min(medians)
+            print(f"{sc:30s} {len(medians):>5d} {mean_m:>10.4f} {stdev:>7.4f} {min(medians):>7.4f} {max(medians):>7.4f} {spread:>7.4f}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────
@@ -395,12 +434,6 @@ async def main() -> int:
         help="Max parallel SearchGlobal requests (default: None = full gather without semaphore)",
     )
     parser.add_argument(
-        "--warmup-iterations",
-        type=int,
-        default=1,
-        help="Number of warmup iterations before measured runs (default: 1)",
-    )
-    parser.add_argument(
         "--delay-between-scenarios",
         type=float,
         default=1.0,
@@ -417,6 +450,18 @@ async def main() -> int:
         type=int,
         default=60,
         help="Max FloodWait seconds to tolerate before giving up (default: 60)",
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=1,
+        help="Number of full sweep runs (default: 1). >1 enables cross-run variance tracking",
+    )
+    parser.add_argument(
+        "--run-cooldown",
+        type=float,
+        default=30.0,
+        help="Delay between runs when --runs > 1 (default: 30.0s)",
     )
     args = parser.parse_args()
     skip = set(args.skip)
@@ -453,74 +498,98 @@ async def main() -> int:
         return 0
 
     # ── Run ─────────────────────────────────────────────────────────────
-    reports: list[BenchmarkReport] = []
     timeout_s = args.timeout
+    all_run_reports: list[dict] = []
 
-    for idx, (name, scenario_fn) in enumerate(scenario_fns):
-        print(f"\n{'='*60}")
-        print(f"Scenario: {name}")
-        print(f"{'='*60}")
+    for run in range(1, args.runs + 1):
+        if run > 1:
+            print(f"\n{'='*60}")
+            print(f"=== Run {run}/{args.runs} ===")
+            print(f"{'='*60}")
 
-        # ── Warmup (discard, triggers initial FloodWait) ──
-        if args.warmup_iterations > 0:
-            print(f"  Warmup ({args.warmup_iterations}x):", end=" ", flush=True)
-            for _ in range(args.warmup_iterations):
-                try:
-                    await scenario_fn()
-                    print(".", end="", flush=True)
-                except Exception:
-                    print("X", end="", flush=True)
-            print(" done")
+        run_reports: list[BenchmarkReport] = []
 
-        # ── Measured run ──
-        try:
-            report = await asyncio.wait_for(
-                _run_single_scenario(
-                    name, scenario_fn, args.iterations, config,
-                    floodwait_max_retry=args.floodwait_max_retry,
-                    floodwait_cap=args.floodwait_cap,
-                ),
-                timeout=timeout_s,
-            )
-            reports.append(report)
-        except asyncio.TimeoutError:
-            print(f"  TIMEOUT after {timeout_s}s — skipping")
-            reports.append(
-                BenchmarkReport(
-                    scenario=name,
-                    n_iterations=0,
-                    durations_s=[],
-                    results_counts=[],
-                    errors=[f"timeout_{timeout_s}s"],
+        for idx, (name, scenario_fn) in enumerate(scenario_fns):
+            print(f"\n{'='*60}")
+            print(f"Scenario: {name}")
+            print(f"{'='*60}")
+
+            try:
+                report = await asyncio.wait_for(
+                    _run_single_scenario(
+                        name, scenario_fn, args.iterations, config,
+                        floodwait_max_retry=args.floodwait_max_retry,
+                        floodwait_cap=args.floodwait_cap,
+                    ),
+                    timeout=timeout_s,
                 )
-            )
+                run_reports.append(report)
+            except asyncio.TimeoutError:
+                print(f"  TIMEOUT after {timeout_s}s — skipping")
+                run_reports.append(
+                    BenchmarkReport(
+                        scenario=name,
+                        n_iterations=0,
+                        durations_s=[],
+                        results_counts=[],
+                        errors=[f"timeout_{timeout_s}s"],
+                    )
+                )
 
-        # ── Cooldown delay before next scenario ──
-        if idx < len(scenario_fns) - 1 and args.delay_between_scenarios > 0:
-            print(f"  Cooling down {args.delay_between_scenarios}s...")
-            await asyncio.sleep(args.delay_between_scenarios)
+            # ── Cooldown delay before next scenario ──
+            if idx < len(scenario_fns) - 1 and args.delay_between_scenarios > 0:
+                print(f"  Cooling down {args.delay_between_scenarios}s...")
+                await asyncio.sleep(args.delay_between_scenarios)
 
-    # ── Report ──────────────────────────────────────────────────────────
-    print(f"\n{'='*60}")
-    print(f"BENCHMARK RESULTS (max_concurrent={args.max_concurrent})")
-    print(f"{'='*60}\n")
-    print(_report_table(reports))
+        # ── Per-run report ──
+        print(f"\n{'='*60}")
+        print(f"Run {run} RESULTS (max_concurrent={args.max_concurrent})")
+        print(f"{'='*60}\n")
+        print(_report_table(run_reports))
 
-    json_data = _report_json(reports)
-    print(f"\n{'='*60}")
-    print("JSON summary")
-    print(f"{'='*60}")
-    compact = deepcopy(json_data)
-    for s in compact["scenarios"].values():
-        del s["durations_s"]
-        del s["results_counts"]
-        del s["errors"]
-    print(json.dumps(compact, indent=2, ensure_ascii=False))
+        # Unreliable scenarios warning
+        unreliable_scenarios = [r.scenario for r in run_reports if r.unreliable]
+        if unreliable_scenarios:
+            print(f"\n⚠️ Unreliable: {', '.join(unreliable_scenarios)} (n_clean < {args.iterations}/2)")
 
-    if args.output:
-        out_path = Path(args.output)
-        out_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False))
-        print(f"\nFull report saved to: {out_path.resolve()}")
+        json_data = _report_json(run_reports)
+        all_run_reports.append(json_data)
+
+        # Compact JSON
+        print(f"\n{'='*60}")
+        print("JSON summary")
+        print(f"{'='*60}")
+        compact = deepcopy(json_data)
+        for s in compact["scenarios"].values():
+            del s["durations_s"]
+            del s["results_counts"]
+            del s["errors"]
+            if s.get("unreliable"):
+                s["unreliable"] = True
+        print(json.dumps(compact, indent=2, ensure_ascii=False))
+
+        # Save per-run JSON
+        if args.output:
+            if args.runs > 1:
+                stem = Path(args.output).stem
+                suffix = Path(args.output).suffix
+                out_path = Path(args.output).parent / f"{stem}_run{run}{suffix}"
+            else:
+                out_path = Path(args.output)
+            out_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False))
+            print(f"\nFull report saved to: {out_path.resolve()}")
+
+        # Cross-run cooldown
+        if run < args.runs:
+            print(f"\nCross-run cooldown {args.run_cooldown}s...")
+            await asyncio.sleep(args.run_cooldown)
+
+    # ── Cross-run comparison ──
+    if args.runs > 1:
+        print(f"\n{'='*60}")
+        print(f"CROSS-RUN COMPARISON ({args.runs} runs, cooldown={args.run_cooldown}s)")
+        print(f"{'='*60}")
+        _report_cross_run(all_run_reports)
 
     return 0
 
