@@ -119,13 +119,11 @@ async def scenario_global_single(
     query: str = "Андрей",
     limit: int = 10,
     max_concurrent: int | None = None,
-    search_timeout: float | None = None,
 ) -> dict:
     """Standard single-term global Telegram search."""
     result = await find_chats_impl(
         query=query, limit=limit,
         max_concurrent=max_concurrent,
-        search_timeout=search_timeout,
     )
     return result
 
@@ -134,13 +132,11 @@ async def scenario_global_multi(
     query: str = "Андрей, Сергей, Роман",
     limit: int = 10,
     max_concurrent: int | None = None,
-    search_timeout: float | None = None,
 ) -> dict:
     """Multi-term global Telegram search — the parallelization optimization target."""
     result = await find_chats_impl(
         query=query, limit=limit,
         max_concurrent=max_concurrent,
-        search_timeout=search_timeout,
     )
     return result
 
@@ -210,7 +206,6 @@ async def scenario_multi_dedup(
     query: str = "Андрей, a",
     limit: int = 10,
     max_concurrent: int | None = None,
-    search_timeout: float | None = None,
 ) -> dict:
     """Multi-term search — validate no duplicate IDs from overlapping terms.
 
@@ -219,7 +214,6 @@ async def scenario_multi_dedup(
     result = await find_chats_impl(
         query=query, limit=limit,
         max_concurrent=max_concurrent,
-        search_timeout=search_timeout,
     )
     if "error" in result:
         return result
@@ -243,7 +237,6 @@ async def scenario_multi_fairness(
     query: str = "Роман, Кирилл, Евгений",
     limit: int = 15,
     max_concurrent: int | None = None,
-    search_timeout: float | None = None,
 ) -> dict:
     """Multi-term search — validate results from ALL terms present.
 
@@ -253,7 +246,6 @@ async def scenario_multi_fairness(
     result = await find_chats_impl(
         query=query, limit=limit,
         max_concurrent=max_concurrent,
-        search_timeout=search_timeout,
     )
     if "error" in result:
         return result
@@ -291,7 +283,6 @@ async def scenario_multi_partial(
     query: str = "asdfghjkl12345xyz999, Андрей",
     limit: int = 10,
     max_concurrent: int | None = None,
-    search_timeout: float | None = None,
 ) -> dict:
     """Multi-term search with one failing term — validate graceful degradation.
 
@@ -301,7 +292,6 @@ async def scenario_multi_partial(
     result = await find_chats_impl(
         query=query, limit=limit,
         max_concurrent=max_concurrent,
-        search_timeout=search_timeout,
     )
     if "error" in result:
         # Partial failure is OK if the good term's results are present
@@ -416,14 +406,13 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
     return "\n".join(lines)
 
 
-def _report_json(reports: list[BenchmarkReport], *, max_concurrent: int | None = None, search_timeout: float | None = None) -> dict:
+def _report_json(reports: list[BenchmarkReport], *, max_concurrent: int | None = None) -> dict:
     """Convert reports to a JSON-serializable dict."""
     return {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "python_version": sys.version,
         "config": {
             "max_concurrent": max_concurrent,
-            "search_timeout": search_timeout,
         },
         "scenarios": {
             r.scenario: {
@@ -499,12 +488,6 @@ async def main() -> int:
         help="Maximum concurrent search requests for multi-term queries (default: no limit)",
     )
     parser.add_argument(
-        "--search-timeout",
-        type=float,
-        default=None,
-        help="Per-request timeout in seconds for multi-term queries (default: no timeout)",
-    )
-    parser.add_argument(
         "--randomize-order",
         action="store_true",
         default=False,
@@ -528,15 +511,15 @@ async def main() -> int:
 
     # ── Scenario factory ────────────────────────────────────────────────
     scenarios = [
-        ("global_single", lambda: scenario_global_single(limit=10, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
-        ("global_multi", lambda: scenario_global_multi(limit=10, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
+        ("global_single", lambda: scenario_global_single(limit=10, max_concurrent=args.max_concurrent)),
+        ("global_multi", lambda: scenario_global_multi(limit=10, max_concurrent=args.max_concurrent)),
         ("date_browse", lambda: scenario_date_browse(limit=20)),
         ("date_search", lambda: scenario_date_search(limit=10)),
         ("folder_include", lambda: scenario_folder_include(folder_name=args.folder_name, limit=20)),
         ("folder_flags", lambda: scenario_folder_flags(folder_name=args.folder_name, limit=10)),
-        ("multi_dedup", lambda: scenario_multi_dedup(limit=10, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
-        ("multi_fairness", lambda: scenario_multi_fairness(limit=15, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
-        ("multi_partial", lambda: scenario_multi_partial(limit=10, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)),
+        ("multi_dedup", lambda: scenario_multi_dedup(limit=10, max_concurrent=args.max_concurrent)),
+        ("multi_fairness", lambda: scenario_multi_fairness(limit=15, max_concurrent=args.max_concurrent)),
+        ("multi_partial", lambda: scenario_multi_partial(limit=10, max_concurrent=args.max_concurrent)),
     ]
 
     # Filter
@@ -585,7 +568,7 @@ async def main() -> int:
     print(f"{'='*60}\n")
     print(_report_table(reports))
 
-    json_data = _report_json(reports, max_concurrent=args.max_concurrent, search_timeout=args.search_timeout)
+    json_data = _report_json(reports, max_concurrent=args.max_concurrent)
     print(f"\n{'='*60}")
     print("JSON summary")
     print(f"{'='*60}")

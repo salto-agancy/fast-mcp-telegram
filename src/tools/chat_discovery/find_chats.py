@@ -20,7 +20,6 @@ from .include_peers import _find_chats_by_include_peers
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_CONCURRENT: int = 2
-_DEFAULT_SEARCH_TIMEOUT: float = 10.0
 
 
 async def find_chats_impl(
@@ -32,7 +31,6 @@ async def find_chats_impl(
     max_date: str | None = None,
     folder: str | None = None,
     max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
-    search_timeout: float | None = _DEFAULT_SEARCH_TIMEOUT,
 ) -> dict[str, Any]:
     """
     High-level contacts search with support for comma-separated multi-term queries.
@@ -52,7 +50,6 @@ async def find_chats_impl(
                 for flag-based folders, dialog last activity uses dialog top-message date (early skip)
                 or a history fallback when needed.
         max_concurrent: Maximum concurrent search requests for multi-term queries (default: 2)
-        search_timeout: Per-request timeout in seconds for multi-term queries (default: 10.0)
 
     Returns:
         Dict with "chats" key containing list of matches, or standardized error dict
@@ -126,7 +123,6 @@ async def find_chats_impl(
         chat_type=chat_type,
         public=public,
         max_concurrent=max_concurrent,
-        search_timeout=search_timeout,
     )
     return {"chats": result} if isinstance(result, list) else result
 
@@ -137,7 +133,6 @@ async def _find_chats_global(
     chat_type: str | None,
     public: bool | None,
     max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
-    search_timeout: float | None = _DEFAULT_SEARCH_TIMEOUT,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     """Global Telegram search without date filtering."""
     normalized_query = query or ""
@@ -149,7 +144,7 @@ async def _find_chats_global(
         )
         return {"chats": result} if isinstance(result, list) else result
 
-    return await _find_chats_global_multi_term(terms, limit, chat_type, public, max_concurrent, search_timeout)
+    return await _find_chats_global_multi_term(terms, limit, chat_type, public, max_concurrent)
 
 
 async def _gather_term_results(
@@ -158,34 +153,23 @@ async def _gather_term_results(
     chat_type: str | None,
     public: bool | None,
     max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
-    search_timeout: float | None = _DEFAULT_SEARCH_TIMEOUT,
 ) -> tuple[list[list[dict[str, Any]]] | None, tuple[str, ...]]:
-    """Execute all term searches with optional concurrency limit and per-request timeout.
+    """Execute all term searches with optional concurrency limit.
 
     Uses asyncio.Semaphore when max_concurrent is set to throttle concurrent requests.
-    Uses asyncio.wait_for when search_timeout is set to bound each request.
-    Falls back to bare asyncio.gather when neither is set (original behavior).
+    Falls back to bare asyncio.gather when max_concurrent is None (original behavior).
 
     Returns (term_results, errors) where term_results is None if no term succeeded.
     """
     semaphore = asyncio.Semaphore(max_concurrent) if max_concurrent else None
 
     async def _run_with_limits(term: str) -> list[dict[str, Any]] | dict[str, Any]:
-        """Run a single term search, applying semaphore and timeout if configured."""
+        """Run a single term search, applying semaphore if configured."""
         coro = _search_contacts_as_list(term, limit, chat_type, public)
-
-        async def _execute() -> list[dict[str, Any]] | dict[str, Any]:
-            if semaphore:
-                async with semaphore:
-                    if search_timeout:
-                        return await asyncio.wait_for(coro, timeout=search_timeout)
-                    return await coro
-            else:
-                if search_timeout:
-                    return await asyncio.wait_for(coro, timeout=search_timeout)
+        if semaphore:
+            async with semaphore:
                 return await coro
-
-        return await _execute()
+        return await coro
 
     tasks = [_run_with_limits(term) for term in terms]
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -243,7 +227,6 @@ async def _find_chats_global_multi_term(
     chat_type: str | None,
     public: bool | None,
     max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
-    search_timeout: float | None = _DEFAULT_SEARCH_TIMEOUT,
 ) -> dict[str, Any]:
     """
     Multi-term global search using parallel gather + round-robin merge.
@@ -254,7 +237,7 @@ async def _find_chats_global_multi_term(
     Deduplicates by entity ID.
     """
     term_results, failed_terms = await _gather_term_results(
-        terms, limit, chat_type, public, max_concurrent, search_timeout
+        terms, limit, chat_type, public, max_concurrent
     )
     if term_results is None:
         error_detail = (
