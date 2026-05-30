@@ -493,6 +493,18 @@ async def main() -> int:
         default=False,
         help="Randomize scenario execution order (default: false)",
     )
+    parser.add_argument(
+        "--warmup-iterations",
+        type=int,
+        default=1,
+        help="Number of warmup iterations before measured runs (default: 1)",
+    )
+    parser.add_argument(
+        "--delay-between-scenarios",
+        type=float,
+        default=1.0,
+        help="Delay in seconds between scenarios to let FloodWait cool down (default: 1.0)",
+    )
     args = parser.parse_args()
     skip = set(args.skip)
     only = set(args.only)
@@ -539,11 +551,23 @@ async def main() -> int:
     reports: list[BenchmarkReport] = []
     timeout_s = args.timeout
 
-    for name, scenario_fn in scenarios:
+    for idx, (name, scenario_fn) in enumerate(scenarios):
         print(f"\n{'='*60}")
         print(f"Scenario: {name}")
         print(f"{'='*60}")
 
+        # ── Warmup (discard, triggers initial FloodWait) ──
+        if args.warmup_iterations > 0:
+            print(f"  Warmup ({args.warmup_iterations}x):", end=" ", flush=True)
+            for _ in range(args.warmup_iterations):
+                try:
+                    await scenario_fn()
+                    print(".", end="", flush=True)
+                except Exception:
+                    print("X", end="", flush=True)
+            print(" done")
+
+        # ── Measured run ──
         try:
             report = await asyncio.wait_for(
                 _run_single_scenario(name, scenario_fn, args.iterations),
@@ -561,6 +585,11 @@ async def main() -> int:
                     errors=[f"timeout_{timeout_s}s"],
                 )
             )
+
+        # ── Cooldown delay before next scenario ──
+        if idx < len(scenarios) - 1 and args.delay_between_scenarios > 0:
+            print(f"  Cooling down {args.delay_between_scenarios}s...")
+            await asyncio.sleep(args.delay_between_scenarios)
 
     # ── Report ──────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
