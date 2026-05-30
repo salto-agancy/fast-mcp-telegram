@@ -747,3 +747,7 @@ def _report_cross_run(run_jsons: list[dict]) -> None:
             stdev = math.sqrt(variance)
             spread = max(medians) - min(medians)
             print(f"{sc:30s} {len(medians):>5d} {mean_m:>10.4f} {stdev:>7.4f} {min(medians):>7.4f} {max(medians):>7.4f} {spread:>7.4f}")
+
+
+if __name__ == "__main__":
+    exit(asyncio.run(main()))
