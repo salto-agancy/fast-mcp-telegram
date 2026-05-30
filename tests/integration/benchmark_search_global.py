@@ -110,17 +110,17 @@ def _make_scenario(query: str, limit: int, max_concurrent: int | None,
 def _build_scenarios(max_concurrent: int | None, search_timeout: float | None) -> list[tuple[str, Any]]:
     """Build list of (name, callable) pairs for all benchmark scenarios."""
     scenarios = [
-        ("single_term", _make_scenario("alexey", 10, max_concurrent, search_timeout)),
-        ("two_terms", _make_scenario("alexey, test", 10, max_concurrent, search_timeout)),
-        ("three_terms", _make_scenario("alexey, test, channel", 10, max_concurrent, search_timeout)),
-        ("five_terms", _make_scenario("alexey, test, channel, bot, group", 10, max_concurrent, search_timeout)),
-        ("three_terms_large", _make_scenario("alexey, test, channel", 50, max_concurrent, search_timeout)),
+        ("single_term", _make_scenario("недвижимость", 10, max_concurrent, search_timeout)),
+        ("two_terms", _make_scenario("недвижимость, инвестиции", 10, max_concurrent, search_timeout)),
+        ("three_terms", _make_scenario("недвижимость, инвестиции, сделка", 10, max_concurrent, search_timeout)),
+        ("five_terms", _make_scenario("недвижимость, инвестиции, объект, проект, сделка", 10, max_concurrent, search_timeout)),
+        ("three_terms_large", _make_scenario("недвижимость, инвестиции, сделка", 50, max_concurrent, search_timeout)),
     ]
 
     # Dedup check — validates no duplicate IDs from overlapping terms
     async def _dedup():
         result = await search_messages_impl(
-            query="alexey, alex, alexander", limit=15,
+            query="недвижимость, сделка, недвижимость", limit=15,
             max_concurrent=max_concurrent,
             search_timeout=search_timeout,
         )
@@ -145,14 +145,14 @@ def _build_scenarios(max_concurrent: int | None, search_timeout: float | None) -
     # Fairness check — validates results from all terms are represented
     async def _fairness():
         result = await search_messages_impl(
-            query="test, channel, bot", limit=20,
+            query="недвижимость, инвестиции, сделка", limit=20,
             max_concurrent=max_concurrent,
             search_timeout=search_timeout,
         )
         if "error" in result:
             return result
         messages = result.get("messages", [])
-        terms = [t.strip() for t in "test, channel, bot".split(",")]
+        terms = [t.strip() for t in "недвижимость, инвестиции, сделка".split(",")]
         per_term = {}
         for term in terms:
             tr = await search_messages_impl(query=term, limit=20)
@@ -192,7 +192,7 @@ async def _warmup(client) -> None:
 
     # Practice search to warm MTProto cache
     try:
-        result = await search_messages_impl(query="test", limit=1)
+        result = await search_messages_impl(query="недвижимость", limit=1)
         logger.info("Warmup search: %s", "OK" if "error" not in result else result.get("error"))
     except Exception as e:
         logger.info("Warmup search (optional): %s", e)
