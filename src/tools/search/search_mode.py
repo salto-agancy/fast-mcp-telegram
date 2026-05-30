@@ -21,7 +21,7 @@ from .search_generators import _search_chat_messages_generator
 logger = logging.getLogger(__name__)
 
 # Default semaphore limits for global search parallelization
-_DEFAULT_MAX_CONCURRENT: int = 4
+_DEFAULT_MAX_CONCURRENT: int = 2
 _DEFAULT_SEARCH_TIMEOUT: float = 10.0
 
 
