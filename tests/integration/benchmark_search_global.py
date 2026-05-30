@@ -5,8 +5,8 @@ Benchmark suite for search_global and get_messages multi-term optimization.
 Tests performance of comma-separated multi-term queries in both
 global search (SearchGlobalRequest) and in-chat search (iter_messages).
 
-Supports configurable semaphore (--max-concurrent) and per-request timeout
-    uv run python3 tests/integration/benchmark_search_global.py --iterations 5
+Supports configurable semaphore (--max-concurrent) for the gather-based parallelization.
+
 """
 import argparse
 import asyncio
@@ -114,7 +114,6 @@ def _build_scenarios(max_concurrent: int | None) -> list[tuple[str, Any]]:
         result = await search_messages_impl(
             query="недвижимость, сделка, недвижимость", limit=15,
             max_concurrent=max_concurrent,
-
         )
         if "error" in result:
             return result
@@ -139,7 +138,6 @@ def _build_scenarios(max_concurrent: int | None) -> list[tuple[str, Any]]:
         result = await search_messages_impl(
             query="недвижимость, инвестиции, сделка", limit=20,
             max_concurrent=max_concurrent,
-
         )
         if "error" in result:
             return result
@@ -346,3 +344,120 @@ async def main() -> int:
         default=None,
         help="Max parallel SearchGlobal requests (default: None = full gather without semaphore)",
     )
+    parser.add_argument(
+        "--warmup-iterations",
+        type=int,
+        default=1,
+        help="Number of warmup iterations before measured runs (default: 1)",
+    )
+    parser.add_argument(
+        "--delay-between-scenarios",
+        type=float,
+        default=1.0,
+        help="Delay in seconds between scenarios to let FloodWait cool down (default: 1.0)",
+    )
+    args = parser.parse_args()
+    skip = set(args.skip)
+    only = set(args.only)
+
+    config = {
+        "max_concurrent": args.max_concurrent,
+    }
+
+    # ── Connect ────────────────────────────────────────────────────────
+    print("Connecting to Telegram...", end=" ", flush=True)
+    try:
+        if args.bearer_token:
+            set_request_token(args.bearer_token)
+        client = await get_connected_client()
+        await _warmup(client)
+        print("OK")
+    except Exception as e:
+        print(f"FAILED: {e}")
+        return 1
+
+    # ── Build scenarios with config ───────────────────────────────────
+    scenario_fns = _build_scenarios(
+        max_concurrent=args.max_concurrent,
+    )
+
+    # Filter
+    if only:
+        scenario_fns = [(n, fn) for n, fn in scenario_fns if n in only]
+    scenario_fns = [(n, fn) for n, fn in scenario_fns if n not in skip]
+
+    if not scenario_fns:
+        print("No scenarios to run (all filtered out)")
+        return 0
+
+    # ── Run ─────────────────────────────────────────────────────────────
+    reports: list[BenchmarkReport] = []
+    timeout_s = args.timeout
+
+    for idx, (name, scenario_fn) in enumerate(scenario_fns):
+        print(f"\n{'='*60}")
+        print(f"Scenario: {name}")
+        print(f"{'='*60}")
+
+        # ── Warmup (discard, triggers initial FloodWait) ──
+        if args.warmup_iterations > 0:
+            print(f"  Warmup ({args.warmup_iterations}x):", end=" ", flush=True)
+            for _ in range(args.warmup_iterations):
+                try:
+                    await scenario_fn()
+                    print(".", end="", flush=True)
+                except Exception:
+                    print("X", end="", flush=True)
+            print(" done")
+
+        # ── Measured run ──
+        try:
+            report = await asyncio.wait_for(
+                _run_single_scenario(name, scenario_fn, args.iterations, config),
+                timeout=timeout_s,
+            )
+            reports.append(report)
+        except asyncio.TimeoutError:
+            print(f"  TIMEOUT after {timeout_s}s — skipping")
+            reports.append(
+                BenchmarkReport(
+                    scenario=name,
+                    n_iterations=0,
+                    durations_s=[],
+                    results_counts=[],
+                    errors=[f"timeout_{timeout_s}s"],
+                )
+            )
+
+        # ── Cooldown delay before next scenario ──
+        if idx < len(scenario_fns) - 1 and args.delay_between_scenarios > 0:
+            print(f"  Cooling down {args.delay_between_scenarios}s...")
+            await asyncio.sleep(args.delay_between_scenarios)
+
+    # ── Report ──────────────────────────────────────────────────────────
+    print(f"\n{'='*60}")
+    print(f"BENCHMARK RESULTS (max_concurrent={args.max_concurrent})")
+    print(f"{'='*60}\n")
+    print(_report_table(reports))
+
+    json_data = _report_json(reports)
+    print(f"\n{'='*60}")
+    print("JSON summary")
+    print(f"{'='*60}")
+    compact = deepcopy(json_data)
+    for s in compact["scenarios"].values():
+        del s["durations_s"]
+        del s["results_counts"]
+        del s["errors"]
+    print(json.dumps(compact, indent=2, ensure_ascii=False))
+
+    if args.output:
+        out_path = Path(args.output)
+        out_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False))
+        print(f"\nFull report saved to: {out_path.resolve()}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    exit(asyncio.run(main()))
