@@ -1,8 +1,12 @@
 """Query and browse mode for get_messages (MessageRetrievalMode.SEARCH)."""
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
+
+from telethon.tl.functions.messages import SearchGlobalRequest
+from telethon.tl.types import InputMessagesFilterEmpty, InputPeerEmpty
 
 from src.client.connection import get_connected_client
 from src.utils.datetime_parse import parse_iso_datetime_utc
@@ -11,10 +15,8 @@ from src.utils.error_handling import log_and_build_error, log_connection_error_r
 from src.utils.helpers import _append_dedup_until_limit
 from src.utils.message_format import transcribe_voice_messages
 
-from .search_generators import (
-    _search_chat_messages_generator,
-    _search_global_messages_generator,
-)
+from . import results
+from .search_generators import _search_chat_messages_generator
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,122 @@ async def _execute_parallel_searches_generators(
                 continue
 
         active_gens = next_active
+
+
+async def _gather_global_results(
+    client,
+    terms: list[dict],
+    batch_limit: int,
+    min_datetime: datetime | None,
+    max_datetime: datetime | None,
+    chat_type: str | None,
+    public: bool | None,
+    include_chat_entity: bool,
+) -> list[list[dict[str, Any]]]:
+    """Execute SearchGlobalRequest for all active terms in parallel.
+
+    Returns a list of per-term message result lists (one per active term).
+    Exhausted/failed terms return empty lists.
+    """
+    from src.utils.entity import _matches_chat_type, _matches_public_filter
+
+    requests = []
+    for ts in terms:
+        if not ts["has_more"]:
+            continue
+        req = SearchGlobalRequest(
+            q=ts["query"],
+            filter=InputMessagesFilterEmpty(),
+            min_date=min_datetime,
+            max_date=max_datetime,
+            offset_rate=0,
+            offset_peer=InputPeerEmpty(),
+            offset_id=ts["offset_id"],
+            limit=batch_limit,
+        )
+        requests.append(client(req))
+
+    if not requests:
+        return [[] for _ in terms]
+
+    responses = await asyncio.gather(*requests, return_exceptions=True)
+
+    term_results: list[list[dict[str, Any]]] = []
+    resp_idx = 0
+    for ts in terms:
+        if not ts["has_more"]:
+            term_results.append([])
+            continue
+
+        response = responses[resp_idx]
+        resp_idx += 1
+
+        if isinstance(response, Exception):
+            logger.warning(
+                "SearchGlobalRequest error for term '%s': %s",
+                ts["query"],
+                response,
+            )
+            ts["has_more"] = False
+            term_results.append([])
+            continue
+
+        if not hasattr(response, "messages") or not response.messages:
+            ts["has_more"] = False
+            term_results.append([])
+            continue
+
+        messages = []
+        for message in response.messages:
+            try:
+                chat = await get_entity_by_id(message.peer_id)
+                if not chat:
+                    logger.warning(
+                        f"Could not get entity for peer_id: {message.peer_id}"
+                    )
+                    continue
+
+                if not _matches_chat_type(chat, chat_type):
+                    continue
+
+                if not _matches_public_filter(chat, public):
+                    continue
+
+                msg_result = await results._build_result_for_message(
+                    client, message, chat, include_chat_entity
+                )
+                if msg_result:
+                    messages.append(msg_result)
+
+            except Exception as e:
+                logger.warning(f"Error processing message: {e}")
+                continue
+
+        term_results.append(messages)
+
+        # Update offset_id for pagination
+        if response.messages:
+            ts["offset_id"] = response.messages[-1].id
+        else:
+            ts["has_more"] = False
+
+    return term_results
+
+
+def _merge_messages_round_robin(
+    term_results: list[list[dict[str, Any]]],
+    collected: list[dict[str, Any]],
+    seen_keys: set[Any],
+    target_limit: int,
+) -> None:
+    """Round-robin merge messages from all terms, deduplicating by seen_keys."""
+    max_len = max((len(r) for r in term_results), default=0)
+    for i in range(max_len):
+        for tl in term_results:
+            if i < len(tl):
+                _append_dedup_until_limit(collected, seen_keys, [tl[i]], target_limit)
+                if len(collected) >= target_limit:
+                    return
 
 
 async def _collect_messages_in_chat(
@@ -97,22 +215,50 @@ async def _collect_messages_global(
     seen_keys: set[Any],
     include_chat_entity: bool = True,
 ) -> None:
-    generators = [
-        _search_global_messages_generator(
+    """P0-style parallel gather for multi-term global search.
+
+    Replaces round-robin generator pattern with asyncio.gather
+    for SearchGlobalRequest calls. Runs all term searches
+    in parallel per batch, then round-robin merges results.
+    """
+    terms = [
+        {"query": q, "offset_id": 0, "has_more": True}
+        for q in queries
+        if q and str(q).strip()
+    ]
+    if not terms:
+        return
+
+    batch_limit = min(limit * 2, 50)
+    max_batches = 1 + (auto_expand_batches if chat_type else 0)
+    target_limit = limit + 1
+
+    for _batch_idx in range(max_batches):
+        if len(collected) >= target_limit:
+            break
+        if not any(ts["has_more"] for ts in terms):
+            break
+
+        term_results = await _gather_global_results(
             client,
-            q,
-            limit,
+            terms,
+            batch_limit,
             min_datetime,
             max_datetime,
             chat_type,
             public,
-            auto_expand_batches,
             include_chat_entity,
         )
-        for q in queries
-        if q and str(q).strip()
-    ]
-    await _execute_parallel_searches_generators(generators, collected, seen_keys, limit)
+
+        _merge_messages_round_robin(
+            term_results,
+            collected,
+            seen_keys,
+            target_limit,
+        )
+
+        if len(collected) >= target_limit:
+            break
 
 
 async def _handle_query_mode(
