@@ -20,6 +20,10 @@ from .search_generators import _search_chat_messages_generator
 
 logger = logging.getLogger(__name__)
 
+# Default semaphore limits for global search parallelization
+_DEFAULT_MAX_CONCURRENT: int = 4
+_DEFAULT_SEARCH_TIMEOUT: float = 10.0
+
 
 async def _execute_parallel_searches_generators(
     generators: list, collected: list[dict[str, Any]], seen_keys: set, limit: int
@@ -53,10 +57,13 @@ async def _gather_global_batch(
     batch_limit: int,
     min_datetime: datetime | None,
     max_datetime: datetime | None,
+    semaphore: asyncio.Semaphore | None = None,
+    timeout: float | None = None,
 ) -> list[tuple[int, Any]]:
     """Execute SearchGlobalRequest for all active terms in parallel.
 
-    Returns list of (term_index, response) for successful responses.
+    Uses optional semaphore to limit concurrency and optional per-request
+    timeout. Returns list of (term_index, response) for successful responses.
     Failed or exhausted terms are skipped. Updates terms' offset_id/has_more.
     """
     requests = []
@@ -80,7 +87,20 @@ async def _gather_global_batch(
     if not requests:
         return []
 
-    responses = await asyncio.gather(*requests, return_exceptions=True)
+    # Wrap requests with optional semaphore
+    async def _run_with_limits(coro) -> Any:
+        if semaphore:
+            async with semaphore:
+                if timeout:
+                    return await asyncio.wait_for(coro, timeout=timeout)
+                return await coro
+        else:
+            if timeout:
+                return await asyncio.wait_for(coro, timeout=timeout)
+            return await coro
+
+    wrapped = [_run_with_limits(r) for r in requests]
+    responses = await asyncio.gather(*wrapped, return_exceptions=True)
 
     results: list[tuple[int, Any]] = []
     for req_idx, term_idx in enumerate(term_indices):
@@ -186,12 +206,18 @@ async def _collect_messages_global(
     collected: list[dict[str, Any]],
     seen_keys: set[Any],
     include_chat_entity: bool = True,
+    max_concurrent: int | None = None,
+    search_timeout: float | None = None,
 ) -> None:
     """P0-style parallel gather for multi-term global search.
 
     Runs SearchGlobalRequest for all terms in parallel per batch,
     then lazily processes and round-robin merges results (only
     processes as many messages as needed for target_limit).
+
+    Args:
+        max_concurrent: Max parallel requests (None = no semaphore).
+        search_timeout: Per-request timeout in seconds (None = no timeout).
     """
     terms = [
         {"query": q, "offset_id": 0, "has_more": True}
@@ -205,6 +231,9 @@ async def _collect_messages_global(
     max_batches = 1 + (auto_expand_batches if chat_type else 0)
     target_limit = limit + 1
 
+    # Create optional semaphore for concurrency limiting
+    semaphore = asyncio.Semaphore(max_concurrent) if max_concurrent else None
+
     for _batch_idx in range(max_batches):
         if len(collected) >= target_limit:
             break
@@ -214,6 +243,7 @@ async def _collect_messages_global(
         # Gather search results from all active terms in parallel
         batch_results = await _gather_global_batch(
             client, terms, batch_limit, min_datetime, max_datetime,
+            semaphore=semaphore, timeout=search_timeout,
         )
 
         if not batch_results:
@@ -344,6 +374,9 @@ async def _handle_query_mode(
                     e, f"Failed to search in chat '{chat_id}': {e!s}"
                 )
         else:
+            max_concurrent = params.get("max_concurrent")
+            search_timeout = params.get("search_timeout")
+
             try:
                 await _collect_messages_global(
                     client,
@@ -357,6 +390,8 @@ async def _handle_query_mode(
                     collected,
                     seen_keys,
                     include_chat_entity=True,
+                    max_concurrent=max_concurrent,
+                    search_timeout=search_timeout,
                 )
             except Exception as e:
                 return _connection_error_or_build(
