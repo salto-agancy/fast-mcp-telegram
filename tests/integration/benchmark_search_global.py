@@ -5,12 +5,13 @@ Benchmark suite for search_global and get_messages multi-term optimization.
 Tests performance of comma-separated multi-term queries in both
 global search (SearchGlobalRequest) and in-chat search (iter_messages).
 
-The P0-style optimization replaces round-robin generator iteration
-with asyncio.gather, measuring wall-clock time improvement.
+Supports configurable semaphore (--max-concurrent) and per-request timeout
+(--search-timeout) for the gather-based parallelization.
 
 Usage:
     uv run python3 tests/integration/benchmark_search_global.py
-    uv run python3 tests/integration/benchmark_search_global.py --output results.json
+    uv run python3 tests/integration/benchmark_search_global.py \
+        --max-concurrent 4 --search-timeout 10 --output results.json
     uv run python3 tests/integration/benchmark_search_global.py --iterations 5
 """
 import argparse
@@ -59,6 +60,7 @@ class BenchmarkReport:
     durations_s: list[float] = field(default_factory=list)
     results_counts: list[int] = field(default_factory=list)
     errors: list[str | None] = field(default_factory=list)
+    config: dict[str, Any] = field(default_factory=dict)
 
     @property
     def mean_s(self) -> float:
@@ -92,7 +94,95 @@ class BenchmarkReport:
         return all(e is None for e in self.errors)
 
 
-# ── Scenario definitions ───────────────────────────────────────────────────
+# ── Scenario factory ────────────────────────────────────────────────────────
+
+
+def _make_scenario(query: str, limit: int, max_concurrent: int | None,
+                   search_timeout: float | None):
+    """Create a callable that returns a search coroutine."""
+    return lambda: search_messages_impl(
+        query=query, limit=limit,
+        max_concurrent=max_concurrent,
+        search_timeout=search_timeout,
+    )
+
+
+def _build_scenarios(max_concurrent: int | None, search_timeout: float | None) -> list[tuple[str, Any]]:
+    """Build list of (name, callable) pairs for all benchmark scenarios."""
+    scenarios = [
+        ("single_term", _make_scenario("alexey", 10, max_concurrent, search_timeout)),
+        ("two_terms", _make_scenario("alexey, test", 10, max_concurrent, search_timeout)),
+        ("three_terms", _make_scenario("alexey, test, channel", 10, max_concurrent, search_timeout)),
+        ("five_terms", _make_scenario("alexey, test, channel, bot, group", 10, max_concurrent, search_timeout)),
+        ("three_terms_large", _make_scenario("alexey, test, channel", 50, max_concurrent, search_timeout)),
+    ]
+
+    # Dedup check — validates no duplicate IDs from overlapping terms
+    async def _dedup():
+        result = await search_messages_impl(
+            query="alexey, alex, alexander", limit=15,
+            max_concurrent=max_concurrent,
+            search_timeout=search_timeout,
+        )
+        if "error" in result:
+            return result
+        messages = result.get("messages", [])
+        ids = [m.get("id") for m in messages if m.get("id") is not None]
+        if len(ids) != len(set(ids)):
+            dupes = [id_ for id_ in ids if ids.count(id_) > 1]
+            return {
+                **result,
+                "error": f"DEDUP_FAIL: {len(ids)} results but {len(ids) - len(set(ids))} "
+                         f"duplicates (ids: {sorted(set(dupes))})",
+                "_assertion_ok": False,
+                "_assertion_type": "dedup_check",
+            }
+        result["_assertion_ok"] = True
+        result["_assertion_type"] = "dedup_check"
+        return result
+    scenarios.append(("dedup_check", _dedup))
+
+    # Fairness check — validates results from all terms are represented
+    async def _fairness():
+        result = await search_messages_impl(
+            query="test, channel, bot", limit=20,
+            max_concurrent=max_concurrent,
+            search_timeout=search_timeout,
+        )
+        if "error" in result:
+            return result
+        messages = result.get("messages", [])
+        terms = [t.strip() for t in "test, channel, bot".split(",")]
+        per_term = {}
+        for term in terms:
+            tr = await search_messages_impl(query=term, limit=20)
+            if "error" not in tr:
+                term_ids = {m.get("id") for m in tr.get("messages", [])}
+                per_term[term] = term_ids
+
+        combined_ids = {m.get("id") for m in messages if m.get("id") is not None}
+        missing_terms = []
+        for term, term_ids in per_term.items():
+            if term_ids and not term_ids.intersection(combined_ids):
+                missing_terms.append(term)
+
+        if missing_terms:
+            return {
+                **result,
+                "warning": f"FAIRNESS: terms [{', '.join(missing_terms)}] have results but "
+                           f"none appear in multi-term output.",
+                "_assertion_type": "fairness_check",
+                "_assertion_ok": False,
+            }
+        result["_assertion_ok"] = True
+        result["_assertion_type"] = "fairness_check"
+        return result
+    scenarios.append(("fairness_check", _fairness))
+
+    return scenarios
+
+
+# ── Benchmark runner ──────────────────────────────────────────────────────
 
 
 async def _warmup(client) -> None:
@@ -108,130 +198,14 @@ async def _warmup(client) -> None:
         logger.info("Warmup search (optional): %s", e)
 
 
-async def scenario_single_term(query: str = "alexey", limit: int = 10) -> dict:
-    """Single-term global search — baseline (no parallel gain expected)."""
-    result = await search_messages_impl(query=query, limit=limit)
-    return result
-
-
-async def scenario_two_terms(query: str = "alexey, test", limit: int = 10) -> dict:
-    """Two-term global search — first multi-term case."""
-    result = await search_messages_impl(query=query, limit=limit)
-    return result
-
-
-async def scenario_three_terms(query: str = "alexey, test, channel", limit: int = 10) -> dict:
-    """Three-term global search — typical real usage."""
-    result = await search_messages_impl(query=query, limit=limit)
-    return result
-
-
-async def scenario_five_terms(
-    query: str = "alexey, test, channel, bot, group",
-    limit: int = 10,
-) -> dict:
-    """Five-term global search — stress test."""
-    result = await search_messages_impl(query=query, limit=limit)
-    return result
-
-
-async def scenario_three_terms_large(
-    query: str = "alexey, test, channel",
-    limit: int = 50,
-) -> dict:
-    """Three terms with larger limit."""
-    result = await search_messages_impl(query=query, limit=limit)
-    return result
-
-
-async def scenario_dedup_check(
-    query: str = "alexey, alex, alexander",
-    limit: int = 15,
-) -> dict:
-    """Multi-term global search — validate no duplicate message IDs.
-
-    Overlapping terms like "alexey", "alex", "alexander" may match
-    the same messages. The merge MUST deduplicate by message ID.
-    """
-    result = await search_messages_impl(query=query, limit=limit)
-    if "error" in result:
-        return result
-    messages = result.get("messages", [])
-    ids = [m.get("id") for m in messages if m.get("id") is not None]
-    if len(ids) != len(set(ids)):
-        dupes = [id_ for id_ in ids if ids.count(id_) > 1]
-        return {
-            **result,
-            "error": f"DEDUP_FAIL: {len(ids)} results but {len(ids) - len(set(ids))} "
-                     f"duplicates (ids: {sorted(set(dupes))})",
-            "_assertion_ok": False,
-            "_assertion_type": "dedup_check",
-        }
-    result["_assertion_ok"] = True
-    result["_assertion_type"] = "dedup_check"
-    return result
-
-
-async def scenario_fairness_check(
-    query: str = "test, channel, bot",
-    limit: int = 20,
-) -> dict:
-    """Multi-term global search — validate results from ALL terms.
-
-    Each term in "test, channel, bot" should contribute results.
-    We check by running each term alone and verifying overlap.
-    """
-    result = await search_messages_impl(query=query, limit=limit)
-    if "error" in result:
-        return result
-    messages = result.get("messages", [])
-
-    terms = [t.strip() for t in query.split(",")]
-    per_term = {}
-    for term in terms:
-        tr = await search_messages_impl(query=term, limit=limit)
-        if "error" not in tr:
-            term_ids = {m.get("id") for m in tr.get("messages", [])}
-            per_term[term] = term_ids
-
-    combined_ids = {m.get("id") for m in messages if m.get("id") is not None}
-    missing_terms = []
-    for term, term_ids in per_term.items():
-        if term_ids and not term_ids.intersection(combined_ids):
-            missing_terms.append(term)
-
-    if missing_terms:
-        return {
-            **result,
-            "warning": f"FAIRNESS: terms [{', '.join(missing_terms)}] have results but "
-                       f"none appear in multi-term output. Expected if limit < per-term counts.",
-            "_assertion_type": "fairness_check",
-            "_assertion_ok": False,
-        }
-    result["_assertion_ok"] = True
-    result["_assertion_type"] = "fairness_check"
-    return result
-
-
-async def scenario_three_terms_large_limit(
-    query: str = "alexey, test, channel",
-    limit: int = 50,
-) -> dict:
-    """Three terms with large limit — stress both gather and merge."""
-    result = await search_messages_impl(query=query, limit=limit)
-    return result
-
-
-# ── Benchmark runner ──────────────────────────────────────────────────────
-
-
 async def _run_single_scenario(
     name: str,
     scenario_fn: Any,
     iterations: int,
+    config: dict[str, Any],
 ) -> BenchmarkReport:
     """Run a single scenario `iterations` times and aggregate results."""
-    report = BenchmarkReport(scenario=name, n_iterations=iterations)
+    report = BenchmarkReport(scenario=name, n_iterations=iterations, config=config)
 
     logger.info("Running scenario: %s (%d iterations)", name, iterations)
 
@@ -303,9 +277,11 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
 
 def _report_json(reports: list[BenchmarkReport]) -> dict:
     """Convert reports to a JSON-serializable dict."""
+    config = reports[0].config if reports else {}
     return {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "python_version": sys.version,
+        "config": config,
         "scenarios": {
             r.scenario: {
                 "mean_s": round(r.mean_s, 4),
@@ -372,9 +348,26 @@ async def main() -> int:
         default=None,
         help="Folder name (unused here, kept for compatibility)",
     )
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=None,
+        help="Max parallel SearchGlobal requests (default: None = full gather without semaphore)",
+    )
+    parser.add_argument(
+        "--search-timeout",
+        type=float,
+        default=None,
+        help="Per-request timeout in seconds (default: None = no timeout)",
+    )
     args = parser.parse_args()
     skip = set(args.skip)
     only = set(args.only)
+
+    config = {
+        "max_concurrent": args.max_concurrent,
+        "search_timeout": args.search_timeout,
+    }
 
     # ── Connect ────────────────────────────────────────────────────────
     print("Connecting to Telegram...", end=" ", flush=True)
@@ -388,23 +381,18 @@ async def main() -> int:
         print(f"FAILED: {e}")
         return 1
 
-    # ── Scenario factory ────────────────────────────────────────────────
-    scenarios = [
-        ("single_term", lambda: scenario_single_term(limit=10)),
-        ("two_terms", lambda: scenario_two_terms(limit=10)),
-        ("three_terms", lambda: scenario_three_terms(limit=10)),
-        ("five_terms", lambda: scenario_five_terms(limit=10)),
-        ("three_terms_large", lambda: scenario_three_terms_large(limit=50)),
-        ("dedup_check", lambda: scenario_dedup_check(limit=15)),
-        ("fairness_check", lambda: scenario_fairness_check(limit=20)),
-    ]
+    # ── Build scenarios with config ───────────────────────────────────
+    scenario_fns = _build_scenarios(
+        max_concurrent=args.max_concurrent,
+        search_timeout=args.search_timeout,
+    )
 
     # Filter
     if only:
-        scenarios = [(n, fn) for n, fn in scenarios if n in only]
-    scenarios = [(n, fn) for n, fn in scenarios if n not in skip]
+        scenario_fns = [(n, fn) for n, fn in scenario_fns if n in only]
+    scenario_fns = [(n, fn) for n, fn in scenario_fns if n not in skip]
 
-    if not scenarios:
+    if not scenario_fns:
         print("No scenarios to run (all filtered out)")
         return 0
 
@@ -412,14 +400,14 @@ async def main() -> int:
     reports: list[BenchmarkReport] = []
     timeout_s = args.timeout
 
-    for name, scenario_fn in scenarios:
+    for name, scenario_fn in scenario_fns:
         print(f"\n{'='*60}")
         print(f"Scenario: {name}")
         print(f"{'='*60}")
 
         try:
             report = await asyncio.wait_for(
-                _run_single_scenario(name, scenario_fn, args.iterations),
+                _run_single_scenario(name, scenario_fn, args.iterations, config),
                 timeout=timeout_s,
             )
             reports.append(report)
@@ -432,12 +420,14 @@ async def main() -> int:
                     durations_s=[],
                     results_counts=[],
                     errors=[f"timeout_{timeout_s}s"],
+                    config=config,
                 )
             )
 
     # ── Report ──────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
-    print("BENCHMARK RESULTS")
+    print(f"BENCHMARK RESULTS (max_concurrent={args.max_concurrent}, "
+          f"search_timeout={args.search_timeout})")
     print(f"{'='*60}\n")
     print(_report_table(reports))
 
