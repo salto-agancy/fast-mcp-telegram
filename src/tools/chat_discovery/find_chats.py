@@ -161,7 +161,7 @@ async def _find_chats_global(
     Use search_dialogs_impl for name-based group/channel search.
     """
     normalized_query = query or ""
-    terms = [t.strip() for t in normalized_query.split(",") if t.strip()]
+    terms: list[str] = [t.strip() for t in normalized_query.split(",") if t.strip()]
 
     if len(terms) <= 1:
         result = await _search_contacts_as_list(
@@ -195,9 +195,9 @@ async def _find_chats_combined(
     params = {"query": query, "limit": limit, "public": public}
 
     try:
-        # Type annotation for mypy — asyncio.gather doesn't infer per-element types
-        user_result: dict[str, Any] | Exception
-        dialog_result: dict[str, Any] | Exception
+        # Type annotation for mypy/ty — asyncio.gather can return BaseException
+        user_result: dict[str, Any] | BaseException
+        dialog_result: dict[str, Any] | BaseException
         user_result, dialog_result = await asyncio.gather(
             _find_chats_global(
                 query=query, limit=limit, chat_type=None, public=public
