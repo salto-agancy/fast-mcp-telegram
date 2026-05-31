@@ -257,7 +257,7 @@ async def test_setup_phone_flood_returns_phone_form_without_session(
         async def connect(self):
             return None
 
-        async def send_code_request(self, _phone):
+        async def send_code_request(self, _phone, **kwargs):
             raise PhoneNumberFloodError(request=None)
 
         async def disconnect(self):
@@ -300,7 +300,7 @@ async def test_setup_reauthorize_phone_handles_send_code_failure(
     setup_id = "reauth-1"
 
     class _Client:
-        async def send_code_request(self, _phone):
+        async def send_code_request(self, _phone, **kwargs):
             raise RuntimeError("rpc fail")
 
     web_setup._setup_sessions[setup_id] = {
@@ -346,7 +346,7 @@ async def test_setup_reauthorize_phone_normalizes_formatted_phone(
     seen = {"phone": None}
 
     class _Client:
-        async def send_code_request(self, phone):
+        async def send_code_request(self, phone, **kwargs):
             seen["phone"] = phone
             return
 
