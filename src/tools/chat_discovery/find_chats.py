@@ -118,11 +118,6 @@ async def find_chats_impl(
     # iteration instead, which matches by display name (title/username) via
     # entity_matches_dialog_query(). This is the only Telegram API approach
     # that searches by chat name rather than by message content.
-    #
-    # Performance note: iter_dialogs() fetches up to limit×10 dialogs, then
-    # filters client-side. This is O(dialogs) compared to O(1) for
-    # contacts.SearchRequest, but it's the only server-side API that supports
-    # name-based group/channel search.
     if chat_type in ("group", "groups", "megagroup", "channel", "channels", "broadcast"):
         return await _find_chats_by_dialogs(
             query=query,
@@ -134,8 +129,14 @@ async def find_chats_impl(
             folder_id=None,
         )
 
-    # Default (private, bot, or no chat_type): use contacts.SearchRequest
-    # for user search (username-based).
+    # No chat_type → combined search: users via contacts.SearchRequest (username-based)
+    # + groups/channels via dialog iteration (title-based). Merged round-robin.
+    if not chat_type:
+        return await _find_chats_combined(
+            query=query, limit=limit, public=public,
+        )
+
+    # Private/bot → contacts.SearchRequest only (user search by username).
     result = await _find_chats_global(
         query=query,
         limit=limit,
@@ -150,7 +151,7 @@ async def _find_chats_global(
     limit: int,
     chat_type: str | None,
     public: bool | None,
-) -> list[dict[str, Any]] | dict[str, Any]:
+) -> dict[str, Any]:
     """
     Global Telegram search without date filtering.
 
@@ -169,6 +170,87 @@ async def _find_chats_global(
         return {"chats": result} if isinstance(result, list) else result
 
     return await _find_chats_global_multi_term(terms, limit, chat_type, public)
+
+
+async def _find_chats_combined(
+    query: str | None,
+    limit: int,
+    public: bool | None,
+) -> dict[str, Any]:
+    """
+    Combined search: contacts.SearchRequest (users) + dialog iteration (groups/channels).
+
+    Runs both searches in parallel via asyncio.gather, then merges results
+    round-robin with dedup by entity ID. Gracefully degrades if one path fails
+    (e.g., contacts.SearchRequest under FloodWait → dialog-only results).
+
+    Args:
+        query: Search query
+        limit: Maximum results
+        public: Optional public filter
+
+    Returns:
+        Dict with 'chats' key, or error dict if both paths failed.
+    """
+    params = {"query": query, "limit": limit, "public": public}
+
+    try:
+        user_result, dialog_result = await asyncio.gather(
+            _find_chats_global(
+                query=query, limit=limit, chat_type=None, public=public
+            ),
+            _find_chats_by_dialogs(
+                query=query,
+                limit=limit,
+                chat_type=None,
+                public=public,
+                min_date=None,
+                max_date=None,
+                folder_id=None,
+            ),
+            return_exceptions=True,
+        )
+    except Exception as e:
+        logger.warning("Combined search failed unexpectedly: %s", e)
+        return log_and_build_error(
+            operation="find_chats",
+            error_message=f"Combined search failed: {e}",
+            params=params,
+            exception=e,
+        )
+
+    term_results: list[list[dict[str, Any]]] = []
+
+    # Extract user results from _find_chats_global
+    if isinstance(user_result, Exception):
+        logger.warning(
+            "Combined search: contact search failed, degrading to dialog-only: %s",
+            user_result,
+        )
+    elif isinstance(user_result, dict):
+        chats = user_result.get("chats")
+        if isinstance(chats, list) and chats:
+            term_results.append(chats)
+
+    # Extract dialog results from _find_chats_by_dialogs
+    if isinstance(dialog_result, Exception):
+        logger.warning(
+            "Combined search: dialog search failed, degrading to contact-only: %s",
+            dialog_result,
+        )
+    elif isinstance(dialog_result, dict):
+        chats = dialog_result.get("chats")
+        if isinstance(chats, list) and chats:
+            term_results.append(chats)
+
+    if not term_results:
+        # Both paths failed or returned empty — propagate the most meaningful error
+        for r in (user_result, dialog_result):
+            if isinstance(r, dict) and r.get("ok") is False:
+                return r
+        return {"chats": []}
+
+    return {"chats": _merge_results_round_robin(term_results, limit)}
 
 
 async def _gather_term_results(
