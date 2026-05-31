@@ -195,6 +195,9 @@ async def _find_chats_combined(
     params = {"query": query, "limit": limit, "public": public}
 
     try:
+        # Type annotation for mypy — asyncio.gather doesn't infer per-element types
+        user_result: dict[str, Any] | Exception
+        dialog_result: dict[str, Any] | Exception
         user_result, dialog_result = await asyncio.gather(
             _find_chats_global(
                 query=query, limit=limit, chat_type=None, public=public
@@ -244,10 +247,15 @@ async def _find_chats_combined(
             term_results.append(chats)
 
     if not term_results:
-        # Both paths failed or returned empty — propagate the most meaningful error
-        for r in (user_result, dialog_result):
-            if isinstance(r, dict) and r.get("ok") is False:
-                return r
+        if error_result := next(
+            (
+                r
+                for r in (user_result, dialog_result)
+                if isinstance(r, dict) and r.get("ok") is False
+            ),
+            None,
+        ):
+            return error_result
         return {"chats": []}
 
     return {"chats": _merge_results_round_robin(term_results, limit)}
@@ -271,7 +279,7 @@ async def _gather_term_results(
 
     term_results: list[list[dict[str, Any]]] = []
     errors: list[str] = []
-    for term, result in zip(terms, results):
+    for term, result in zip(terms, results, strict=True):
         if isinstance(result, Exception):
             errors.append(f"'{term}': {result}")
             logger.warning(
@@ -286,9 +294,7 @@ async def _gather_term_results(
             continue
         term_results.append(result)
 
-    if not term_results:
-        return None, tuple(errors)
-    return term_results, tuple(errors)
+    return (term_results, tuple(errors)) if term_results else (None, tuple(errors))
 
 
 def _merge_results_round_robin(
