@@ -172,6 +172,31 @@ async def _find_chats_global(
     return await _find_chats_global_multi_term(terms, limit, chat_type, public)
 
 
+def _normalize_gather_result(
+    result: Any,
+    source_name: str,
+) -> list[dict[str, Any]] | None:
+    """Extract chat list from a gather result, or None on error.
+
+    Args:
+        result: A result from asyncio.gather(return_exceptions=True).
+        source_name: Name of the source for logging.
+
+    Returns:
+        List of chat dicts, or None if the result was an error or empty.
+    """
+    if isinstance(result, BaseException):
+        if isinstance(result, (KeyboardInterrupt, SystemExit)):
+            raise result
+        logger.warning("Combined search: %s failed: %s", source_name, result)
+        return None
+    if isinstance(result, dict):
+        chats = result.get("chats")
+        if isinstance(chats, list) and chats:
+            return chats
+    return None
+
+
 async def _find_chats_combined(
     query: str | None,
     limit: int,
@@ -195,7 +220,7 @@ async def _find_chats_combined(
     params = {"query": query, "limit": limit, "public": public}
 
     try:
-        # Type annotation for mypy/ty — asyncio.gather can return BaseException
+        # asyncio.gather(return_exceptions=True) can return BaseException instances
         user_result: dict[str, Any] | BaseException
         dialog_result: dict[str, Any] | BaseException
         user_result, dialog_result = await asyncio.gather(
@@ -224,27 +249,13 @@ async def _find_chats_combined(
 
     term_results: list[list[dict[str, Any]]] = []
 
-    # Extract user results from _find_chats_global
-    if isinstance(user_result, Exception):
-        logger.warning(
-            "Combined search: contact search failed, degrading to dialog-only: %s",
-            user_result,
-        )
-    elif isinstance(user_result, dict):
-        chats = user_result.get("chats")
-        if isinstance(chats, list) and chats:
-            term_results.append(chats)
+    user_chats = _normalize_gather_result(user_result, "contact search (users)")
+    if user_chats is not None:
+        term_results.append(user_chats)
 
-    # Extract dialog results from _find_chats_by_dialogs
-    if isinstance(dialog_result, Exception):
-        logger.warning(
-            "Combined search: dialog search failed, degrading to contact-only: %s",
-            dialog_result,
-        )
-    elif isinstance(dialog_result, dict):
-        chats = dialog_result.get("chats")
-        if isinstance(chats, list) and chats:
-            term_results.append(chats)
+    dialog_chats = _normalize_gather_result(dialog_result, "dialog search (groups/channels)")
+    if dialog_chats is not None:
+        term_results.append(dialog_chats)
 
     if not term_results:
         if error_result := next(
