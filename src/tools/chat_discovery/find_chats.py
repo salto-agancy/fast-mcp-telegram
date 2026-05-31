@@ -113,6 +113,29 @@ async def find_chats_impl(
             folder_id=None,
         )
 
+    # For group/channel search: contacts.SearchRequest searches USERS by username
+    # substring — it does NOT find groups/channels by title. Route to dialog
+    # iteration instead, which matches by display name (title/username) via
+    # entity_matches_dialog_query(). This is the only Telegram API approach
+    # that searches by chat name rather than by message content.
+    #
+    # Performance note: iter_dialogs() fetches up to limit×10 dialogs, then
+    # filters client-side. This is O(dialogs) compared to O(1) for
+    # contacts.SearchRequest, but it's the only server-side API that supports
+    # name-based group/channel search.
+    if chat_type in ("group", "groups", "megagroup", "channel", "channels", "broadcast"):
+        return await _find_chats_by_dialogs(
+            query=query,
+            limit=limit,
+            chat_type=chat_type,
+            public=public,
+            min_date=None,
+            max_date=None,
+            folder_id=None,
+        )
+
+    # Default (private, bot, or no chat_type): use contacts.SearchRequest
+    # for user search (username-based).
     result = await _find_chats_global(
         query=query,
         limit=limit,
@@ -128,7 +151,14 @@ async def _find_chats_global(
     chat_type: str | None,
     public: bool | None,
 ) -> list[dict[str, Any]] | dict[str, Any]:
-    """Global Telegram search without date filtering."""
+    """
+    Global Telegram search without date filtering.
+
+    NOTE: This uses contacts.SearchRequest which searches USERS by username
+    substring — it does NOT search groups/channels by title. The chat_type
+    parameter here is only a filter on user results, not a different API.
+    Use search_dialogs_impl for name-based group/channel search.
+    """
     normalized_query = query or ""
     terms = [t.strip() for t in normalized_query.split(",") if t.strip()]
 
