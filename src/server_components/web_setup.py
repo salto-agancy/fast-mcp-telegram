@@ -389,10 +389,24 @@ def register_web_setup_routes(mcp_app):
         )
 
         client = create_session_client(temp_session_path)
-        await client.connect()
+        try:
+            await client.connect()
+            logger.info("Connected setup client for phone %s", masked)
+        except Exception as e:
+            logger.error("Failed to connect setup client for phone %s: %s", masked, e)
+            await client.disconnect()
+            temp_session_path.unlink(missing_ok=True)
+            return _setup_error_fragment(request, f"Failed to connect: {e}")
 
         try:
-            await client.send_code_request(phone_raw)
+            sent = await client.send_code_request(phone_raw)
+            logger.info(
+                "Code sent for phone %s: type=%s, phone_code_hash=%s, timeout=%s",
+                masked,
+                getattr(sent, 'type', None),
+                getattr(sent, 'phone_code_hash', None),
+                getattr(sent, 'timeout', None),
+            )
         except PhoneNumberFloodError:
             await client.disconnect()
             temp_session_path.unlink(missing_ok=True)
@@ -439,6 +453,7 @@ def register_web_setup_routes(mcp_app):
         try:
             await client.sign_in(phone=phone, code=code)
             state["authorized"] = True
+            logger.info("Phone %s verified successfully", masked_phone)
             return await _complete_authentication(request, state)
         except SessionPasswordNeededError:
             hint = ""
@@ -449,6 +464,7 @@ def register_web_setup_routes(mcp_app):
             ctx = _2fa_form_context(setup_id, masked_phone, hint=hint or "")
             return _fragment(request, "fragments/2fa_form.html", ctx)
         except Exception as e:
+            logger.warning("Verification failed for phone %s: %s", masked_phone, e)
             return _fragment(
                 request,
                 "fragments/code_form.html",
@@ -622,7 +638,14 @@ def register_web_setup_routes(mcp_app):
             )
 
         try:
-            await client.send_code_request(phone_raw)
+            sent = await client.send_code_request(phone_raw)
+            logger.info(
+                "Reauthorization code sent for phone %s: type=%s, phone_code_hash=%s, timeout=%s",
+                mask_phone_number(phone_raw),
+                getattr(sent, 'type', None),
+                getattr(sent, 'phone_code_hash', None),
+                getattr(sent, 'timeout', None),
+            )
         except PhoneNumberFloodError:
             return _fragment(
                 request,
