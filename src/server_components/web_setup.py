@@ -399,7 +399,7 @@ def register_web_setup_routes(mcp_app):
             return _setup_error_fragment(request, f"Failed to connect: {e}")
 
         try:
-            sent = await client.send_code_request(phone_raw)
+            sent = await client.send_code_request(phone_raw, force_sms=True)
             logger.info(
                 "Code sent for phone %s: type=%s, phone_code_hash=%s, timeout=%s",
                 masked,
@@ -638,7 +638,7 @@ def register_web_setup_routes(mcp_app):
             )
 
         try:
-            sent = await client.send_code_request(phone_raw)
+            sent = await client.send_code_request(phone_raw, force_sms=True)
             logger.info(
                 "Reauthorization code sent for phone %s: type=%s, phone_code_hash=%s, timeout=%s",
                 mask_phone_number(phone_raw),
