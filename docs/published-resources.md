@@ -13,13 +13,14 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 | **ToolSDK Registry** | https://github.com/toolsdk-ai/toolsdk-mcp-registry/pull/324 | ✅ PR #324 | Added `fast-mcp-telegram.json` to registry |
 | **Official MCP Registry** | https://registry.modelcontextprotocol.io | ✅ Published v0.22.2 | Published via `mcp-publisher` — `io.github.leshchenko1979/fast-mcp-telegram` |
 | **mcp.so** | https://mcp.so/servers/678f0b7fc72dda6b377d9800 | ✅ Submitted | Direct API submission — listed as "FastMCP Telegram" by leshchenko1979 |
+| **Smithery** | https://smithery.ai/servers/leshchenko/fast-mcp-telegram | ✅ Live (URL-based) | tg-mcp.l1979.ru — URL-based via Smithery CLI + config schema (BEARER_TOKEN) |
 
 ## Submitted — Awaiting Review / Merge ⏳
 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
 | **awesome-mcp-servers** | https://github.com/punkpeye/awesome-mcp-servers/pull/7019 | ⏳ PR pending | Awaiting merge by @punkpeye |
-| **MCPFind** | https://github.com/MCPFind/mcp-find/pull/53 | ✅ Submitted | PR #53 to `community-servers.yml`
+| **MCPFind** | https://github.com/MCPFind/mcp-find/pull/53 | ❌ Closed | MCPFind moved to automated curation — PR #53 closed without merge |
 | **MCP.Directory** | https://mcp.directory | ✅ Submitted | "Server Submitted!" — auto-pulls metadata from GitHub, publishes within 24h |
 
 ## Failed — Blocks Automation ❌
@@ -27,7 +28,6 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
 | **MCPMarket** | https://app.mcpmarket.com/servers/fast-mcp-telegram | ❌ Dead end | Custom MCP deployments from GitHub require Pro plan — user declined |
-| **Smithery** | https://smithery.ai/servers/leshchenko/fast-mcp-telegram | ✅ Live (URL-based) | tg-mcp.l1979.ru — URL-based via Smithery CLI + config schema (BEARER_TOKEN) |
 | **PulseMCP** | https://pulsemcp.com/servers | ❌ Blocked | Cloudflare blocks automated checks |
 | **MCPForge** | https://mcpforge.org | ❌ Not a directory | Managed hosting service (like Smithery), not a listing directory |
 
