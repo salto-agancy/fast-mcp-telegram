@@ -21,8 +21,8 @@ from src.config.server_config import get_config
 from src.server_components.attachment_routes import register_attachment_routes
 from src.server_components.auth_middleware import UrlTokenMiddleware
 from src.server_components.health import register_health_routes
-from src.server_components.mtproto_api import register_mtproto_api_routes
 from src.server_components.middleware_register import register_mcp_middleware
+from src.server_components.mtproto_api import register_mtproto_api_routes
 from src.server_components.server_card import register_server_card_route
 from src.server_components.tools_register import register_tools
 from src.server_components.web_setup import register_web_setup_routes
@@ -37,21 +37,32 @@ _cleanup_task = None
 
 
 async def cleanup_loop():
-    """Background task: inactivity cleanup once at startup, then idle session disconnect periodically."""
+    """Background task: inactivity and idle session cleanup every 60 seconds."""
     logger.info("Starting background cleanup task")
 
-    # One-shot inactivity cleanup (30-day tolerance, startup enough)
+    # On startup, run an immediate inactivity cleanup
     try:
-        deleted = await _cleanup_inactive_sessions()
-        if deleted:
-            logger.info(f"Inactivity cleanup: removed {deleted} session(s)")
+        await _run_inactivity_cleanup()
     except Exception as e:
-        logger.error(f"Error in inactivity cleanup: {e}")
+        logger.error(f"Error in startup inactivity cleanup: {e}")
 
-    # Periodic idle session disconnect
+    cleanup_cycle = 0
+    inactivity_check_interval = 1440  # every 24 hours (1440 iterations * 60s)
+
+    # Periodic cleanup loop
     while True:
         try:
             await asyncio.sleep(60)  # Check every minute
+            cleanup_cycle += 1
+
+            # Run daily inactivity cleanup
+            if cleanup_cycle % inactivity_check_interval == 0:
+                try:
+                    await _run_inactivity_cleanup()
+                except Exception as e:
+                    logger.error(f"Error in periodic inactivity cleanup: {e}")
+
+            # Disconnect idle cached sessions
             await cleanup_idle_sessions()
         except asyncio.CancelledError:
             logger.info("Background cleanup task cancelled")
@@ -59,6 +70,13 @@ async def cleanup_loop():
         except Exception as e:
             logger.error(f"Error in cleanup task: {e}")
             await asyncio.sleep(60)  # Wait before retrying
+
+
+async def _run_inactivity_cleanup():
+    """Run inactivity-based session file cleanup and log results."""
+    deleted = await _cleanup_inactive_sessions()
+    if deleted:
+        logger.info(f"Inactivity cleanup: removed {deleted} session(s)")
 
 
 @asynccontextmanager

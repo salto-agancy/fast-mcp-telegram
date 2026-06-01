@@ -1,9 +1,12 @@
 import asyncio
 import base64
+import contextlib
 import inspect
 import json
 import logging
+import os
 import secrets
+import tempfile
 import time
 import traceback
 from contextvars import ContextVar
@@ -496,27 +499,58 @@ def _tracking_file_path() -> Path:
 
 
 def _load_session_tracking() -> dict:
-    """Load session tracking data from disk. Returns empty dict if file doesn't exist or is corrupt."""
+    """Load session tracking data from disk. Returns empty dict if file doesn't exist, is corrupt, or has unexpected structure."""
     tracking_path = _tracking_file_path()
     if not tracking_path.is_file():
         return {}
     try:
         with open(tracking_path, encoding="utf-8") as f:
             data: dict = json.load(f)
-        return data
     except (json.JSONDecodeError, OSError) as e:
         logger.warning(f"Failed to read session tracking file: {e}")
         return {}
 
+    # Validate top-level structure: must be a dict of token -> tracking info
+    if not isinstance(data, dict):
+        logger.warning(
+            f"Session tracking file has invalid structure: expected object at top level, "
+            f"got {type(data).__name__}. Ignoring file."
+        )
+        return {}
+    if invalid := {
+        key: type(value).__name__
+        for key, value in data.items()
+        if not isinstance(value, dict)
+    }:
+        logger.warning(
+            f"Session tracking file has invalid value types; expected dict values. "
+            f"Invalid entries: {invalid}. Ignoring file."
+        )
+        return {}
+
+    return data
+
 
 def _save_session_tracking(data: dict) -> None:
-    """Save session tracking data to disk."""
+    """Save session tracking data to disk atomically."""
     tracking_path = _tracking_file_path()
+    tracking_dir = os.path.dirname(os.fspath(tracking_path))
+    tmp_path: str | None = None
     try:
-        with open(tracking_path, "w", encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=tracking_dir,
+            delete=False,
+        ) as f:
+            tmp_path = f.name
             json.dump(data, f, indent=2)
+        os.replace(tmp_path, tracking_path)
     except OSError as e:
         logger.warning(f"Failed to write session tracking file: {e}")
+        if tmp_path is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
 
 
 async def _update_last_active(token: str) -> None:
@@ -531,11 +565,28 @@ async def _update_last_active(token: str) -> None:
         _save_session_tracking(tracking)
 
 
-_INACTIVE_SESSION_DAYS = 30
+def _session_file_last_modified(session_path: Path) -> float | None:
+    """Return the mtime of the session file, checking both .session and no-suffix variants.
+
+    Returns None if neither variant exists.
+    """
+    candidates = []
+    if session_path.suffix != ".session":
+        candidates.append(session_path.with_suffix(".session"))
+    candidates.append(session_path)
+    for candidate in candidates:
+        try:
+            return candidate.stat().st_mtime
+        except OSError:
+            continue
+    return None
+
+
+_INACTIVE_SESSION_DAYS = int(os.environ.get("TELEGRAM_INACTIVE_SESSION_DAYS", "30"))
 
 
 async def _cleanup_inactive_sessions() -> int:
-    """Delete session files for tokens with no activity in >30 days.
+    """Delete session files for tokens with no activity in >N days (default 30).
 
     Uses `last_active` from the tracking file. Falls back to file mtime
     for tokens without a tracking entry (legacy). Returns count of deleted sessions.
@@ -553,31 +604,39 @@ async def _cleanup_inactive_sessions() -> int:
             if last_active is not None and last_active > cutoff:
                 continue  # Still active
 
-            # Check file mtime as fallback for tokens without last_active
-            if last_active is None:
-                try:
-                    session_path = _resolve_session_path_for_token(token)
-                    if _session_file_exists(session_path):
-                        mtime = session_path.with_suffix(".session").stat().st_mtime
-                        if mtime > cutoff:
-                            continue  # File was modified recently
-                except (InvalidSessionTokenError, OSError):
-                    pass  # Can't determine activity — will delete
-
-            # Delete session file
             try:
                 session_path = _resolve_session_path_for_token(token)
-                if _session_file_exists(session_path):
+            except InvalidSessionTokenError:
+                continue  # Can't resolve — skip
+
+            # Check file mtime as fallback for tokens without last_active
+            if last_active is None:
+                session_file_mtime = _session_file_last_modified(session_path)
+                if session_file_mtime is not None and session_file_mtime > cutoff:
+                    continue  # File was modified recently
+
+            # TOCTOU guard: re-check last_active from disk in case a concurrent
+            # ensure_connection updated it after our initial load
+            fresh_tracking = _load_session_tracking()
+            fresh_entry = fresh_tracking.get(token)
+            if fresh_entry is not None:
+                fresh_last_active = fresh_entry.get("last_active")
+                if fresh_last_active is not None and fresh_last_active > cutoff:
+                    continue  # Became active since we started checking
+
+            # Delete session file
+            if _session_file_exists(session_path):
+                try:
                     _unlink_session_file(session_path)
                     logger.info(
                         f"Deleted inactive session file for token {token[:8]}... "
                         f"(last_active: {'never' if last_active is None else time.ctime(last_active)})"
                     )
-            except (InvalidSessionTokenError, OSError) as e:
-                logger.warning(
-                    f"Error deleting session file for token {token[:8]}...: {e}"
-                )
-                continue  # Don't remove tracking entry if deletion failed
+                except OSError as e:
+                    logger.warning(
+                        f"Error deleting session file for token {token[:8]}...: {e}"
+                    )
+                    continue  # Don't remove tracking entry if deletion failed
 
             # Remove tracking entry
             del tracking[token]
