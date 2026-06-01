@@ -9,7 +9,10 @@ from src.utils.datetime_parse import parse_iso_datetime_utc
 from src.utils.entity import _get_chat_message_count, get_entity_by_id
 from src.utils.error_handling import log_and_build_error, log_connection_error_response
 from src.utils.helpers import _append_dedup_until_limit
-from src.utils.message_format import transcribe_voice_messages
+from src.utils.message_format import (
+    _response_attachment_warning,
+    transcribe_voice_messages,
+)
 
 from .search_generators import (
     _search_chat_messages_generator,
@@ -260,6 +263,11 @@ async def _handle_query_mode(
         response: dict[str, Any] = {"messages": window, "has_more": has_more}
         if total_count is not None:
             response["total_count"] = total_count
+
+        warning = _response_attachment_warning(window)
+        if warning:
+            response["_warning"] = warning
+
         return response
 
     except Exception as e:

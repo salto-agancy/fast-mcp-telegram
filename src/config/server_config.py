@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # DOMAIN values treated as unset: no public origin for MCP URLs or attachment links.
 _DOMAIN_PLACEHOLDER_VALUES: frozenset[str] = frozenset(
-    {"your-domain.com", "your-server.com"}
+    {"your-domain.com", "your-server.com", "localhost"}
 )
 
 
@@ -367,6 +367,13 @@ class ServerConfig(BaseSettings):
 
             validate_acl_config()
             logger.info(f"🔒 Session ACL enabled: {self.acl_config_file}")
+
+        if self.transport == "http" and not self.public_base_url_normalized:
+            logger.warning(
+                "⚠️ DOMAIN is '%s' — attachment_download_url DISABLED for all messages. "
+                "Set DOMAIN=<your-public-host> in .env to enable download links.",
+                self.domain,
+            )
 
     @classmethod
     def from_args_and_env(cls) -> "ServerConfig":
