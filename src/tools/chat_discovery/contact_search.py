@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+from telethon.errors import FloodWaitError
 from telethon.tl.functions.contacts import SearchRequest
 
 from src.client.connection import (
@@ -70,6 +71,14 @@ async def search_contacts_native(
                     yield info
                     count += 1
 
+    except FloodWaitError as e:
+        logger.warning(
+            "FloodWait on SearchRequest for '%s': %ds (~%.1fh)",
+            query,
+            e.seconds,
+            e.seconds / 3600,
+        )
+        raise
     except SessionNotAuthorizedError:
         raise
     except TelegramTransportError:
