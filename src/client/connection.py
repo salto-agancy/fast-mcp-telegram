@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextlib
 import inspect
 import logging
 import secrets
@@ -407,6 +408,12 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
             async with _failure_lock:
                 _connection_failures.pop(token, None)
 
+            # Touch session file so mtime reflects last-active (for inactivity cleanup)
+            with contextlib.suppress(InvalidSessionTokenError, OSError):
+                _resolve_session_path_for_token(token).with_suffix(".session").touch(
+                    exist_ok=True
+                )
+
         return client.is_connected()
     except SessionNotAuthorizedError:
         logger.error(f"Client reconnected but not authorized for token {token[:8]}...")
@@ -477,20 +484,35 @@ _INACTIVE_SESSION_DAYS = 30
 async def _cleanup_inactive_sessions() -> int:
     """Delete .session files not modified in >INACTIVE_SESSION_DAYS days.
 
-    Uses file mtime to determine inactivity. Returns count of deleted sessions.
+    Skips the configured default session. Uses file mtime to determine
+    inactivity. Returns count of deleted sessions.
     """
     cutoff = time.time() - _INACTIVE_SESSION_DAYS * 86400
+    default_session = get_config().session_name
     deleted = 0
 
     for session_file in SESSION_DIR.glob("*.session"):
         if not session_file.is_file():
             continue
+
+        # Never delete the configured default session
+        if session_file.stem == default_session:
+            continue
+
         try:
             mtime = session_file.stat().st_mtime
         except OSError:
             continue
 
         if mtime > cutoff:
+            continue
+
+        # Re-check mtime just before delete (TOCTOU guard)
+        try:
+            current_mtime = session_file.stat().st_mtime
+            if current_mtime > cutoff:
+                continue
+        except OSError:
             continue
 
         try:
