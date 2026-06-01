@@ -2,8 +2,6 @@
 
 import logging
 
-import pytest
-
 from src.config.server_config import set_config
 from src.utils import message_format as mf
 
