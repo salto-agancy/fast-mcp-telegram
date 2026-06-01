@@ -109,6 +109,28 @@ class TestCleanupInactiveSessions:
         assert deleted == 0
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("days", [0, -1])
+    async def test_disabled_when_non_positive(self, tmp_path, days):
+        """When INACTIVE_SESSION_DAYS <= 0, cleanup does nothing."""
+        now = 1_000_000_000.0
+        old_mtime = now - 86400 * 100  # 100 days ago
+
+        session_file = make_session_file(tmp_path, _TOKEN)
+        import os as _os
+
+        _os.utime(str(session_file), (old_mtime, old_mtime))
+
+        with (
+            patch("src.client.connection.SESSION_DIR", tmp_path),
+            patch("src.client.connection.time.time", return_value=now),
+            patch("src.client.connection._INACTIVE_SESSION_DAYS", days),
+        ):
+            deleted = await _cleanup_inactive_sessions()
+
+        assert deleted == 0
+        assert session_file.is_file()
+
+    @pytest.mark.asyncio
     async def test_skips_non_session_files(self, tmp_path):
         """Files without .session suffix are ignored."""
         (tmp_path / "not_a_session.txt").write_text("ignore me")

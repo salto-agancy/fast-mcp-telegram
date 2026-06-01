@@ -3,6 +3,7 @@ import base64
 import contextlib
 import inspect
 import logging
+import os
 import secrets
 import time
 import traceback
@@ -478,7 +479,10 @@ async def _record_connection_failure(token: str) -> None:
         )
 
 
-_INACTIVE_SESSION_DAYS = 30
+try:
+    _INACTIVE_SESSION_DAYS = int(os.environ.get("TELEGRAM_INACTIVE_SESSION_DAYS", "30"))
+except (ValueError, TypeError):
+    _INACTIVE_SESSION_DAYS = 30
 
 
 async def _cleanup_inactive_sessions() -> int:
@@ -486,7 +490,11 @@ async def _cleanup_inactive_sessions() -> int:
 
     Skips the configured default session. Uses file mtime to determine
     inactivity. Returns count of deleted sessions.
+    Set TELEGRAM_INACTIVE_SESSION_DAYS=0 to disable.
     """
+    if _INACTIVE_SESSION_DAYS <= 0:
+        return 0
+
     cutoff = time.time() - _INACTIVE_SESSION_DAYS * 86400
     default_session = get_config().session_name
     deleted = 0
