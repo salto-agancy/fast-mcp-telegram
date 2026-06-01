@@ -12,7 +12,7 @@ from typing import Literal
 from fastmcp import FastMCP
 
 from src.client.connection import (
-    cleanup_failed_sessions,
+    _cleanup_inactive_sessions,
     cleanup_idle_sessions,
     cleanup_session_cache,
 )
@@ -37,12 +37,21 @@ _cleanup_task = None
 
 
 async def cleanup_loop():
-    """Background task to clean up failed and idle sessions."""
+    """Background task: inactivity cleanup once at startup, then idle session disconnect periodically."""
     logger.info("Starting background cleanup task")
+
+    # One-shot inactivity cleanup (30-day tolerance, startup enough)
+    try:
+        deleted = await _cleanup_inactive_sessions()
+        if deleted:
+            logger.info(f"Inactivity cleanup: removed {deleted} session(s)")
+    except Exception as e:
+        logger.error(f"Error in inactivity cleanup: {e}")
+
+    # Periodic idle session disconnect
     while True:
         try:
             await asyncio.sleep(60)  # Check every minute
-            await cleanup_failed_sessions()
             await cleanup_idle_sessions()
         except asyncio.CancelledError:
             logger.info("Background cleanup task cancelled")
