@@ -243,6 +243,7 @@ LOG_LEVEL=INFO                    # Logging verbosity
 SESSION_NAME=telegram             # Session file name (stdio mode only)
 SESSION_DIR=~/.config/fast-mcp-telegram  # Custom session directory
 MTPROTO_PROXY=tg://proxy?server=your-proxy.com&port=443&secret=your-secret  # Firewall proxy
+TELEGRAM_INACTIVE_SESSION_DAYS=30 # Auto-delete .session files unused >N days (0 = disable)
 
 # Session ACL (http-auth only) — see #session-acl-http-auth
 ACL_ENABLED=false                  # Opt-in per-principal MCP limits (http-auth)
