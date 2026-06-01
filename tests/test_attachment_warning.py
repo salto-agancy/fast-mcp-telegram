@@ -1,4 +1,4 @@
-"""Tests for _response_attachment_warning() in message_format."""
+"""Tests for response_attachment_warning() in message_format."""
 
 import logging
 
@@ -7,13 +7,13 @@ from src.utils import message_format as mf
 
 
 class TestResponseAttachmentWarning:
-    """Tests for _response_attachment_warning(): per-response warning when DOMAIN is placeholder."""
+    """Tests for response_attachment_warning(): per-response warning when DOMAIN is placeholder."""
 
     def test_warning_returns_none_when_stdio(self, stdio_config):
         """No warning in stdio mode even with placeholder domain and media."""
         stdio_config.domain = "your-domain.com"
         set_config(stdio_config)
-        result = mf._response_attachment_warning(
+        result = mf.response_attachment_warning(
             [{"id": 1, "media": {"type": "photo"}}]
         )
         assert result is None
@@ -22,7 +22,7 @@ class TestResponseAttachmentWarning:
         """No warning when domain resolves to a valid public URL."""
         http_no_auth_config.domain = "tg-mcp.example.com"
         set_config(http_no_auth_config)
-        result = mf._response_attachment_warning(
+        result = mf.response_attachment_warning(
             [{"id": 1, "media": {"type": "photo"}}]
         )
         assert result is None
@@ -31,7 +31,7 @@ class TestResponseAttachmentWarning:
         """No warning when messages have no media at all."""
         http_no_auth_config.domain = "your-domain.com"
         set_config(http_no_auth_config)
-        result = mf._response_attachment_warning(
+        result = mf.response_attachment_warning(
             [{"id": 1, "text": "hello"}, {"id": 2, "text": "world"}]
         )
         assert result is None
@@ -40,7 +40,7 @@ class TestResponseAttachmentWarning:
         """No warning for an empty message list."""
         http_no_auth_config.domain = "your-domain.com"
         set_config(http_no_auth_config)
-        result = mf._response_attachment_warning([])
+        result = mf.response_attachment_warning([])
         assert result is None
 
     def test_warning_returns_string_when_placeholder_with_media(
@@ -49,7 +49,7 @@ class TestResponseAttachmentWarning:
         """Warning string returned when domain is placeholder and messages include media."""
         http_no_auth_config.domain = "your-domain.com"
         set_config(http_no_auth_config)
-        result = mf._response_attachment_warning(
+        result = mf.response_attachment_warning(
             [
                 {"id": 1, "text": "hello"},
                 {"id": 2, "media": {"filename": "test.pdf", "mime_type": "application/pdf"}},
@@ -66,7 +66,7 @@ class TestResponseAttachmentWarning:
         """localhost is now a placeholder — warning should fire."""
         http_no_auth_config.domain = "localhost"
         set_config(http_no_auth_config)
-        result = mf._response_attachment_warning(
+        result = mf.response_attachment_warning(
             [{"id": 1, "media": {"type": "photo"}}]
         )
         assert isinstance(result, str)
@@ -76,7 +76,7 @@ class TestResponseAttachmentWarning:
         """Raw IP addresses like 144.31.188.163 are NOT placeholders — no warning."""
         http_no_auth_config.domain = "144.31.188.163"
         set_config(http_no_auth_config)
-        result = mf._response_attachment_warning(
+        result = mf.response_attachment_warning(
             [{"id": 1, "media": {"type": "photo"}}]
         )
         assert result is None
@@ -87,7 +87,7 @@ class TestResponseAttachmentWarning:
         """Even with placeholder domain, no warning when no message has media."""
         http_no_auth_config.domain = "your-domain.com"
         set_config(http_no_auth_config)
-        result = mf._response_attachment_warning(
+        result = mf.response_attachment_warning(
             [
                 {"id": 1, "text": "a", "error": "not found"},
                 {"id": 2, "text": "b"},
@@ -104,10 +104,9 @@ class TestResponseAttachmentWarning:
             {"id": 2, "media": {"filename": "x.pdf"}},
             {"id": 3, "text": "plain"},
         ]
-        result = mf._response_attachment_warning(messages)
+        result = mf.response_attachment_warning(messages)
         assert isinstance(result, str)
-        # It's a single string, not a list
-        assert isinstance(result, str) and len(result) > 10
+        assert len(result) > 10  # verify it's a real message, not empty
 
 
 class TestValidateConfigDomainWarning:
@@ -117,7 +116,6 @@ class TestValidateConfigDomainWarning:
         """validate_config should log a warning when domain is your-domain.com."""
         http_auth_config.domain = "your-domain.com"
         with caplog.at_level(logging.WARNING):
-            # Reset the _config_logged flag so validate_config runs
             if hasattr(http_auth_config, "_config_logged"):
                 del http_auth_config._config_logged
             http_auth_config.validate_config()

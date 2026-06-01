@@ -568,7 +568,7 @@ async def build_message_result(
     return result
 
 
-def _response_attachment_warning(messages: list[dict]) -> str | None:
+def response_attachment_warning(messages: list[dict]) -> str | None:
     """Return a warning string if DOMAIN is missing and any message has media.
 
     One warning per entire response, not per message. Returns None when
@@ -579,7 +579,7 @@ def _response_attachment_warning(messages: list[dict]) -> str | None:
     cfg = get_config()
     if cfg.transport != "http" or cfg.public_base_url_normalized:
         return None
-    has_media = any(isinstance(m, dict) and "media" in m for m in messages)
+    has_media = any(bool(m.get("media")) for m in messages)
     if not has_media:
         return None
     return (
