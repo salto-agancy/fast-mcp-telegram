@@ -1,12 +1,21 @@
 """Query and browse mode for get_messages (MessageRetrievalMode.SEARCH)."""
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
 
+from telethon.tl.functions.messages import SearchGlobalRequest
+from telethon.tl.types import InputMessagesFilterEmpty, InputPeerEmpty
+
 from src.client.connection import get_connected_client
 from src.utils.datetime_parse import parse_iso_datetime_utc
-from src.utils.entity import _get_chat_message_count, get_entity_by_id
+from src.utils.entity import (
+    _get_chat_message_count,
+    _matches_chat_type,
+    _matches_public_filter,
+    get_entity_by_id,
+)
 from src.utils.error_handling import log_and_build_error, log_connection_error_response
 from src.utils.helpers import _append_dedup_until_limit
 from src.utils.message_format import (
@@ -14,12 +23,13 @@ from src.utils.message_format import (
     transcribe_voice_messages,
 )
 
-from .search_generators import (
-    _search_chat_messages_generator,
-    _search_global_messages_generator,
-)
+from . import results
+from .search_generators import _search_chat_messages_generator
 
 logger = logging.getLogger(__name__)
+
+# Default semaphore limits for global search parallelization
+_DEFAULT_MAX_CONCURRENT: int = 2
 
 
 async def _execute_parallel_searches_generators(
@@ -46,6 +56,104 @@ async def _execute_parallel_searches_generators(
                 continue
 
         active_gens = next_active
+
+
+async def _gather_global_batch(
+    client,
+    terms: list[dict],
+    batch_limit: int,
+    min_datetime: datetime | None,
+    max_datetime: datetime | None,
+    semaphore: asyncio.Semaphore | None = None,
+) -> list[tuple[int, Any]]:
+    """Execute SearchGlobalRequest for all active terms in parallel.
+
+    Uses optional semaphore to limit concurrency. Returns list of
+    (term_index, response) for successful responses. Failed or exhausted
+    terms are skipped. Updates terms' offset_id/has_more.
+    """
+    requests = []
+    term_indices = []
+    for i, ts in enumerate(terms):
+        if not ts["has_more"]:
+            continue
+        req = SearchGlobalRequest(
+            q=ts["query"],
+            filter=InputMessagesFilterEmpty(),
+            min_date=min_datetime,
+            max_date=max_datetime,
+            offset_rate=0,
+            offset_peer=InputPeerEmpty(),
+            offset_id=ts["offset_id"],
+            limit=batch_limit,
+        )
+        requests.append(client(req))
+        term_indices.append(i)
+
+    if not requests:
+        return []
+
+    # Wrap requests with optional semaphore
+    async def _run_with_limits(coro) -> Any:
+        if semaphore:
+            async with semaphore:
+                return await coro
+        return await coro
+
+    wrapped = [_run_with_limits(r) for r in requests]
+    responses = await asyncio.gather(*wrapped, return_exceptions=True)
+
+    results: list[tuple[int, Any]] = []
+    for req_idx, term_idx in enumerate(term_indices):
+        response = responses[req_idx]
+
+        if isinstance(response, Exception):
+            logger.warning(
+                "SearchGlobalRequest error for term '%s': %s",
+                terms[term_idx]["query"],
+                response,
+            )
+            terms[term_idx]["has_more"] = False
+            continue
+
+        if not hasattr(response, "messages") or not response.messages:
+            terms[term_idx]["has_more"] = False
+            continue
+
+        # Update offset_id for pagination
+        terms[term_idx]["offset_id"] = response.messages[-1].id  # type: ignore[union-attr]
+        results.append((term_idx, response))
+
+    return results
+
+
+async def _process_raw_message(
+    client,
+    message,
+    chat_type: str | None,
+    public: bool | None,
+    include_chat_entity: bool,
+) -> dict[str, Any] | None:
+    """Process a raw Telethon message into a result dict. Returns None if filtered out."""
+
+    try:
+        chat = await get_entity_by_id(message.peer_id)
+        if not chat:
+            logger.warning("Could not get entity for peer_id: %s", message.peer_id)
+            return None
+
+        if chat_type is not None and not _matches_chat_type(chat, chat_type):
+            return None
+
+        if not _matches_public_filter(chat, public):
+            return None
+
+        return await results._build_result_for_message(
+            client, message, chat, include_chat_entity
+        )
+    except Exception as e:
+        logger.warning(f"Error processing message: {e}")
+        return None
 
 
 async def _collect_messages_in_chat(
@@ -99,23 +207,90 @@ async def _collect_messages_global(
     collected: list[dict[str, Any]],
     seen_keys: set[Any],
     include_chat_entity: bool = True,
+    max_concurrent: int | None = None,
 ) -> None:
-    generators = [
-        _search_global_messages_generator(
-            client,
-            q,
-            limit,
-            min_datetime,
-            max_datetime,
-            chat_type,
-            public,
-            auto_expand_batches,
-            include_chat_entity,
-        )
+    """P0-style parallel gather for multi-term global search.
+
+    Runs SearchGlobalRequest for all terms in parallel per batch,
+    then lazily processes and round-robin merges results (only
+    processes as many messages as needed for target_limit).
+
+    Args:
+        max_concurrent: Max parallel requests (None = no semaphore).
+
+    """
+    terms = [
+        {"query": q, "offset_id": 0, "has_more": True}
         for q in queries
         if q and str(q).strip()
     ]
-    await _execute_parallel_searches_generators(generators, collected, seen_keys, limit)
+    if not terms:
+        return
+
+    batch_limit = min(limit * 2, 50)
+    max_batches = 1 + (auto_expand_batches if chat_type else 0)
+    target_limit = limit + 1
+
+    # Create optional semaphore for concurrency limiting
+    semaphore = asyncio.Semaphore(max_concurrent) if max_concurrent else None
+
+    for _batch_idx in range(max_batches):
+        if len(collected) >= target_limit:
+            break
+        if not any(ts["has_more"] for ts in terms):
+            break
+
+        # Gather search results from all active terms in parallel
+        batch_results = await _gather_global_batch(
+            client,
+            terms,
+            batch_limit,
+            min_datetime,
+            max_datetime,
+            semaphore=semaphore,
+        )
+
+        if not batch_results:
+            break
+
+        # Build per-term message iterators from raw responses
+        term_iters: list[tuple[int, Any]] = []
+        for term_idx, response in batch_results:
+            if hasattr(response, "messages") and response.messages:
+                term_iters.append((term_idx, iter(response.messages)))
+
+        if not term_iters:
+            break
+
+        # Lazy round-robin: process only what's needed
+        while term_iters and len(collected) < target_limit:
+            next_iters: list[tuple[int, Any]] = []
+            for term_idx, it in term_iters:
+                raw_msg = next(it, None)
+                if raw_msg is None:
+                    continue
+
+                msg_result = await _process_raw_message(
+                    client,
+                    raw_msg,
+                    chat_type,
+                    public,
+                    include_chat_entity,
+                )
+                if msg_result:
+                    _append_dedup_until_limit(
+                        collected,
+                        seen_keys,
+                        [msg_result],
+                        target_limit,
+                    )
+                    if len(collected) >= target_limit:
+                        break
+                next_iters.append((term_idx, it))
+            term_iters = next_iters
+
+        if len(collected) >= target_limit:
+            break
 
 
 async def _handle_query_mode(
@@ -210,6 +385,8 @@ async def _handle_query_mode(
                     e, f"Failed to search in chat '{chat_id}': {e!s}"
                 )
         else:
+            max_concurrent = params.get("max_concurrent")
+
             try:
                 await _collect_messages_global(
                     client,
@@ -223,6 +400,7 @@ async def _handle_query_mode(
                     collected,
                     seen_keys,
                     include_chat_entity=True,
+                    max_concurrent=max_concurrent,
                 )
             except Exception as e:
                 return _connection_error_or_build(

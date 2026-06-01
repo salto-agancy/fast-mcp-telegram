@@ -7,7 +7,7 @@ from src.utils.error_handling import log_and_build_error
 from src.utils.message_format import response_attachment_warning
 
 from .replies import _handle_reply_mode
-from .search_mode import _handle_query_mode
+from .search_mode import _DEFAULT_MAX_CONCURRENT, _handle_query_mode
 from .types import MessageRetrievalMode, ThreadScope, resolve_mode
 
 
@@ -25,6 +25,7 @@ def _build_search_params(
     public: bool | None,
     auto_expand_batches: int,
     include_total_count: bool,
+    max_concurrent: int | None = None,
 ) -> dict[str, Any]:
     return {
         "query": query,
@@ -39,6 +40,7 @@ def _build_search_params(
         "public": public,
         "auto_expand_batches": auto_expand_batches,
         "include_total_count": include_total_count,
+        "max_concurrent": max_concurrent,
         "is_global_search": chat_id is None,
         "has_query": bool(query and query.strip()),
         "has_date_filter": bool(min_date or max_date),
@@ -151,6 +153,7 @@ async def search_messages_impl(
     auto_expand_batches: int = 1,
     include_total_count: bool = False,
     thread_scope: ThreadScope = "auto",
+    max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
 ) -> dict[str, Any]:
     """
     Unified message retrieval: search, browse, read by IDs, or list replies.
@@ -158,6 +161,9 @@ async def search_messages_impl(
     Modes: per-chat search/browse (optional query); message_ids; reply_to_id;
     global search (non-empty query required). message_ids cannot combine with
     query or reply_to_id.
+
+    Args:
+        max_concurrent: Max parallel SearchGlobal requests (default: 2).
     """
     params = _build_search_params(
         query=query,
@@ -172,6 +178,7 @@ async def search_messages_impl(
         public=public,
         auto_expand_batches=auto_expand_batches,
         include_total_count=include_total_count,
+        max_concurrent=max_concurrent,
     )
 
     if thread_scope in ("full", "direct") and reply_to_id is None:
