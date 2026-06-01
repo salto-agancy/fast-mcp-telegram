@@ -1,8 +1,12 @@
 import asyncio
 import base64
+import contextlib
 import inspect
+import json
 import logging
+import os
 import secrets
+import tempfile
 import time
 import traceback
 from contextvars import ContextVar
@@ -87,6 +91,10 @@ _connection_failures: dict[
     str, tuple[int, float]
 ] = {}  # token -> (failure_count, last_failure_time)
 _failure_lock = asyncio.Lock()
+
+# Disk-based session tracking (for inactivity-based cleanup)
+_SESSION_TRACKING_FILE = "session_tracking.json"
+_tracking_lock = asyncio.Lock()
 
 # Idle session cleanup
 MAX_IDLE_TIME = 1800  # 30 minutes in seconds
@@ -407,6 +415,9 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
             async with _failure_lock:
                 _connection_failures.pop(token, None)
 
+            # Track last successful activity for inactivity-based cleanup
+            await _update_last_active(token)
+
         return client.is_connected()
     except SessionNotAuthorizedError:
         logger.error(f"Client reconnected but not authorized for token {token[:8]}...")
@@ -461,7 +472,7 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
 
 
 async def _record_connection_failure(token: str) -> None:
-    """Record a connection failure for backoff and circuit breaker logic."""
+    """Record a connection failure for backoff and circuit breaker logic (persisted to disk)."""
     async with _failure_lock:
         current_time = time.time()
         failure_count, _ = _connection_failures.get(token, (0, 0))
@@ -469,6 +480,173 @@ async def _record_connection_failure(token: str) -> None:
         logger.warning(
             f"Recorded connection failure #{failure_count + 1} for token {token[:8]}..."
         )
+
+    # Persist to disk for session tracking
+    async with _tracking_lock:
+        tracking = _load_session_tracking()
+        tracking.setdefault(
+            token,
+            {"last_active": None, "failure_count": 0, "last_failure": None},
+        )
+        tracking[token]["failure_count"] = failure_count + 1
+        tracking[token]["last_failure"] = current_time
+        _save_session_tracking(tracking)
+
+
+def _tracking_file_path() -> Path:
+    """Path to the session tracking JSON file."""
+    return SESSION_DIR / _SESSION_TRACKING_FILE
+
+
+def _load_session_tracking() -> dict:
+    """Load session tracking data from disk. Returns empty dict if file doesn't exist, is corrupt, or has unexpected structure."""
+    tracking_path = _tracking_file_path()
+    if not tracking_path.is_file():
+        return {}
+    try:
+        with open(tracking_path, encoding="utf-8") as f:
+            data: dict = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Failed to read session tracking file: {e}")
+        return {}
+
+    # Validate top-level structure: must be a dict of token -> tracking info
+    if not isinstance(data, dict):
+        logger.warning(
+            f"Session tracking file has invalid structure: expected object at top level, "
+            f"got {type(data).__name__}. Ignoring file."
+        )
+        return {}
+    if invalid := {
+        key: type(value).__name__
+        for key, value in data.items()
+        if not isinstance(value, dict)
+    }:
+        logger.warning(
+            f"Session tracking file has invalid value types; expected dict values. "
+            f"Invalid entries: {invalid}. Ignoring file."
+        )
+        return {}
+
+    return data
+
+
+def _save_session_tracking(data: dict) -> None:
+    """Save session tracking data to disk atomically."""
+    tracking_path = _tracking_file_path()
+    tracking_dir = os.path.dirname(os.fspath(tracking_path))
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=tracking_dir,
+            delete=False,
+        ) as f:
+            tmp_path = f.name
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, tracking_path)
+    except OSError as e:
+        logger.warning(f"Failed to write session tracking file: {e}")
+        if tmp_path is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+
+
+async def _update_last_active(token: str) -> None:
+    """Update last_active timestamp for a token on successful connection."""
+    async with _tracking_lock:
+        tracking = _load_session_tracking()
+        tracking.setdefault(
+            token,
+            {"last_active": None, "failure_count": 0, "last_failure": None},
+        )
+        tracking[token]["last_active"] = time.time()
+        _save_session_tracking(tracking)
+
+
+def _session_file_last_modified(session_path: Path) -> float | None:
+    """Return the mtime of the session file, checking both .session and no-suffix variants.
+
+    Returns None if neither variant exists.
+    """
+    candidates = []
+    if session_path.suffix != ".session":
+        candidates.append(session_path.with_suffix(".session"))
+    candidates.append(session_path)
+    for candidate in candidates:
+        try:
+            return candidate.stat().st_mtime
+        except OSError:
+            continue
+    return None
+
+
+_INACTIVE_SESSION_DAYS = int(os.environ.get("TELEGRAM_INACTIVE_SESSION_DAYS", "30"))
+
+
+async def _cleanup_inactive_sessions() -> int:
+    """Delete session files for tokens with no activity in >N days (default 30).
+
+    Uses `last_active` from the tracking file. Falls back to file mtime
+    for tokens without a tracking entry (legacy). Returns count of deleted sessions.
+    """
+    async with _tracking_lock:
+        tracking = _load_session_tracking()
+
+        cutoff = time.time() - _INACTIVE_SESSION_DAYS * 86400
+        deleted = 0
+
+        for token in list(tracking.keys()):
+            entry = tracking[token]
+            last_active = entry.get("last_active")
+
+            if last_active is not None and last_active > cutoff:
+                continue  # Still active
+
+            try:
+                session_path = _resolve_session_path_for_token(token)
+            except InvalidSessionTokenError:
+                continue  # Can't resolve — skip
+
+            # Check file mtime as fallback for tokens without last_active
+            if last_active is None:
+                session_file_mtime = _session_file_last_modified(session_path)
+                if session_file_mtime is not None and session_file_mtime > cutoff:
+                    continue  # File was modified recently
+
+            # TOCTOU guard: re-check last_active from disk in case a concurrent
+            # ensure_connection updated it after our initial load
+            fresh_tracking = _load_session_tracking()
+            fresh_entry = fresh_tracking.get(token)
+            if fresh_entry is not None:
+                fresh_last_active = fresh_entry.get("last_active")
+                if fresh_last_active is not None and fresh_last_active > cutoff:
+                    continue  # Became active since we started checking
+
+            # Delete session file
+            if _session_file_exists(session_path):
+                try:
+                    _unlink_session_file(session_path)
+                    logger.info(
+                        f"Deleted inactive session file for token {token[:8]}... "
+                        f"(last_active: {'never' if last_active is None else time.ctime(last_active)})"
+                    )
+                except OSError as e:
+                    logger.warning(
+                        f"Error deleting session file for token {token[:8]}...: {e}"
+                    )
+                    continue  # Don't remove tracking entry if deletion failed
+
+            # Remove tracking entry
+            del tracking[token]
+            deleted += 1
+
+        _save_session_tracking(tracking)
+
+    if deleted:
+        logger.info(f"Cleaned up {deleted} inactive session(s)")
+    return deleted
 
 
 async def cleanup_session_cache():
@@ -485,51 +663,6 @@ async def cleanup_session_cache():
 
     _session_cache.clear()
     logger.info("Cleaned up all session cache entries")
-
-
-async def cleanup_failed_sessions():
-    """Clean up sessions that have too many connection failures."""
-    async with _failure_lock:
-        current_time = time.time()
-        failed_tokens = []
-
-        for token, (failure_count, last_failure_time) in _connection_failures.items():
-            # If more than 10 failures and last failure was more than 1 hour ago, clean up
-            if failure_count >= 10 and (current_time - last_failure_time) > 3600:
-                failed_tokens.append(token)
-
-        for token in failed_tokens:
-            # Remove from failure tracking
-            _connection_failures.pop(token, None)
-
-            # Remove from session cache and disconnect
-            if token in _session_cache:
-                client, _ = _session_cache.pop(token)
-                try:
-                    await client.disconnect()
-                    logger.info(f"Disconnected failed session for token {token[:8]}...")
-                except Exception as e:
-                    logger.warning(
-                        f"Error disconnecting failed session {token[:8]}...: {e}"
-                    )
-
-            # Remove session file
-            try:
-                session_path = _resolve_session_path_for_token(token)
-            except InvalidSessionTokenError:
-                continue
-            if _session_file_exists(session_path):
-                try:
-                    _unlink_session_file(session_path)
-                    logger.info(f"Removed failed session file for token {token[:8]}...")
-                except Exception as e:
-                    logger.warning(
-                        f"Error removing failed session file {token[:8]}...: {e}"
-                    )
-
-            logger.info(
-                f"Cleaned up failed session for token {token[:8]}... (had {failure_count} failures)"
-            )
 
 
 async def get_session_health_stats() -> dict:
