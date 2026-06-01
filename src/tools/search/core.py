@@ -4,6 +4,7 @@ from typing import Any
 
 from src.tools.messages import read_messages_by_ids
 from src.utils.error_handling import log_and_build_error
+from src.utils.message_format import response_attachment_warning
 
 from .replies import _handle_reply_mode
 from .search_mode import _handle_query_mode
@@ -126,10 +127,15 @@ async def _handle_ids_mode(
     if len(messages_list) == 1 and "error" in messages_list[0]:
         return messages_list[0]
 
-    return {
+    result: dict[str, Any] = {
         "messages": messages_list,
         "has_more": False,
     }
+
+    if warning := response_attachment_warning(messages_list):
+        result["_warning"] = warning
+
+    return result
 
 
 async def search_messages_impl(

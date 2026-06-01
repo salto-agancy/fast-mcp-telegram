@@ -7,7 +7,10 @@ from src.client.connection import get_connected_client
 from src.utils.discussion import get_post_discussion_info
 from src.utils.entity import get_entity_by_id
 from src.utils.error_handling import log_and_build_error
-from src.utils.message_format import transcribe_voice_messages
+from src.utils.message_format import (
+    response_attachment_warning,
+    transcribe_voice_messages,
+)
 
 from . import results
 from .forum_replies import (
@@ -287,6 +290,9 @@ async def _handle_reply_mode(
 
         if discussion_metadata:
             response |= discussion_metadata
+
+        if warning := response_attachment_warning(window):
+            response["_warning"] = warning
 
         return response
 

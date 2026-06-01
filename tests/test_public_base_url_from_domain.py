@@ -13,7 +13,7 @@ import pytest
         ("https://tg-mcp.example.com", "https://tg-mcp.example.com"),
         ("https://tg-mcp.example.com/", "https://tg-mcp.example.com"),
         ("http://127.0.0.1:8000", "http://127.0.0.1:8000"),
-        ("localhost", "http://localhost"),
+        ("localhost", ""),
         ("localhost:9000", "http://localhost:9000"),
         ("127.0.0.1", "http://127.0.0.1"),
         ("127.0.0.1:8000", "http://127.0.0.1:8000"),

@@ -568,6 +568,26 @@ async def build_message_result(
     return result
 
 
+def response_attachment_warning(messages: list[dict]) -> str | None:
+    """Return a warning string if DOMAIN is missing and any message has media.
+
+    One warning per entire response, not per message. Returns None when
+    there is no problem (valid domain, stdio transport, or no media messages).
+    """
+    if not messages:
+        return None
+    cfg = get_config()
+    if cfg.transport != "http" or cfg.public_base_url_normalized:
+        return None
+    has_media = any(bool(m.get("media")) for m in messages)
+    if not has_media:
+        return None
+    return (
+        f"⚠️ DOMAIN is '{cfg.domain}' — attachment_download_url DISABLED for media messages. "
+        "Set DOMAIN=<your-public-host> in .env to enable download links."
+    )
+
+
 class PremiumRequiredError(Exception):
     """Exception raised when transcription fails due to non-premium account."""
 
