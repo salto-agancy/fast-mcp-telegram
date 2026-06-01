@@ -8,16 +8,16 @@ global search (SearchGlobalRequest) and in-chat search (iter_messages).
 Supports configurable semaphore (--max-concurrent) for the gather-based parallelization.
 
 """
+
 import argparse
 import asyncio
 import json
 import logging
 import math
-import signal
 import sys
 import time
 from copy import deepcopy
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -35,9 +35,10 @@ logger = logging.getLogger("benchmark_search")
 _saved_argv_for_fastmcp: list[str] = sys.argv[:]
 sys.argv = [sys.argv[0] if sys.argv else "benchmark"]
 try:
+    from telethon.errors import FloodWaitError
+
     from src.client.connection import get_connected_client, set_request_token
     from src.tools.search import search_messages_impl
-    from telethon.errors import FloodWaitError
 finally:
     sys.argv = _saved_argv_for_fastmcp
 
@@ -71,7 +72,9 @@ class BenchmarkReport:
 
     @property
     def mean_s(self) -> float:
-        return sum(self.durations_s) / len(self.durations_s) if self.durations_s else 0.0
+        return (
+            sum(self.durations_s) / len(self.durations_s) if self.durations_s else 0.0
+        )
 
     @property
     def min_s(self) -> float:
@@ -107,7 +110,8 @@ class BenchmarkReport:
 def _make_scenario(query: str, limit: int, max_concurrent: int | None):
     """Create a callable that returns a search coroutine."""
     return lambda: search_messages_impl(
-        query=query, limit=limit,
+        query=query,
+        limit=limit,
         max_concurrent=max_concurrent,
     )
 
@@ -118,15 +122,27 @@ def _build_scenarios(max_concurrent: int | None) -> list[tuple[str, Any]]:
         ("baseline", _make_scenario("__z__", 1, max_concurrent)),
         ("single_term", _make_scenario("недвижимость", 10, max_concurrent)),
         ("two_terms", _make_scenario("недвижимость, инвестиции", 10, max_concurrent)),
-        ("three_terms", _make_scenario("недвижимость, инвестиции, сделка", 10, max_concurrent)),
-        ("five_terms", _make_scenario("недвижимость, инвестиции, объект, проект, сделка", 10, max_concurrent)),
-        ("three_terms_large", _make_scenario("недвижимость, инвестиции, сделка", 50, max_concurrent)),
+        (
+            "three_terms",
+            _make_scenario("недвижимость, инвестиции, сделка", 10, max_concurrent),
+        ),
+        (
+            "five_terms",
+            _make_scenario(
+                "недвижимость, инвестиции, объект, проект, сделка", 10, max_concurrent
+            ),
+        ),
+        (
+            "three_terms_large",
+            _make_scenario("недвижимость, инвестиции, сделка", 50, max_concurrent),
+        ),
     ]
 
     # Dedup check — validates no duplicate IDs from overlapping terms
     async def _dedup():
         result = await search_messages_impl(
-            query="недвижимость, сделка, недвижимость", limit=15,
+            query="недвижимость, сделка, недвижимость",
+            limit=15,
             max_concurrent=max_concurrent,
         )
         if "error" in result:
@@ -138,25 +154,27 @@ def _build_scenarios(max_concurrent: int | None) -> list[tuple[str, Any]]:
             return {
                 **result,
                 "error": f"DEDUP_FAIL: {len(ids)} results but {len(ids) - len(set(ids))} "
-                         f"duplicates (ids: {sorted(set(dupes))})",
+                f"duplicates (ids: {sorted(set(dupes))})",
                 "_assertion_ok": False,
                 "_assertion_type": "dedup_check",
             }
         result["_assertion_ok"] = True
         result["_assertion_type"] = "dedup_check"
         return result
+
     scenarios.append(("dedup_check", _dedup))
 
     # Fairness check — validates results from all terms are represented
     async def _fairness():
         result = await search_messages_impl(
-            query="недвижимость, инвестиции, сделка", limit=20,
+            query="недвижимость, инвестиции, сделка",
+            limit=20,
             max_concurrent=max_concurrent,
         )
         if "error" in result:
             return result
         messages = result.get("messages", [])
-        terms = [t.strip() for t in "недвижимость, инвестиции, сделка".split(",")]
+        terms = [t.strip() for t in ["недвижимость", " инвестиции", " сделка"]]
         per_term = {}
         for term in terms:
             tr = await search_messages_impl(query=term, limit=20)
@@ -174,13 +192,14 @@ def _build_scenarios(max_concurrent: int | None) -> list[tuple[str, Any]]:
             return {
                 **result,
                 "warning": f"FAIRNESS: terms [{', '.join(missing_terms)}] have results but "
-                           f"none appear in multi-term output.",
+                f"none appear in multi-term output.",
                 "_assertion_type": "fairness_check",
                 "_assertion_ok": False,
             }
         result["_assertion_ok"] = True
         result["_assertion_type"] = "fairness_check"
         return result
+
     scenarios.append(("fairness_check", _fairness))
 
     return scenarios
@@ -197,7 +216,9 @@ async def _warmup(client) -> None:
     # Practice search to warm MTProto cache
     try:
         result = await search_messages_impl(query="недвижимость", limit=1)
-        logger.info("Warmup search: %s", "OK" if "error" not in result else result.get("error"))
+        logger.info(
+            "Warmup search: %s", "OK" if "error" not in result else result.get("error")
+        )
     except Exception as e:
         logger.info("Warmup search (optional): %s", e)
 
@@ -251,13 +272,21 @@ async def _run_single_scenario(
                     report.n_floodwait_exceeded += 1
                     logger.warning(
                         "  [%s] iter %d: %s (cap %ds, retries %d/%d)",
-                        name, i + 1, error, floodwait_cap,
-                        floodwait_retries - 1, floodwait_max_retry,
+                        name,
+                        i + 1,
+                        error,
+                        floodwait_cap,
+                        floodwait_retries - 1,
+                        floodwait_max_retry,
                     )
                     break
                 logger.warning(
                     "  [%s] iter %d: FloodWait %ds, sleeping (retry %d/%d)",
-                    name, i + 1, wait, floodwait_retries, floodwait_max_retry,
+                    name,
+                    i + 1,
+                    wait,
+                    floodwait_retries,
+                    floodwait_max_retry,
                 )
                 await asyncio.sleep(wait)
                 # Loop back to retry
@@ -276,14 +305,21 @@ async def _run_single_scenario(
             report.n_clean += 1
             logger.info(
                 "  [%s] iter %d: %.3fs, %d results%s",
-                name, i + 1, duration, results_count, "",
+                name,
+                i + 1,
+                duration,
+                results_count,
+                "",
             )
         else:
             # Skipped — FloodWait was involved (recovered or exceeded)
             report.n_skipped += 1
             logger.info(
                 "  [%s] iter %d: SKIPPED (FloodWait retries=%d, %.3fs wasted)",
-                name, i + 1, floodwait_retries, duration,
+                name,
+                i + 1,
+                floodwait_retries,
+                duration,
             )
 
     # ── Reliability check: >50% iterations must be clean ──
@@ -291,7 +327,9 @@ async def _run_single_scenario(
         report.unreliable = True
         logger.warning(
             "  [%s] UNCLEAN: %d/%d clean iterations — RESULTS UNRELIABLE",
-            name, report.n_clean, report.n_iterations,
+            name,
+            report.n_clean,
+            report.n_iterations,
         )
 
     return report
@@ -313,7 +351,9 @@ def _report_table(reports: list[BenchmarkReport]) -> str:
         results_str = (
             f"{min(r.results_counts)}-{max(r.results_counts)}"
             if min(r.results_counts) != max(r.results_counts)
-            else str(r.results_counts[0]) if r.results_counts else "0"
+            else str(r.results_counts[0])
+            if r.results_counts
+            else "0"
         )
         clean_skip = f"{r.n_clean}/{r.n_skipped}"
         lines.append(
@@ -356,7 +396,9 @@ def _report_cross_run(run_jsons: list[dict]) -> None:
     """Compare median latencies across multiple runs (run-to-run variance)."""
     scenarios = list(run_jsons[0]["scenarios"].keys())
 
-    print(f"{'Scenario':30s} {'Runs':>5s} {'Mean(med)':>10s} {'StDev':>7s} {'Min':>7s} {'Max':>7s} {'Spread':>7s}")
+    print(
+        f"{'Scenario':30s} {'Runs':>5s} {'Mean(med)':>10s} {'StDev':>7s} {'Min':>7s} {'Max':>7s} {'Spread':>7s}"
+    )
     print("-" * 80)
 
     for sc in scenarios:
@@ -367,30 +409,40 @@ def _report_cross_run(run_jsons: list[dict]) -> None:
                 medians.append(s["median_s"])
 
         if not medians:
-            print(f"{sc:30s} {'0':>5s} {'-':>10s} {'-':>7s} {'-':>7s} {'-':>7s} {'-':>7s}")
+            print(
+                f"{sc:30s} {'0':>5s} {'-':>10s} {'-':>7s} {'-':>7s} {'-':>7s} {'-':>7s}"
+            )
         elif len(medians) == 1:
-            print(f"{sc:30s} {'1':>5d} {medians[0]:>10.4f} {'-':>7s} {'-':>7s} {'-':>7s} {'-':>7s}")
+            print(
+                f"{sc:30s} {'1':>5d} {medians[0]:>10.4f} {'-':>7s} {'-':>7s} {'-':>7s} {'-':>7s}"
+            )
         else:
             mean_m = sum(medians) / len(medians)
             variance = sum((m - mean_m) ** 2 for m in medians) / len(medians)
             stdev = math.sqrt(variance)
             spread = max(medians) - min(medians)
-            print(f"{sc:30s} {len(medians):>5d} {mean_m:>10.4f} {stdev:>7.4f} {min(medians):>7.4f} {max(medians):>7.4f} {spread:>7.4f}")
+            print(
+                f"{sc:30s} {len(medians):>5d} {mean_m:>10.4f} {stdev:>7.4f} {min(medians):>7.4f} {max(medians):>7.4f} {spread:>7.4f}"
+            )
 
 
 # ── Main ──────────────────────────────────────────────────────────────────
 
 
 async def main() -> int:
-    parser = argparse.ArgumentParser(description="Global message search benchmark suite")
+    parser = argparse.ArgumentParser(
+        description="Global message search benchmark suite"
+    )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=str,
         default=None,
         help="Save JSON report to file",
     )
     parser.add_argument(
-        "--iterations", "-n",
+        "--iterations",
+        "-n",
         type=int,
         default=3,
         help="Number of iterations per scenario (default: 3)",
@@ -503,28 +555,31 @@ async def main() -> int:
 
     for run in range(1, args.runs + 1):
         if run > 1:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"=== Run {run}/{args.runs} ===")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
         run_reports: list[BenchmarkReport] = []
 
         for idx, (name, scenario_fn) in enumerate(scenario_fns):
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Scenario: {name}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
             try:
                 report = await asyncio.wait_for(
                     _run_single_scenario(
-                        name, scenario_fn, args.iterations, config,
+                        name,
+                        scenario_fn,
+                        args.iterations,
+                        config,
                         floodwait_max_retry=args.floodwait_max_retry,
                         floodwait_cap=args.floodwait_cap,
                     ),
                     timeout=timeout_s,
                 )
                 run_reports.append(report)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print(f"  TIMEOUT after {timeout_s}s — skipping")
                 run_reports.append(
                     BenchmarkReport(
@@ -542,23 +597,25 @@ async def main() -> int:
                 await asyncio.sleep(args.delay_between_scenarios)
 
         # ── Per-run report ──
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Run {run} RESULTS (max_concurrent={args.max_concurrent})")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
         print(_report_table(run_reports))
 
         # Unreliable scenarios warning
         unreliable_scenarios = [r.scenario for r in run_reports if r.unreliable]
         if unreliable_scenarios:
-            print(f"\n⚠️ Unreliable: {', '.join(unreliable_scenarios)} (n_clean < {args.iterations}/2)")
+            print(
+                f"\n⚠️ Unreliable: {', '.join(unreliable_scenarios)} (n_clean < {args.iterations}/2)"
+            )
 
         json_data = _report_json(run_reports)
         all_run_reports.append(json_data)
 
         # Compact JSON
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("JSON summary")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         compact = deepcopy(json_data)
         for s in compact["scenarios"].values():
             del s["durations_s"]
@@ -586,9 +643,9 @@ async def main() -> int:
 
     # ── Cross-run comparison ──
     if args.runs > 1:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"CROSS-RUN COMPARISON ({args.runs} runs, cooldown={args.run_cooldown}s)")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         _report_cross_run(all_run_reports)
 
     return 0

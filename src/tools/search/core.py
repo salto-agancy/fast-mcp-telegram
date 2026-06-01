@@ -6,7 +6,7 @@ from src.tools.messages import read_messages_by_ids
 from src.utils.error_handling import log_and_build_error
 
 from .replies import _handle_reply_mode
-from .search_mode import _handle_query_mode
+from .search_mode import _DEFAULT_MAX_CONCURRENT, _handle_query_mode
 from .types import MessageRetrievalMode, ThreadScope, resolve_mode
 
 
@@ -147,7 +147,7 @@ async def search_messages_impl(
     auto_expand_batches: int = 1,
     include_total_count: bool = False,
     thread_scope: ThreadScope = "auto",
-    max_concurrent: int | None = None,
+    max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
 ) -> dict[str, Any]:
     """
     Unified message retrieval: search, browse, read by IDs, or list replies.
@@ -157,7 +157,7 @@ async def search_messages_impl(
     query or reply_to_id.
 
     Args:
-        max_concurrent: Max parallel SearchGlobal requests (None = full gather).
+        max_concurrent: Max parallel SearchGlobal requests (default: 2).
     """
     params = _build_search_params(
         query=query,

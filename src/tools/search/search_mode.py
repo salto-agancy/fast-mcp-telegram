@@ -10,7 +10,12 @@ from telethon.tl.types import InputMessagesFilterEmpty, InputPeerEmpty
 
 from src.client.connection import get_connected_client
 from src.utils.datetime_parse import parse_iso_datetime_utc
-from src.utils.entity import _get_chat_message_count, get_entity_by_id
+from src.utils.entity import (
+    _get_chat_message_count,
+    _matches_chat_type,
+    _matches_public_filter,
+    get_entity_by_id,
+)
 from src.utils.error_handling import log_and_build_error, log_connection_error_response
 from src.utils.helpers import _append_dedup_until_limit
 from src.utils.message_format import transcribe_voice_messages
@@ -113,7 +118,7 @@ async def _gather_global_batch(
             continue
 
         # Update offset_id for pagination
-        terms[term_idx]["offset_id"] = response.messages[-1].id
+        terms[term_idx]["offset_id"] = response.messages[-1].id  # type: ignore[union-attr]
         results.append((term_idx, response))
 
     return results
@@ -127,14 +132,14 @@ async def _process_raw_message(
     include_chat_entity: bool,
 ) -> dict[str, Any] | None:
     """Process a raw Telethon message into a result dict. Returns None if filtered out."""
-    from src.utils.entity import _matches_chat_type, _matches_public_filter
 
     try:
         chat = await get_entity_by_id(message.peer_id)
         if not chat:
+            logger.warning("Could not get entity for peer_id: %s", message.peer_id)
             return None
 
-        if not _matches_chat_type(chat, chat_type):
+        if chat_type is not None and not _matches_chat_type(chat, chat_type):
             return None
 
         if not _matches_public_filter(chat, public):
@@ -234,7 +239,11 @@ async def _collect_messages_global(
 
         # Gather search results from all active terms in parallel
         batch_results = await _gather_global_batch(
-            client, terms, batch_limit, min_datetime, max_datetime,
+            client,
+            terms,
+            batch_limit,
+            min_datetime,
+            max_datetime,
             semaphore=semaphore,
         )
 
@@ -259,11 +268,18 @@ async def _collect_messages_global(
                     continue
 
                 msg_result = await _process_raw_message(
-                    client, raw_msg, chat_type, public, include_chat_entity,
+                    client,
+                    raw_msg,
+                    chat_type,
+                    public,
+                    include_chat_entity,
                 )
                 if msg_result:
                     _append_dedup_until_limit(
-                        collected, seen_keys, [msg_result], target_limit,
+                        collected,
+                        seen_keys,
+                        [msg_result],
+                        target_limit,
                     )
                     if len(collected) >= target_limit:
                         break
