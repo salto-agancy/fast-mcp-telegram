@@ -40,6 +40,9 @@ python-dotenv    # Environment variable management
 
 ### Environment Configuration
 ```bash
+# Session cleanup (0.27.0)
+TELEGRAM_INACTIVE_SESSION_DAYS=30      # Auto-delete .session files unused >N days (0=disable)
+
 # Project structure
 tg_mcp/
 ├── src/                   # Source code

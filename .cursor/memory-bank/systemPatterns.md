@@ -27,7 +27,7 @@ The project follows a modular architecture with clear separation of concerns:
    ```bash
    docker compose logs | grep "token_hash_prefix"
    ```
-3. **Verify timestamps**: Check session file modification times to detect stale vs active sessions
+3. **Verify timestamps**: Check session file modification times — `.session` files untouched for >30 days are auto-deleted
    ```bash
    ls -la --time-style=+%H:%M:%S sessions/
    ```
@@ -130,4 +130,5 @@ Summary:
 ## Memory Management
 - **Resource Limits**: Docker container limited to 256MB RAM (increased from 128MB)
 - **Idle Timeout**: Sessions disconnected after inactivity (planned)
-- **Cleanup**: Failed sessions auto-removed to prevent disk bloat
+- **Cleanup**: `.session` files untouched for >30 days auto-deleted by `_cleanup_inactive_sessions()` (runs at startup + every 24h)
+- **Configurable**: `TELEGRAM_INACTIVE_SESSION_DAYS` env var (0=disable auto-delete)

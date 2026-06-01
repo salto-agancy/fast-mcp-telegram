@@ -1,4 +1,8 @@
-### 2026-05-29
+### 2026-06-01
+- **0.27.0 — Inactivity-based session cleanup:** Replaced `cleanup_failed_sessions()` (10 errors → delete) with `_cleanup_inactive_sessions()` — deletes `.session` files with mtime >30 days old. mtime-only, no tracking file. Periodic cleanup (startup + every 24h). Default session protection. TOCTOU guard. GitHub release + CI green; Telegram RU posted, EN failed (bot not invited to `5131784155`).
+- **Post-release fixes:** `TELEGRAM_INACTIVE_SESSION_DAYS` env var (0=disable), documented in `docs/Installation.md` Configuration Reference. PRs #95, #96, #97, #98 merged.
+- **Qwen3.7 review process:** Subagent spawned for skeptical review of session cleanup changes; 31 findings for tracking-file version, fixed 2 real bugs (mtime touch on connection, default session protection). Sourcery GH App rate-limited for the remainder of the week.
+- **Release process extracted:** `RELEASE-PROCESS.md` extracted from `.cursor/skills/release-notes/SKILL.md`, `alexey-coding-process.md` updated with Qwen3.7 review requirement.
 - **0.23.1 — Session ACL hardening:** PR #68 merged; empty-lane denial copy for `get_messages` / `get_chat_info`; `find_chats` lane filter on id/chat_id/username; HTTP MTProto ACL route tests; SECURITY/Roadmap docs. GitHub release + Telegram posted; CI/deploy green.
 - **0.23.0 — Session ACL principals terminology:** Breaking rename `tokens:` → `principals:`; `ACL_DENY_UNLISTED_PRINCIPALS`; legacy `tokens:` fails at load; operator glossary in SECURITY.md. GitHub release + PyPI + Telegram posted; CI green.
 
