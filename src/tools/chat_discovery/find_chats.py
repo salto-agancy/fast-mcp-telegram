@@ -118,7 +118,14 @@ async def find_chats_impl(
     # iteration instead, which matches by display name (title/username) via
     # entity_matches_dialog_query(). This is the only Telegram API approach
     # that searches by chat name rather than by message content.
-    if chat_type in ("group", "groups", "megagroup", "channel", "channels", "broadcast"):
+    if chat_type in (
+        "group",
+        "groups",
+        "megagroup",
+        "channel",
+        "channels",
+        "broadcast",
+    ):
         return await _find_chats_by_dialogs(
             query=query,
             limit=limit,
@@ -133,7 +140,9 @@ async def find_chats_impl(
     # + groups/channels via dialog iteration (title-based). Merged round-robin.
     if not chat_type:
         return await _find_chats_combined(
-            query=query, limit=limit, public=public,
+            query=query,
+            limit=limit,
+            public=public,
         )
 
     # Private/bot → contacts.SearchRequest only (user search by username).
@@ -224,9 +233,7 @@ async def _find_chats_combined(
         user_result: dict[str, Any] | BaseException
         dialog_result: dict[str, Any] | BaseException
         user_result, dialog_result = await asyncio.gather(
-            _find_chats_global(
-                query=query, limit=limit, chat_type=None, public=public
-            ),
+            _find_chats_global(query=query, limit=limit, chat_type=None, public=public),
             _find_chats_by_dialogs(
                 query=query,
                 limit=limit,
@@ -253,7 +260,9 @@ async def _find_chats_combined(
     if user_chats is not None:
         term_results.append(user_chats)
 
-    dialog_chats = _normalize_gather_result(dialog_result, "dialog search (groups/channels)")
+    dialog_chats = _normalize_gather_result(
+        dialog_result, "dialog search (groups/channels)"
+    )
     if dialog_chats is not None:
         term_results.append(dialog_chats)
 
@@ -282,10 +291,7 @@ async def _gather_term_results(
 
     Returns (term_results, errors) where term_results is None if no term succeeded.
     """
-    tasks = [
-        _search_contacts_as_list(term, limit, chat_type, public)
-        for term in terms
-    ]
+    tasks = [_search_contacts_as_list(term, limit, chat_type, public) for term in terms]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     term_results: list[list[dict[str, Any]]] = []
