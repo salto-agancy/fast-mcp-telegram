@@ -132,8 +132,7 @@ async def _handle_ids_mode(
         "has_more": False,
     }
 
-    warning = response_attachment_warning(messages_list)
-    if warning:
+    if warning := response_attachment_warning(messages_list):
         result["_warning"] = warning
 
     return result

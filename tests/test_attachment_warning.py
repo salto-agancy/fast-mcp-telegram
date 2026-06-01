@@ -116,6 +116,7 @@ class TestValidateConfigDomainWarning:
         """validate_config should log a warning when domain is your-domain.com."""
         http_auth_config.domain = "your-domain.com"
         with caplog.at_level(logging.WARNING):
+            # sourcery: skip
             if hasattr(http_auth_config, "_config_logged"):
                 del http_auth_config._config_logged
             http_auth_config.validate_config()
@@ -130,22 +131,18 @@ class TestValidateConfigDomainWarning:
         """validate_config should NOT log a domain warning when domain is valid."""
         http_auth_config.domain = "tg-mcp.example.com"
         with caplog.at_level(logging.WARNING):
+            # sourcery: skip
             if hasattr(http_auth_config, "_config_logged"):
                 del http_auth_config._config_logged
             http_auth_config.validate_config()
-        domain_warnings = [
-            r for r in caplog.records if "DOMAIN is" in r.message
-        ]
-        assert len(domain_warnings) == 0
+        assert all("DOMAIN is" not in r.message for r in caplog.records)
 
     def test_validate_config_no_warning_when_stdio(self, stdio_config, caplog):
         """No domain warning in stdio mode (transport is not http)."""
         stdio_config.domain = "your-domain.com"
         with caplog.at_level(logging.WARNING):
+            # sourcery: skip
             if hasattr(stdio_config, "_config_logged"):
                 del stdio_config._config_logged
             stdio_config.validate_config()
-        domain_warnings = [
-            r for r in caplog.records if "DOMAIN is" in r.message
-        ]
-        assert len(domain_warnings) == 0
+        assert all("DOMAIN is" not in r.message for r in caplog.records)

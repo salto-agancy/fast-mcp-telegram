@@ -291,8 +291,7 @@ async def _handle_reply_mode(
         if discussion_metadata:
             response |= discussion_metadata
 
-        warning = response_attachment_warning(window)
-        if warning:
+        if warning := response_attachment_warning(window):
             response["_warning"] = warning
 
         return response
