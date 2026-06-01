@@ -54,7 +54,11 @@ async def search_dialogs_impl(
         query_lower = query.lower().strip() if query else ""
 
         count = 0
-        async for dialog in client.iter_dialogs(limit=limit * 10, folder=folder_id):  # type: ignore[arg-type]
+        # Fetch enough dialogs to have a reasonable chance of finding the target.
+        # limit*10 alone can miss groups/channels beyond position N*10 for large accounts.
+        # The +200 floor ensures at least ~200 dialogs are checked even at small limits.
+        iter_limit = max(limit * 10, limit + 200)
+        async for dialog in client.iter_dialogs(limit=iter_limit, folder=folder_id):  # type: ignore[arg-type]
             if count >= limit:
                 break
 

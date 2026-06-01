@@ -113,6 +113,39 @@ async def find_chats_impl(
             folder_id=None,
         )
 
+    # For group/channel search: contacts.SearchRequest searches USERS by username
+    # substring — it does NOT find groups/channels by title. Route to dialog
+    # iteration instead, which matches by display name (title/username) via
+    # entity_matches_dialog_query(). This is the only Telegram API approach
+    # that searches by chat name rather than by message content.
+    if chat_type in (
+        "group",
+        "groups",
+        "megagroup",
+        "channel",
+        "channels",
+        "broadcast",
+    ):
+        return await _find_chats_by_dialogs(
+            query=query,
+            limit=limit,
+            chat_type=chat_type,
+            public=public,
+            min_date=None,
+            max_date=None,
+            folder_id=None,
+        )
+
+    # No chat_type → combined search: users via contacts.SearchRequest (username-based)
+    # + groups/channels via dialog iteration (title-based). Merged round-robin.
+    if not chat_type:
+        return await _find_chats_combined(
+            query=query,
+            limit=limit,
+            public=public,
+        )
+
+    # Private/bot → contacts.SearchRequest only (user search by username).
     result = await _find_chats_global(
         query=query,
         limit=limit,
@@ -127,10 +160,17 @@ async def _find_chats_global(
     limit: int,
     chat_type: str | None,
     public: bool | None,
-) -> list[dict[str, Any]] | dict[str, Any]:
-    """Global Telegram search without date filtering."""
+) -> dict[str, Any]:
+    """
+    Global Telegram search without date filtering.
+
+    NOTE: This uses contacts.SearchRequest which searches USERS by username
+    substring — it does NOT search groups/channels by title. The chat_type
+    parameter here is only a filter on user results, not a different API.
+    Use search_dialogs_impl for name-based group/channel search.
+    """
     normalized_query = query or ""
-    terms = [t.strip() for t in normalized_query.split(",") if t.strip()]
+    terms: list[str] = [t.strip() for t in normalized_query.split(",") if t.strip()]
 
     if len(terms) <= 1:
         result = await _search_contacts_as_list(
@@ -139,6 +179,106 @@ async def _find_chats_global(
         return {"chats": result} if isinstance(result, list) else result
 
     return await _find_chats_global_multi_term(terms, limit, chat_type, public)
+
+
+def _normalize_gather_result(
+    result: Any,
+    source_name: str,
+) -> list[dict[str, Any]] | None:
+    """Extract chat list from a gather result, or None on error.
+
+    Args:
+        result: A result from asyncio.gather(return_exceptions=True).
+        source_name: Name of the source for logging.
+
+    Returns:
+        List of chat dicts, or None if the result was an error or empty.
+    """
+    if isinstance(result, BaseException):
+        if isinstance(result, (KeyboardInterrupt, SystemExit)):
+            raise result
+        logger.warning("Combined search: %s failed: %s", source_name, result)
+        return None
+    if isinstance(result, dict):
+        chats = result.get("chats")
+        if isinstance(chats, list) and chats:
+            return chats
+    return None
+
+
+async def _find_chats_combined(
+    query: str | None,
+    limit: int,
+    public: bool | None,
+) -> dict[str, Any]:
+    """
+    Combined search: contacts.SearchRequest (users) + dialog iteration (groups/channels).
+
+    Runs both searches in parallel via asyncio.gather, then merges results
+    round-robin with dedup by entity ID. Gracefully degrades if one path fails
+    (e.g., contacts.SearchRequest under FloodWait → dialog-only results).
+
+    Args:
+        query: Search query
+        limit: Maximum results
+        public: Optional public filter
+
+    Returns:
+        Dict with 'chats' key, or error dict if both paths failed.
+    """
+    params = {"query": query, "limit": limit, "public": public}
+
+    try:
+        # asyncio.gather(return_exceptions=True) can return BaseException instances
+        user_result: dict[str, Any] | BaseException
+        dialog_result: dict[str, Any] | BaseException
+        user_result, dialog_result = await asyncio.gather(
+            _find_chats_global(query=query, limit=limit, chat_type=None, public=public),
+            _find_chats_by_dialogs(
+                query=query,
+                limit=limit,
+                chat_type=None,
+                public=public,
+                min_date=None,
+                max_date=None,
+                folder_id=None,
+            ),
+            return_exceptions=True,
+        )
+    except Exception as e:
+        logger.warning("Combined search failed unexpectedly: %s", e)
+        return log_and_build_error(
+            operation="find_chats",
+            error_message=f"Combined search failed: {e}",
+            params=params,
+            exception=e,
+        )
+
+    term_results: list[list[dict[str, Any]]] = []
+
+    user_chats = _normalize_gather_result(user_result, "contact search (users)")
+    if user_chats is not None:
+        term_results.append(user_chats)
+
+    dialog_chats = _normalize_gather_result(
+        dialog_result, "dialog search (groups/channels)"
+    )
+    if dialog_chats is not None:
+        term_results.append(dialog_chats)
+
+    if not term_results:
+        if error_result := next(
+            (
+                r
+                for r in (user_result, dialog_result)
+                if isinstance(r, dict) and r.get("ok") is False
+            ),
+            None,
+        ):
+            return error_result
+        return {"chats": []}
+
+    return {"chats": _merge_results_round_robin(term_results, limit)}
 
 
 async def _gather_term_results(
@@ -151,15 +291,12 @@ async def _gather_term_results(
 
     Returns (term_results, errors) where term_results is None if no term succeeded.
     """
-    tasks = [
-        _search_contacts_as_list(term, limit, chat_type, public)
-        for term in terms
-    ]
+    tasks = [_search_contacts_as_list(term, limit, chat_type, public) for term in terms]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     term_results: list[list[dict[str, Any]]] = []
     errors: list[str] = []
-    for term, result in zip(terms, results):
+    for term, result in zip(terms, results, strict=True):
         if isinstance(result, Exception):
             errors.append(f"'{term}': {result}")
             logger.warning(
@@ -174,9 +311,7 @@ async def _gather_term_results(
             continue
         term_results.append(result)
 
-    if not term_results:
-        return None, tuple(errors)
-    return term_results, tuple(errors)
+    return (term_results, tuple(errors)) if term_results else (None, tuple(errors))
 
 
 def _merge_results_round_robin(
