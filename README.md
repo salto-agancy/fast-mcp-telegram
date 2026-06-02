@@ -50,6 +50,7 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 | :file_folder: **[Folder Filtering](docs/Tools-Reference.md#1-discovery)**                           | Filter chats by dialog folder (archived, custom folders) with integer ID or name matching                      |
 | :envelope: **[Advanced Messaging](docs/Tools-Reference.md#3-write)**                                | Send, edit, reply, post to forum topics, formatting, file attachments, and phone number messaging              |
 | :paperclip: **[Secure File Handling](docs/Tools-Reference.md#3-write)**                             | Rich media sharing with SSRF protection, size limits, album support, optional HTTP attachment streaming        |
+| :outbox_tray: **[Inline File Uploads](docs/Tools-Reference.md#3-write)**                           | Data: URI (base64) file uploads in `files` param — work in all transport modes, filenames preserved, images sent as photos |
 | :microphone: **[Voice Transcription](docs/Tools-Reference.md#get_messages)**                       | Automatic speech-to-text for Premium accounts with parallel processing and polling                             |
 | :zap: **High Performance**                                                                          | Async operations, parallel queries, and memory-conscious batching                                              |
 | :shield: **Production Reliability**                                                                 | Auto-reconnect, configurable logging, comprehensive error handling                                               |
@@ -105,12 +106,12 @@ Deploy your own MCP server on a VDS — see [Installation Guide](docs/Installati
 | Tool | Purpose | Key Features |
 |------|---------|--------------|
 | `search_messages_globally` | Search across all chats | Multi-term queries, date filtering, chat type filtering |
-| `get_messages` | Unified message retrieval | Search/browse, read by IDs, get replies (posts/topics/messages), 5 modes |
-| `send_message` | Send new message | File attachments (URLs/local), formatting (markdown/html), reply to forum topics |
+| `get_messages` | Unified message retrieval | Search/browse, read by IDs, get replies (posts/topics/messages), date filtering in all modes |
+| `send_message` | Send new message | File attachments (URLs/local/data URIs), formatting (markdown/html), reply to forum topics |
 | `edit_message` | Edit existing message | Text formatting, preserves message structure |
 | `find_chats` | Find users/groups/channels | Multi-term search, contact discovery, folder filtering, username/phone lookup |
 | `get_chat_info` | Get detailed profile info | Member counts, bio/about, online status, forum topics, enriched data |
-| `send_message_to_phone` | Message phone numbers | Auto-contact management, optional cleanup, file support |
+| `send_message_to_phone` | Message phone numbers | Auto-contact management, optional cleanup, file support (URLs/data URIs) |
 | `invoke_mtproto` | Direct Telegram API access | Raw MTProto methods, entity resolution, safety guardrails |
 
 See [Tools Reference](docs/Tools-Reference.md) for detailed documentation with examples.
