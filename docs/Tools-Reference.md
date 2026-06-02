@@ -358,7 +358,7 @@ send_message(
 
 **File Sending:**
 - `files`: Array of one or more files (paths, URLs, or data: URIs); for a single attachment use a one-element array
-- **data: URIs**: Inline base64-encoded files, work in all transport modes. Format: `data:<mime>;base64,<data>`. MIME type auto-detected, filename inferred from MIME type.
+- **data: URIs**: Inline base64-encoded files, work in all transport modes. Format: `data:<mime>;base64,<data>`. Add `;filename=name.ext` to preserve original filename. MIME type auto-detected, images sent as photos, non-images as documents.
 - **URLs**: Public HTTP/HTTPS URLs are supported. SSRF protections block localhost, private IP ranges, and cloud metadata endpoints by default.
 - **Local paths**: Only in stdio mode (blocked in HTTP modes)
 - **Size limits**: Download size capped (configurable)
@@ -395,11 +395,11 @@ send_message(
   "files": ["/path/to/report.pdf"]
 }}
 
-// Send inline data: URI (all transport modes)
+// Send inline data: URI with filename (all transport modes)
 {"tool": "send_message", "params": {
   "chat_id": "@username",
-  "message": "Inline PDF",
-  "files": ["data:application/pdf;base64,Khs="]
+  "message": "Report",
+  "files": ["data:application/pdf;filename=report.pdf;base64,Khs="]
 }}
 
 // Reply with formatting
@@ -473,7 +473,7 @@ send_message_to_phone(
   last_name?: str = "Name",    // For new contacts
   remove_if_new?: boolean = false, // Remove temp contact after send
   parse_mode?: 'markdown'|'html'|'auto' = 'auto',  // Text formatting (auto-detect by default)
-  files?: string | string[]    // File URL(s) or local path(s)
+  files?: string | string[]    // File URL(s), data: URI(s), or local path(s)
 )
 ```
 
@@ -481,7 +481,8 @@ send_message_to_phone(
 - Auto-creates contact if phone not in contacts
 - Optional contact cleanup after sending
 - Full formatting support
-- File sending support (URLs or local paths)
+- File sending support (URLs, data: URIs, or local paths)
+- data: URIs work in all modes; local paths in stdio only
 - Multiple files sent as album when possible
 
 **Examples:**

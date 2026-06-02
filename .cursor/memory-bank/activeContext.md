@@ -1,15 +1,12 @@
 ## Current Work Focus
 
-**Forum topic date filtering (2026-06-02):** Removed the `"min_date and max_date are not supported for replies mode"` error. `min_date`/`max_date` now work with `reply_to_id` for date-filtered posts in forum topics.
+**Data URI file uploads (2026-06-02):** Complete — 3 PRs merged (#103, #104, #105).
 
-- **Core change:** `_unsupported_date_filter_error()` in `core.py` no longer blocks `REPLIES` mode — dates are threaded through to Telethon API calls
-- **Topic search:** `topic_search_request()` now accepts `min_date` parameter (already had `max_date`)
-- **Direct replies:** `client.iter_messages()` uses `offset_date=max_date` and post-filters by `min_date`
-- **Thread search:** `_collect_full_thread_messages()` passes dates to `topic_search_request()`
-- **Forum topic search:** Full chain `_collect_forum_anchor_replies` → `_forum_search_collect_pass` → `_scan_forum_topic_messages` → `_forum_topic_search` → `topic_search_request` threads date params
-- **Validation:** `_handle_reply_mode()` parses ISO date strings via `parse_iso_datetime_utc()`, same as SEARCH mode
-- **Not changed:** `MESSAGE_IDS` mode still blocks date filters (reading by ID with dates makes no sense)
-- **PR:** #102, merged
+- **PR #103:** `data:` URI (base64) support in `send_message` `files` param. `_parse_data_uri()`, `_MIME_TO_EXT`, file size validation. 18 TDD tests.
+- **PR #104:** `;filename=name.ext` parameter in data: URI headers. `tg-mcp-call` `_inline_local_files()` adds filename from local path. Server `_parse_data_uri()` preserves it. `_MIME_TO_EXT` expanded with Office MIME types.
+- **PR #105:** `_is_likely_image_filename` fix — skip `filename=` when parsing data: URI headers. Without this, `data:image/png;filename=test.png;base64,...` was treated as document (MIME overwritten to `filename=test.png`). E2E confirmed: PNG sent as `MessageMediaPhoto` (inline), DOCX as document.
+
+**Forum topic date filtering (PR #102, merged):** `min_date`/`max_date` now work with `reply_to_id` for date-filtered forum topic posts.
 
 - **Core change:** `cleanup_failed_sessions()` (10 errors in 1h → delete) replaced with `_cleanup_inactive_sessions()` — deletes `.session` files whose mtime is >30 days old
 - **No tracking file:** Uses file mtime directly via `SESSION_DIR.glob("*.session")` — no JSON, no disk persistence
