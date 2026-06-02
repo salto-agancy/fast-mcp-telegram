@@ -202,8 +202,8 @@ get_messages(
   reply_to_id?: number,          // Thread anchor: post id, forum topic_id, or message id
   thread_scope?: "auto" | "full" | "direct" = "auto",  // Only with reply_to_id
   limit?: number = 50,           // Max results
-  min_date?: string,             // ISO date filter (search/browse modes only)
-  max_date?: string,             // ISO date filter (search/browse modes only)
+  min_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
+  max_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
   auto_expand_batches?: number = 2,  // Extra batches for filtered searches
   include_total_count?: boolean = false  // Include total count (chat search only)
 )
