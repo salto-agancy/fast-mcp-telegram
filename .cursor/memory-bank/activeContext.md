@@ -1,6 +1,15 @@
 ## Current Work Focus
 
-**Session cleanup redesign (2026-06-01):** Replaced error-count-based cleanup with inactivity-based cleanup. Released [`0.27.0`](https://github.com/leshchenko1979/fast-mcp-telegram/releases/tag/0.27.0).
+**Forum topic date filtering (2026-06-02):** Removed the `"min_date and max_date are not supported for replies mode"` error. `min_date`/`max_date` now work with `reply_to_id` for date-filtered posts in forum topics.
+
+- **Core change:** `_unsupported_date_filter_error()` in `core.py` no longer blocks `REPLIES` mode — dates are threaded through to Telethon API calls
+- **Topic search:** `topic_search_request()` now accepts `min_date` parameter (already had `max_date`)
+- **Direct replies:** `client.iter_messages()` uses `offset_date=max_date` and post-filters by `min_date`
+- **Thread search:** `_collect_full_thread_messages()` passes dates to `topic_search_request()`
+- **Forum topic search:** Full chain `_collect_forum_anchor_replies` → `_forum_search_collect_pass` → `_scan_forum_topic_messages` → `_forum_topic_search` → `topic_search_request` threads date params
+- **Validation:** `_handle_reply_mode()` parses ISO date strings via `parse_iso_datetime_utc()`, same as SEARCH mode
+- **Not changed:** `MESSAGE_IDS` mode still blocks date filters (reading by ID with dates makes no sense)
+- **PR:** #102, merged
 
 - **Core change:** `cleanup_failed_sessions()` (10 errors in 1h → delete) replaced with `_cleanup_inactive_sessions()` — deletes `.session` files whose mtime is >30 days old
 - **No tracking file:** Uses file mtime directly via `SESSION_DIR.glob("*.session")` — no JSON, no disk persistence
