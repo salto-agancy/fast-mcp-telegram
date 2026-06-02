@@ -7,6 +7,7 @@ import base64
 import logging
 import os
 from io import BytesIO
+from urllib.parse import unquote
 
 import httpx
 
@@ -34,6 +35,13 @@ _MIME_TO_EXT: dict[str, str] = {
     "video/webm": ".webm",
     "audio/mpeg": ".mp3",
     "audio/ogg": ".ogg",
+    # Office document types
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/msword": ".doc",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.ms-powerpoint": ".ppt",
 }
 
 
@@ -63,10 +71,13 @@ def _parse_data_uri(uri: str) -> tuple[str, bytes, str]:
     parts = header.split(";")
     is_base64 = False
     mime_type = ""
+    filename = ""
 
     for part in parts:
         if part == "base64":
             is_base64 = True
+        elif part.startswith("filename="):
+            filename = unquote(part[len("filename="):])
         elif part:
             mime_type = part
 
@@ -94,9 +105,10 @@ def _parse_data_uri(uri: str) -> tuple[str, bytes, str]:
             f"(max: {max_bytes} bytes)"
         )
 
-    # Derive filename from MIME type
-    ext = _MIME_TO_EXT.get(mime_type, ".bin")
-    filename = f"upload{ext}"
+    # Derive filename: use explicit filename param if provided, else generate from MIME type
+    if not filename:
+        ext = _MIME_TO_EXT.get(mime_type, ".bin")
+        filename = f"upload{ext}"
 
     return mime_type, decoded, filename
 
