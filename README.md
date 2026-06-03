@@ -7,7 +7,6 @@
 [![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
 
 **Fast MCP Telegram Server** — MCP/HTTP Gateway for Telegram — Multi-tenant, MTProto User API, 8 context-efficient tools
-mcp-name: io.github.leshchenko1979/fast-mcp-telegram
 
 ## Try the Demo
 
@@ -149,3 +148,5 @@ See [MTProto Bridge](docs/MTProto-Bridge.md) for full documentation.
 ## License
 
 MIT License - see [LICENSE](LICENSE)
+
+mcp-name: io.github.leshchenko1979/fast-mcp-telegram
