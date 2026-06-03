@@ -1,0 +1,32 @@
+name: Yank 0.28.1
+on: workflow_dispatch
+
+jobs:
+  yank:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Get OIDC token from GitHub
+        id: oidc
+        run: |
+          resp=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=pypi")
+          echo "oidc_token=$(echo "$resp" | jq -r '.value')" >> $GITHUB_OUTPUT
+
+      - name: Exchange OIDC for PyPI API token
+        id: exchange
+        run: |
+          resp=$(curl -s -X POST https://pypi.org/_/oidc/mint_token \
+            -H "Content-Type: application/json" \
+            -d "{\"token\": \"${{ steps.oidc.outputs.oidc_token }}\"}")
+          echo "pypi_token=$(echo "$resp" | jq -r '.token')" >> $GITHUB_OUTPUT
+
+      - name: Yank fast-mcp-telegram 0.28.1
+        run: |
+          curl -s -X POST https://pypi.org/pypi/fast-mcp-telegram/0.28.1/yank \
+            -H "Authorization: Bearer ${{ steps.exchange.outputs.pypi_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{"yanked_reason": "Bad release — auto-inlining local files is server-side wrong, should be client responsibility"}'
