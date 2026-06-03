@@ -178,12 +178,17 @@ async def _find_chats_by_include_peers(
                 continue
             ent_type = ent.get("type")
             chunk_entities.append((pid, ent_type))
+            access_hash = ent.get("access_hash", 0) or 0
             if ent_type == "channel":
+                if not access_hash:
+                    # No access_hash — entity is likely deleted/unavailable,
+                    # GetPeerDialogsRequest would timeout (~30s) trying to resolve it
+                    continue
                 from telethon.tl.types import InputPeerChannel
 
                 input_peers.append(
                     InputPeerChannel(
-                        channel_id=pid, access_hash=ent.get("access_hash", 0) or 0
+                        channel_id=pid, access_hash=access_hash
                     )
                 )
             elif ent_type == "group":
@@ -191,11 +196,15 @@ async def _find_chats_by_include_peers(
 
                 input_peers.append(InputPeerChat(chat_id=pid))
             elif ent_type in ("private", "bot"):
+                if not access_hash:
+                    # No access_hash — entity is likely deleted/unavailable,
+                    # GetPeerDialogsRequest would timeout (~30s) trying to resolve it
+                    continue
                 from telethon.tl.types import InputPeerUser
 
                 input_peers.append(
                     InputPeerUser(
-                        user_id=pid, access_hash=ent.get("access_hash", 0) or 0
+                        user_id=pid, access_hash=access_hash
                     )
                 )
 
