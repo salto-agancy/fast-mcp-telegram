@@ -352,6 +352,7 @@ def make_user(id, first_name="", last_name="", username="", phone="", bot=False)
         "phone": phone,
         "bot": bot,
         "title": None,
+        "access_hash": 123456,
     }
     return type("User", (), attrs)()
 
@@ -379,6 +380,7 @@ def make_channel(id, title="", username="", megagroup=False):
         "first_name": None,
         "last_name": None,
         "phone": None,
+        "access_hash": 123456,
     }
     return type("Channel", (), attrs)()
 
