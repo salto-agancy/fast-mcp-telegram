@@ -14,20 +14,25 @@ jobs:
           python3 << 'PYEOF'
           import json, os, urllib.request, urllib.error
 
-          # 1. Get OIDC token from GitHub
+          # 1. Discover OIDC audience from PyPI
+          req = urllib.request.Request("https://upload.pypi.org/_/oidc/audience")
+          resp = urllib.request.urlopen(req)
+          audience = json.loads(resp.read())["audience"]
+          print(f"✓ OIDC audience: {audience}")
+
+          # 2. Get OIDC token from GitHub with the correct audience
           token = os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
-          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + "&audience=pypi"
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + f"&audience={audience}"
 
           req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
           resp = urllib.request.urlopen(req)
           oidc_token = json.loads(resp.read())["value"]
           print("✓ Got GitHub OIDC token")
 
-          # 2. Exchange OIDC token for PyPI API token
-          # NOTE: OIDC mint endpoint is on upload.pypi.org, not pypi.org
+          # 3. Exchange OIDC token for PyPI API token
           data = json.dumps({"token": oidc_token}).encode()
           req = urllib.request.Request(
-            "https://upload.pypi.org/_/oidc/mint_token",
+            "https://upload.pypi.org/_/oidc/mint-token",
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST"
@@ -36,14 +41,14 @@ jobs:
             resp = urllib.request.urlopen(req)
             result = json.loads(resp.read())
             pypi_token = result["token"]
-            print(f"✓ Got PyPI API token (valid until {result.get('valid_until', '?')})")
+            print(f"✓ Got PyPI API token")
           except urllib.error.HTTPError as e:
             body = e.read().decode(errors='replace')[:1000]
             print(f"✗ mint_token HTTP {e.code}")
             print(f"  Response body: {body}")
             raise
 
-          # 3. Yank version 0.28.1 — yank endpoint is on pypi.org
+          # 4. Yank version 0.28.1 on PyPI
           import urllib.parse
           data = urllib.parse.urlencode({
             "yanked_reason": "Bad release - auto-inlining local files is server-side wrong, should be client responsibility"
