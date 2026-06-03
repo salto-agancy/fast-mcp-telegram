@@ -63,15 +63,32 @@ async def _find_chats_by_include_peers(
 
     async def _get_include(inp_peer) -> tuple[Any | None, dict | None]:
         async with sem:
+            t_start = time.monotonic()
             try:
                 ent = await client.get_entity(inp_peer)
+                elapsed = time.monotonic() - t_start
                 eid = getattr(ent, "id", None)
+                peer_label = repr(inp_peer)
+                if elapsed > 5.0:
+                    logger.info(
+                        "get_entity SLOW: peer=%s id=%s elapsed=%.3fs",
+                        peer_label, eid, elapsed,
+                    )
+                elif logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "get_entity: peer=%s id=%s elapsed=%.3fs",
+                        peer_label, eid, elapsed,
+                    )
                 if eid is None:
                     return None, None
                 ed = build_entity_dict(ent)
                 return (ent, ed) if ed else (None, None)
             except Exception as e:
-                logger.debug("Failed to resolve include_peer %s: %s", inp_peer, e)
+                elapsed = time.monotonic() - t_start
+                logger.warning(
+                    "get_entity FAIL: peer=%s elapsed=%.3fs error=%s",
+                    repr(inp_peer), elapsed, e,
+                )
                 return None, None
 
     t_incl = time.monotonic()
