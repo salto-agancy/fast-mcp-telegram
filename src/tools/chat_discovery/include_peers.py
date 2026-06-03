@@ -179,10 +179,12 @@ async def _find_chats_by_include_peers(
             ent_type = ent.get("type")
             chunk_entities.append((pid, ent_type))
             access_hash = ent.get("access_hash", 0) or 0
+            is_min = ent.get("min", False)
             if ent_type == "channel":
-                if not access_hash:
-                    # No access_hash — entity is likely deleted/unavailable,
-                    # GetPeerDialogsRequest would timeout (~30s) trying to resolve it
+                if is_min or not access_hash:
+                    # Min entity (Layer 102+) has access_hash only for profile photos,
+                    # or deleted entity (no access_hash at all).
+                    # GetPeerDialogsRequest would timeout (~30s) trying to resolve them.
                     continue
                 from telethon.tl.types import InputPeerChannel
 
@@ -196,9 +198,10 @@ async def _find_chats_by_include_peers(
 
                 input_peers.append(InputPeerChat(chat_id=pid))
             elif ent_type in ("private", "bot"):
-                if not access_hash:
-                    # No access_hash — entity is likely deleted/unavailable,
-                    # GetPeerDialogsRequest would timeout (~30s) trying to resolve it
+                if is_min or not access_hash:
+                    # Min entity (Layer 102+) has access_hash only for profile photos,
+                    # or deleted entity (no access_hash at all).
+                    # GetPeerDialogsRequest would timeout (~30s) trying to resolve them.
                     continue
                 from telethon.tl.types import InputPeerUser
 

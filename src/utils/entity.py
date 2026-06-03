@@ -293,6 +293,9 @@ def build_entity_dict(entity) -> dict | None:
         "is_forum": True if is_forum else None,
         # Access hash (required for InputPeer construction)
         "access_hash": getattr(entity, "access_hash", None),
+        # Min flag: since Layer 102, min entities have an access_hash
+        # that only works for profile photo downloads, NOT for general API calls
+        "min": getattr(entity, "min", None),
     }
 
     # Prune None values for a compact, uniform schema
