@@ -47,8 +47,14 @@ async def _find_chats_by_include_peers(
     max_date: str | None,
 ) -> dict[str, Any]:
     """Handle filter with explicit include_peers using GetPeerDialogsRequest."""
+    t0 = time.monotonic()
     include_peers = filter_dict.get("include_peers", []) or []
     exclude_peers = filter_dict.get("exclude_peers", []) or []
+    logger.info(
+        "include_peers start | limit=%d date=%s include_n=%d exclude_n=%d",
+        limit, "yes" if min_date or max_date else "no",
+        len(include_peers), len(exclude_peers),
+    )
 
     ordered_peer_ids: list[int] = []
     peer_entity_map: dict[int, dict] = {}
@@ -124,6 +130,7 @@ async def _find_chats_by_include_peers(
         )
     )
     if has_flags:
+        t_flags_start = time.monotonic()
         async for dialog in client.iter_dialogs(
             limit=min(limit * 10, FLAG_MATCH_MAX_DIALOGS),
         ):
@@ -140,11 +147,22 @@ async def _find_chats_by_include_peers(
                 ordered_peer_ids.append(eid)
                 peer_entity_map[eid] = entity_dict
                 peer_objects[eid] = ent
+        t_flags_end = time.monotonic()
+        logger.info(
+            "include_peers flags_iter | limit=%d added=%d total_ids=%d elapsed=%.3fs",
+            min(limit * 10, FLAG_MATCH_MAX_DIALOGS),
+            len(ordered_peer_ids),  # after flags, includes include_peers
+            len(ordered_peer_ids),
+            t_flags_end - t_flags_start,
+        )
 
     if not ordered_peer_ids:
+        logger.info("include_peers no peers | total=%.3fs", time.monotonic() - t0)
         return {"chats": []}
 
     last_activity_by_peer: dict[int, Any] = {}
+    t_dialogs_start = time.monotonic()
+    n_failed_dialogs = 0
     for chunk_start in range(0, len(ordered_peer_ids), GET_PEER_DIALOGS_CHUNK_SIZE):
         chunk_ids = ordered_peer_ids[
             chunk_start : chunk_start + GET_PEER_DIALOGS_CHUNK_SIZE
@@ -206,11 +224,20 @@ async def _find_chats_by_include_peers(
                     act = act.replace(tzinfo=UTC)
                 last_activity_by_peer[peer_id] = act
         except Exception as e:
+            n_failed_dialogs += 1
             logger.debug("GetPeerDialogsRequest failed: %s", e)
+
+    t_dialogs_end = time.monotonic()
+    logger.info(
+        "include_peers dialogs_batch | total_ids=%d got_activity=%d n_failed=%d elapsed=%.3fs",
+        len(ordered_peer_ids), len(last_activity_by_peer),
+        n_failed_dialogs, t_dialogs_end - t_dialogs_start,
+    )
 
     min_date_dt = parse_iso_datetime_utc(min_date) if min_date else None
     max_date_dt = parse_iso_datetime_utc(max_date) if max_date else None
 
+    n_date_fallback = 0
     results = []
     for pid in ordered_peer_ids:
         ent_dict = peer_entity_map.get(pid)
@@ -236,6 +263,7 @@ async def _find_chats_by_include_peers(
                 ):
                     continue
             else:
+                n_date_fallback += 1
                 if not await _dialog_in_date_range(
                     ent, client, None, min_date_dt, max_date_dt
                 ):
@@ -255,4 +283,9 @@ async def _find_chats_by_include_peers(
         if len(results) >= limit:
             break
 
+    total = time.monotonic() - t0
+    logger.info(
+        "include_peers done | results=%d fallback=%d total=%.3fs",
+        len(results), n_date_fallback, total,
+    )
     return {"chats": results}
