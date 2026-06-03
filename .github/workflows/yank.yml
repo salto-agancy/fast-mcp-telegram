@@ -24,9 +24,10 @@ jobs:
           print("✓ Got GitHub OIDC token")
 
           # 2. Exchange OIDC token for PyPI API token
+          # NOTE: OIDC mint endpoint is on upload.pypi.org, not pypi.org
           data = json.dumps({"token": oidc_token}).encode()
           req = urllib.request.Request(
-            "https://pypi.org/_/oidc/mint_token",
+            "https://upload.pypi.org/_/oidc/mint_token",
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST"
@@ -42,7 +43,7 @@ jobs:
             print(f"  Response body: {body}")
             raise
 
-          # 3. Yank version 0.28.1
+          # 3. Yank version 0.28.1 — yank endpoint is on pypi.org
           import urllib.parse
           data = urllib.parse.urlencode({
             "yanked_reason": "Bad release - auto-inlining local files is server-side wrong, should be client responsibility"
