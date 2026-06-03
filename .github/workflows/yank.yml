@@ -14,6 +14,9 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Install pypi-publish
+        run: pip install pypi-publish
+
       - name: Yank version 0.28.1 from PyPI
         run: |
           python3 << 'PYEOF'
@@ -31,17 +34,25 @@ jobs:
           # 2. Exchange OIDC token for PyPI API token
           data = json.dumps({"token": oidc_token}).encode()
           req = urllib.request.Request(
-            "https://pypi.org/_/oidc/github/mint_token",
+            "https://pypi.org/_/oidc/mint_token",
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST"
           )
-          resp = urllib.request.urlopen(req)
-          pypi_token = json.loads(resp.read())["token"]
-          print("✓ Got PyPI API token via OIDC")
+          try:
+            resp = urllib.request.urlopen(req)
+            result = json.loads(resp.read())
+            pypi_token = result["token"]
+            print(f"✓ Got PyPI API token (valid until {result.get('valid_until', '?')})")
+          except urllib.error.HTTPError as e:
+            print(f"✗ HTTP {e.code}: {e.read().decode()[:500]}")
+            raise
 
           # 3. Yank version 0.28.1
-          data = "yanked_reason=Bad release — auto-inlining local files is server-side wrong, should be client responsibility".encode()
+          import urllib.parse
+          data = urllib.parse.urlencode({
+            "yanked_reason": "Bad release - auto-inlining local files is server-side wrong, should be client responsibility"
+          }).encode()
           req = urllib.request.Request(
             "https://pypi.org/manage/project/fast-mcp-telegram/release/0.28.1/yank/",
             data=data,
@@ -51,6 +62,11 @@ jobs:
             },
             method="POST"
           )
-          resp = urllib.request.urlopen(req)
-          print(f"✓ Yanked. HTTP {resp.status}")
+          try:
+            resp = urllib.request.urlopen(req)
+            print(f"✓ Yanked. HTTP {resp.status}")
+          except urllib.error.HTTPError as e:
+            body = e.read().decode()[:500]
+            print(f"✗ Yank HTTP {e.code}: {body}")
+            raise
           PYEOF
