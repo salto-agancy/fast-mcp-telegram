@@ -163,7 +163,9 @@ async def _find_chats_by_include_peers(
     last_activity_by_peer: dict[int, Any] = {}
     t_dialogs_start = time.monotonic()
     n_failed_dialogs = 0
+    chunk_idx = 0
     for chunk_start in range(0, len(ordered_peer_ids), GET_PEER_DIALOGS_CHUNK_SIZE):
+        chunk_idx += 1
         chunk_ids = ordered_peer_ids[
             chunk_start : chunk_start + GET_PEER_DIALOGS_CHUNK_SIZE
         ]
@@ -198,6 +200,7 @@ async def _find_chats_by_include_peers(
         if not input_peers:
             continue
 
+        t_chunk = time.monotonic()
         try:
             result = await client(GetPeerDialogsRequest(peers=input_peers))
             dialogs = result.dialogs or []
@@ -223,6 +226,13 @@ async def _find_chats_by_include_peers(
                 if act.tzinfo is None:
                     act = act.replace(tzinfo=UTC)
                 last_activity_by_peer[peer_id] = act
+            logger.info(
+                "include_peers chunk %d/%d | peers=%d chunk_elapsed=%.3fs",
+                chunk_idx,
+                (len(ordered_peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1) // GET_PEER_DIALOGS_CHUNK_SIZE,
+                len(input_peers),
+                time.monotonic() - t_chunk,
+            )
         except Exception as e:
             n_failed_dialogs += 1
             logger.debug("GetPeerDialogsRequest failed: %s", e)
