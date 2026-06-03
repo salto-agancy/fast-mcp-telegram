@@ -171,11 +171,13 @@ async def _find_chats_by_include_peers(
         ]
 
         input_peers = []
+        chunk_entities: list[tuple[int, str | None]] = []
         for pid in chunk_ids:
             ent = peer_entity_map.get(pid)
             if not ent:
                 continue
             ent_type = ent.get("type")
+            chunk_entities.append((pid, ent_type))
             if ent_type == "channel":
                 from telethon.tl.types import InputPeerChannel
 
@@ -226,13 +228,27 @@ async def _find_chats_by_include_peers(
                 if act.tzinfo is None:
                     act = act.replace(tzinfo=UTC)
                 last_activity_by_peer[peer_id] = act
-            logger.info(
-                "include_peers chunk %d/%d | peers=%d chunk_elapsed=%.3fs",
-                chunk_idx,
-                (len(ordered_peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1) // GET_PEER_DIALOGS_CHUNK_SIZE,
-                len(input_peers),
-                time.monotonic() - t_chunk,
-            )
+            t_chunk_end = time.monotonic()
+            elapsed = t_chunk_end - t_chunk
+            if elapsed > 1.0:
+                ent_summary = ",".join(
+                    f"{pid}:{t or '?'}" for pid, t in chunk_entities
+                )
+                logger.info(
+                    "include_peers chunk %d/%d | peers=%d elapsed=%.3fs SLOW peer_ids=%s",
+                    chunk_idx,
+                    (len(ordered_peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1) // GET_PEER_DIALOGS_CHUNK_SIZE,
+                    len(input_peers),
+                    elapsed, ent_summary,
+                )
+            else:
+                logger.info(
+                    "include_peers chunk %d/%d | peers=%d elapsed=%.3fs",
+                    chunk_idx,
+                    (len(ordered_peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1) // GET_PEER_DIALOGS_CHUNK_SIZE,
+                    len(input_peers),
+                    elapsed,
+                )
         except Exception as e:
             n_failed_dialogs += 1
             logger.debug("GetPeerDialogsRequest failed: %s", e)
