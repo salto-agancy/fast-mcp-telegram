@@ -14,6 +14,7 @@ from .constants import (
     FLAG_MATCH_MAX_DIALOGS,
     GET_ENTITY_CONCURRENCY,
     GET_PEER_DIALOGS_CHUNK_SIZE,
+    GET_PEER_DIALOGS_TIMEOUT,
 )
 from src.utils.datetime_parse import parse_iso_datetime_utc
 
@@ -216,7 +217,10 @@ async def _find_chats_by_include_peers(
 
         t_chunk = time.monotonic()
         try:
-            result = await client(GetPeerDialogsRequest(peers=input_peers))
+            result = await asyncio.wait_for(
+                client(GetPeerDialogsRequest(peers=input_peers)),
+                timeout=GET_PEER_DIALOGS_TIMEOUT,
+            )
             dialogs = result.dialogs or []
             messages = result.messages or []
             n_d, n_m = len(dialogs), len(messages)
