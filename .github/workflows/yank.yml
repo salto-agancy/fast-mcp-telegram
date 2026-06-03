@@ -9,14 +9,6 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install pypi-publish
-        run: pip install pypi-publish
-
       - name: Yank version 0.28.1 from PyPI
         run: |
           python3 << 'PYEOF'
@@ -45,7 +37,9 @@ jobs:
             pypi_token = result["token"]
             print(f"✓ Got PyPI API token (valid until {result.get('valid_until', '?')})")
           except urllib.error.HTTPError as e:
-            print(f"✗ HTTP {e.code}: {e.read().decode()[:500]}")
+            body = e.read().decode(errors='replace')[:1000]
+            print(f"✗ mint_token HTTP {e.code}")
+            print(f"  Response body: {body}")
             raise
 
           # 3. Yank version 0.28.1
@@ -66,7 +60,7 @@ jobs:
             resp = urllib.request.urlopen(req)
             print(f"✓ Yanked. HTTP {resp.status}")
           except urllib.error.HTTPError as e:
-            body = e.read().decode()[:500]
+            body = e.read().decode(errors='replace')[:1000]
             print(f"✗ Yank HTTP {e.code}: {body}")
             raise
           PYEOF
