@@ -14,7 +14,6 @@ from .constants import (
     FLAG_MATCH_MAX_DIALOGS,
     GET_ENTITY_CONCURRENCY,
     GET_PEER_DIALOGS_CHUNK_SIZE,
-    GET_PEER_DIALOGS_TIMEOUT,
 )
 from src.utils.datetime_parse import parse_iso_datetime_utc
 
@@ -130,6 +129,7 @@ async def _find_chats_by_include_peers(
             "exclude_archived",
         )
     )
+    peer_dl_date: dict[int, Any] = {}
     if has_flags:
         t_flags_start = time.monotonic()
         async for dialog in client.iter_dialogs(
@@ -139,6 +139,10 @@ async def _find_chats_by_include_peers(
             if not ent:
                 continue
             eid = getattr(ent, "id", None)
+            # Store dialog.date so flags entities can skip GetPeerDialogsRequest
+            dl_date_raw = getattr(dialog, "date", None)
+            if dl_date_raw and dl_date_raw.tzinfo is None:
+                dl_date_raw = dl_date_raw.replace(tzinfo=UTC)
             if (
                 eid
                 and eid not in ordered_peer_ids
@@ -148,6 +152,8 @@ async def _find_chats_by_include_peers(
                 ordered_peer_ids.append(eid)
                 peer_entity_map[eid] = entity_dict
                 peer_objects[eid] = ent
+                if dl_date_raw:
+                    peer_dl_date[eid] = dl_date_raw
         t_flags_end = time.monotonic()
         logger.info(
             "include_peers flags_iter | limit=%d added=%d total_ids=%d elapsed=%.3fs",
@@ -176,6 +182,9 @@ async def _find_chats_by_include_peers(
         for pid in chunk_ids:
             ent = peer_entity_map.get(pid)
             if not ent:
+                continue
+            # Skip entities that already have dialog.date from flags iteration
+            if pid in peer_dl_date:
                 continue
             ent_type = ent.get("type")
             chunk_entities.append((pid, ent_type))
@@ -217,10 +226,7 @@ async def _find_chats_by_include_peers(
 
         t_chunk = time.monotonic()
         try:
-            result = await asyncio.wait_for(
-                client(GetPeerDialogsRequest(peers=input_peers)),
-                timeout=GET_PEER_DIALOGS_TIMEOUT,
-            )
+            result = await client(GetPeerDialogsRequest(peers=input_peers))
             dialogs = result.dialogs or []
             messages = result.messages or []
             n_d, n_m = len(dialogs), len(messages)
@@ -298,18 +304,26 @@ async def _find_chats_by_include_peers(
             continue
 
         if min_date_dt is not None or max_date_dt is not None:
-            act_dt = last_activity_by_peer.get(pid)
-            if act_dt is not None:
+            dl_date = peer_dl_date.get(pid)
+            if dl_date is not None:
+                # Entity from flags iteration with dialog.date from iter_dialogs
                 if not _last_activity_datetime_in_range(
-                    act_dt, min_date_dt, max_date_dt
+                    dl_date, min_date_dt, max_date_dt
                 ):
                     continue
             else:
-                n_date_fallback += 1
-                if not await _dialog_in_date_range(
-                    ent, client, None, min_date_dt, max_date_dt
-                ):
-                    continue
+                act_dt = last_activity_by_peer.get(pid)
+                if act_dt is not None:
+                    if not _last_activity_datetime_in_range(
+                        act_dt, min_date_dt, max_date_dt
+                    ):
+                        continue
+                else:
+                    n_date_fallback += 1
+                    if not await _dialog_in_date_range(
+                        ent, client, None, min_date_dt, max_date_dt
+                    ):
+                        continue
 
         if query:
             query_lower = query.lower().strip()
@@ -318,7 +332,10 @@ async def _find_chats_by_include_peers(
 
         result_dict = dict(ent_dict)
         result_dict.pop("access_hash", None)
-        if pid in last_activity_by_peer:
+        dl_date = peer_dl_date.get(pid)
+        if dl_date is not None:
+            result_dict["last_activity_date"] = dl_date.isoformat()
+        elif pid in last_activity_by_peer:
             result_dict["last_activity_date"] = last_activity_by_peer[pid].isoformat()
 
         results.append(result_dict)
