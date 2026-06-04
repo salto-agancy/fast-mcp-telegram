@@ -198,7 +198,7 @@ Each scenario runs **3-5 iterations**, reports:
 tests/integration/
 ├── benchmark_find_chats.py           # Standalone CLI — full benchmark (9 scenarios, warmup, iterations, JSON output)
 ├── benchmark_search_global.py        # Standalone CLI — search benchmark (6 scenarios, flood wait retry, cross-run compare)
-├── test_benchmark_find_chats.py      # Pytest smoke test — @pytest.mark.integration, parametrized, 1 iteration
+├── test_benchmark_find_chats.py      # Pytest smoke test — @pytest.mark.integration, parametrized, covers all 4 code paths (global, flags, folder+date, date)
 ├── test_benchmark_search_global.py   # Pytest smoke test — @pytest.mark.integration, parametrized, 1 iteration
 ├── test_date_filtering.py            # Standalone validation script (not a benchmark)
 ├── test_filter_resolution.py         # Standalone validation script
