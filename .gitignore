@@ -77,3 +77,6 @@ sessions/
 
 # Miscellaneous
 .misc/
+
+# Codegraph (local code analysis index)
+.codegraph/
