@@ -140,14 +140,17 @@ The trick: we must maintain the `limit` parameter semantics. First pass may need
 
 ## 3. Benchmark Design
 
-### 3.1. Benchmark script
+### 3.1. Benchmark harness
 
-A standalone integration script at `tests/integration/benchmark_find_chats.py` that:
+Two complementary entry points in `tests/integration/`:
 
-1. **Tests all 4 branches** with real Telegram API calls
-2. Uses `time.perf_counter()` or `time.monotonic()` for precision
-3. Reports per-branch timing + flood wait events
-4. Is designed to run **before and after** changes for comparison
+1. **`run_bench.py`** — Standalone CLI for full timing benchmarks (warmup, N iterations per scenario, flood wait handling, ASCII table + JSON output). Primary tool for performance measurement.
+2. **`test_bench_scenarios.py`** — Parametrized pytest smoke test. Verifies every scenario runs without errors (1 iteration each, no timing). Quick pass/fail gate.
+
+Shared components:
+- **`bench_core.py`** — `BenchScenario`, `ScenarioRunner`, `BenchReport`, `report_table()`, `report_json()`
+- **`scenarios.py`** — All 13 scenario definitions (`BenchScenario` instances) consumed by both entry points
+- **`conftest.py`** — Module-scoped Telethon client fixture for pytest mode
 
 ### 3.2. Test scenarios
 
@@ -196,50 +199,73 @@ Each scenario runs **3-5 iterations**, reports:
 
 ```
 tests/integration/
-├── benchmark_find_chats.py           # Standalone CLI — full benchmark (9 scenarios, warmup, iterations, JSON output)
-├── benchmark_search_global.py        # Standalone CLI — search benchmark (6 scenarios, flood wait retry, cross-run compare)
-├── test_benchmark_find_chats.py      # Pytest smoke test — @pytest.mark.integration, parametrized, covers all 4 code paths (global, flags, folder+date, date)
-├── test_benchmark_search_global.py   # Pytest smoke test — @pytest.mark.integration, parametrized, 1 iteration
-├── test_date_filtering.py            # Standalone validation script (not a benchmark)
-├── test_filter_resolution.py         # Standalone validation script
+├── bench_core.py                  # Shared infrastructure: BenchScenario, ScenarioRunner, reporting
+├── scenarios.py                   # 13 scenario definitions across find_chats + search_messages
+├── run_bench.py                   # Unified standalone CLI — warmup, N iterations, ASCII table, JSON output
+├── conftest.py                    # Pytest module-scoped Telethon client fixture
+├── test_bench_scenarios.py        # Parametrized pytest smoke test — 13 scenarios, 1 iteration each
+├── test_date_filtering.py         # Standalone validation script (not a benchmark)
+├── test_filter_resolution.py      # Standalone validation script
 ├── test_find_chats_date_filtering.py # Standalone validation script
-└── test_get_messages_timing.py       # Standalone validation script
+└── test_get_messages_timing.py    # Standalone validation script
 docs/
-└── benchmark-spec.md                  # This document — spec, targets, running instructions
+└── benchmark-spec.md              # This document — spec, targets, running instructions
 ```
 
 ### 3.7. Running
 
+**List available scenarios:**
+```bash
+uv run python3 tests/integration/run_bench.py --list-scenarios
+```
+
+**Quick smoke test (1 iteration, all scenarios):**
+```bash
+pytest -m integration -k bench_scenario
+```
+
 **Full benchmark (5 iterations, all scenarios):**
 ```bash
-uv run python3 tests/integration/benchmark_find_chats.py
-uv run python3 tests/integration/benchmark_search_global.py
+uv run python3 tests/integration/run_bench.py
 ```
 
-**Quick validation (1 iteration, selected scenarios):**
+**Tool-specific benchmark:**
 ```bash
-pytest -m integration -k test_benchmark_find_chats
-pytest -m integration -k test_benchmark_search
+uv run python3 tests/integration/run_bench.py --tool find_chats
+uv run python3 tests/integration/run_bench.py --tool search_messages
 ```
 
-**Custom iterations:**
+**Run specific scenarios (substring filter):**
 ```bash
-uv run python3 tests/integration/benchmark_find_chats.py --iterations 3
-uv run python3 tests/integration/benchmark_search_global.py --iterations 3
+uv run python3 tests/integration/run_bench.py --only folder
+uv run python3 tests/integration/run_bench.py --only date
+uv run python3 tests/integration/run_bench.py --only global
 ```
 
-**Skip specific scenarios:**
+**Smoke-only mode (1 iteration, quick validation):**
 ```bash
-uv run python3 tests/integration/benchmark_find_chats.py --skip folder_include
+uv run python3 tests/integration/run_bench.py --smoke
+uv run python3 tests/integration/run_bench.py --smoke --json results.json
+```
+
+**Custom iteration count:**
+```bash
+uv run python3 tests/integration/run_bench.py --only folder_flags_date --iterations 10
 ```
 
 **Save JSON output:**
 ```bash
-uv run python3 tests/integration/benchmark_find_chats.py --output results.json
-uv run python3 tests/integration/benchmark_search_global.py --output results.json
+uv run python3 tests/integration/run_bench.py --json results.json
+uv run python3 tests/integration/run_bench.py --smoke --json results.json
 ```
 
-The standalone CLI scripts (`benchmark_*.py`) are the primary benchmarking tool — full warmup, iteration control, per-scenario timeout, JSON output, cross-run comparison. The pytest smoke tests (`test_benchmark_*.py`) are quick pass/fail validators that ensure the API endpoints work.
+**Run selected pytest scenarios (ID matching):**
+```bash
+pytest -m integration -k 'bench_scenario and (folder_flags or global_single)'
+pytest -m integration -k 'bench_scenario and (date_browse or folder)'
+```
+
+The standalone CLI (`run_bench.py`) is the primary benchmarking tool — warmup, iteration control, flood wait handling, ASCII table, JSON output. The pytest smoke test (`test_bench_scenarios.py`) is a quick pass/fail validator that ensures all API endpoints work.
 
 ---
 
