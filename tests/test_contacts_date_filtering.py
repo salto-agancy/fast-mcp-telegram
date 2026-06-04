@@ -785,3 +785,105 @@ async def test_find_chats_get_peer_dialogs_mismatch_warns(caplog):
         "GetPeerDialogs" in r.message and "len(dialogs)" in r.message
         for r in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_find_chats_by_include_peers_uses_dialog_date_for_flags_entities():
+    """Flags-matched entities should use dialog.date instead of GetPeerDialogsRequest.
+
+    Regression test for dc9177c fix: flags entities already have dialog.date from
+    iter_dialogs iteration, so they should skip GetPeerDialogsRequest which could
+    hang ~30s on stale access_hash. Their last_activity_date comes from peer_dl_date.
+    """
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from telethon.tl.types import InputPeerUser
+
+    from src.tools.chat_discovery.include_peers import _find_chats_by_include_peers
+
+    flags_id = 901
+    include_id = 902
+
+    flags_entity = make_user(flags_id, first_name="FlagsUser")
+    include_entity = make_user(include_id, first_name="IncludeUser")
+
+    async def mock_iter_dialogs(limit=None):
+        yield MockDialog(flags_entity, date=datetime(2024, 6, 15, tzinfo=UTC))
+
+    async def mock_get_entity(inp_peer):
+        if isinstance(inp_peer, InputPeerUser) and inp_peer.user_id == include_id:
+            return include_entity
+        return None
+
+    with patch(
+        "src.tools.chat_discovery.include_peers._filter_matches_flags",
+        side_effect=lambda e, d, f: getattr(e, "id", None) == flags_id,
+    ), patch(
+        "src.tools.chat_discovery.include_peers.GetPeerDialogsRequest"
+    ) as mock_gpd:
+        mock_client = AsyncMock()
+        mock_client.iter_dialogs = mock_iter_dialogs
+        mock_client.get_entity = mock_get_entity
+
+        # GetPeerDialogsRequest returns date only for include_peers entity
+        mock_get_dialogs_result = MagicMock()
+        mock_get_dialogs_result.dialogs = [
+            MagicMock(peer=MagicMock(user_id=include_id)),
+        ]
+        mock_get_dialogs_result.messages = [
+            MagicMock(date=datetime(2024, 6, 10, tzinfo=UTC)),
+        ]
+        mock_client.return_value = mock_get_dialogs_result
+
+        result = await _find_chats_by_include_peers(
+            client=mock_client,
+            filter_dict={
+                "include_peers": [
+                    InputPeerUser(user_id=include_id, access_hash=123456)
+                ],
+                "exclude_peers": [],
+                "broadcasts": True,
+            },
+            query=None,
+            limit=10,
+            chat_type=None,
+            public=None,
+            min_date="2024-01-01",
+            max_date=None,
+        )
+
+    chats = result.get("chats", [])
+
+    # Flags entity should be present with last_activity_date from dialog.date
+    flags_result = [c for c in chats if c["id"] == flags_id]
+    assert len(flags_result) == 1, (
+        f"Flags entity (id={flags_id}) should be in results. "
+        f"Got chats: {chats}"
+    )
+    assert flags_result[0]["last_activity_date"] is not None
+    assert "2024-06-15" in flags_result[0]["last_activity_date"], (
+        f"Expected last_activity_date from dialog.date (2024-06-15), "
+        f"got: {flags_result[0]['last_activity_date']}"
+    )
+
+    # GetPeerDialogsRequest should NOT receive the flags entity
+    for call_args in mock_gpd.call_args_list:
+        peers = call_args.kwargs.get("peers", [])
+        for peer in peers:
+            peer_id = getattr(peer, "user_id", None)
+            assert peer_id != flags_id, (
+                f"Flags entity (id={flags_id}) must not appear in GetPeerDialogsRequest. "
+                f"Got peers: {[getattr(p, 'user_id', None) for p in peers]}"
+            )
+
+    # Include entity should also be present with activity from GetPeerDialogsRequest
+    include_result = [c for c in chats if c["id"] == include_id]
+    assert len(include_result) == 1, (
+        f"Include entity (id={include_id}) should be in results. "
+        f"Got chats: {chats}"
+    )
+    assert "2024-06-10" in include_result[0]["last_activity_date"], (
+        f"Expected include entity last_activity from GetPeerDialogsRequest (2024-06-10), "
+        f"got: {include_result[0]['last_activity_date']}"
+    )

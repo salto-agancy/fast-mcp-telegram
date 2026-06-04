@@ -1,28 +1,17 @@
 ## Current Work Focus
 
-**Data URI file uploads (2026-06-02):** Complete — 3 PRs merged (#103, #104, #105).
+**GetPeerDialogsRequest hang fix — v0.28.2 (2026-06-03):** Released — fix for issue #51 merged and deployed.
 
-- **PR #103:** `data:` URI (base64) support in `send_message` `files` param. `_parse_data_uri()`, `_MIME_TO_EXT`, file size validation. 18 TDD tests.
-- **PR #104:** `;filename=name.ext` parameter in data: URI headers. `tg-mcp-call` `_inline_local_files()` adds filename from local path. Server `_parse_data_uri()` preserves it. `_MIME_TO_EXT` expanded with Office MIME types.
-- **PR #105:** `_is_likely_image_filename` fix — skip `filename=` when parsing data: URI headers. Without this, `data:image/png;filename=test.png;base64,...` was treated as document (MIME overwritten to `filename=test.png`). E2E confirmed: PNG sent as `MessageMediaPhoto` (inline), DOCX as document.
-
-**Forum topic date filtering (PR #102, merged):** `min_date`/`max_date` now work with `reply_to_id` for date-filtered forum topic posts.
-
-- **Core change:** `cleanup_failed_sessions()` (10 errors in 1h → delete) replaced with `_cleanup_inactive_sessions()` — deletes `.session` files whose mtime is >30 days old
-- **No tracking file:** Uses file mtime directly via `SESSION_DIR.glob("*.session")` — no JSON, no disk persistence
-- **Configurable:** `TELEGRAM_INACTIVE_SESSION_DAYS` env var (default 30, set to 0 to disable auto-delete)
-- **Periodic cleanup:** Runs once at startup and every 24 hours in the cleanup loop
-- **Default session protection:** The configured default session (`get_config().session_name`) is never deleted by inactivity cleanup
-- **TOCTOU guard:** Re-stats file mtime before unlinking
-- **Implementation:** [`connection.py`](../src/client/connection.py) (mtime-only, 27 lines)
-- **Tests:** 7 unit tests in [`test_session_cleanup.py`](../tests/unit/client/test_session_cleanup.py)
-- **Release process:** RELEASE-PROCESS.md extracted from SKILL.md; Qwen3.7 review required per [alexey-coding-process.md](/.opencrabs/profiles/ops/alexey-coding-process.md)
+- **Root cause:** `iter_dialogs` returns entities with stale `access_hash` (deleted/expired accounts). GetPeerDialogsRequest hangs ~30s per chunk when given these entities. Fixed by storing `dialog.date` directly during flags iteration and skipping GetPeerDialogsRequest for ~200 flags-matched entities.
+- **Performance:** folder+date query from ~39s to ~6.9s mean (5 iterations).
+- **Debugging findings:** `asyncio.wait_for` on Telethon calls corrupts MTProto (msg_id desync, server reconnect). Batch `get_entity([71])` triggers `FLOOD_WAIT_178`. Cross-DC delays on 8/71 users (41-42s, unfixable client-side).
+- **Regression test:** `test_find_chats_by_include_peers_uses_dialog_date_for_flags_entities` — verifies flags entities skip GetPeerDialogsRequest.
 
 ### Active Decisions
 
-- **mtime is sufficient** for "session untouched for >30 days" use case — Telethon updates the `.session` file on auth, reconnect, any metric significant state change
-- **No env var for `TELEGRAM_INACTIVE_SESSION_DAYS` in `.env.example`** — documented in `docs/Installation.md` Configuration Reference
-- **EN Telegram channel** (`5131784155`) — bot needs to be invited; release announcements fail to deliver there
+- **dialog.date from iter_dialogs is sufficient** for flags-matched entities — GetPeerDialogsRequest is unnecessary when the entity already has a dialog date.
+- **asyncio.wait_for is DANGEROUS with Telethon** — cancellation leaves MTProto sender state inconsistent; the delayed response corrupts the next request's msg_id.
+- **Individual get_entity calls are preferred** over batch — batch triggers flood wait for large peer lists.
 
 ---
 

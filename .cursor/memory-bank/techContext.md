@@ -142,6 +142,14 @@ return log_and_build_error(
 - **Entity Resolution**: Chat IDs can be in multiple formats (username, numeric ID, channel ID)
 - **Session Management**: Requires proper session handling and authentication
 
+### Telethon-specific Constraints
+- **asyncio.wait_for is DANGEROUS**: Cancelling a Telethon coroutine with `asyncio.wait_for` leaves the MTProto sender in an inconsistent state. The delayed response gets read by the next request's handler, causing `msg_id` desync → server disconnect → reconnect overhead. Never use `asyncio.wait_for` on Telethon client calls.
+- **get_entity(InputPeer) ALWAYS makes API calls**: Telethon does not check the session cache before making a `users.GetUsersRequest` for `InputPeerUser`. Even if the entity is cached, the API call is made.
+- **Batch get_entity triggers flood wait**: `client.get_entity([71 users])` makes one `users.GetUsersRequest([71])`, which triggers `FLOOD_WAIT_178` for large lists. Individual `get_entity` calls are safe but some users take 41-42s (Telegram cross-DC internal lookup).
+- **Stale access_hash causes ~30s hang**: Entities from `iter_dialogs` can have stale `access_hash` (deleted accounts, cross-DC migration). GetPeerDialogsRequest with stale hash hangs ~30s. No built-in fix in Telethon.
+- **flood_sleep_threshold blocks by CONSTRUCTOR_ID**: Telethon's `_flood_waited_requests` dict keys on the request's `CONSTRUCTOR_ID`. One FLOOD_WAIT for GetUsersRequest blocks ALL subsequent GetUsersRequest calls.
+- **session.process_entities**: Entities are saved to session DB only AFTER a successful API call. No mechanism to pre-populate or validate cached entity hashes.
+
 ### MCP Protocol Constraints
 - **Tool Registration**: All tools must be properly registered with FastMCP
 - **Async Operations**: All Telegram operations must be async

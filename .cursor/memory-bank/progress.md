@@ -1,3 +1,9 @@
+### 2026-06-03
+- **v0.28.2 — GetPeerDialogsRequest dialog.date fix:** Entities from `iter_dialogs` with stale `access_hash` caused GetPeerDialogsRequest to hang ~30s per chunk. Fixed by storing `dialog.date` directly during flags iteration, skipping GetPeerDialogsRequest for ~200 flags-matched entities. Query time from ~39s to ~6.9s.
+- **Debugging findings:** `asyncio.wait_for` on Telethon calls corrupts MTProto (msg_id desync). Batch `get_entity([71])` triggers FLOOD_WAIT_178. Cross-DC delays on 8/71 users (41-42s, unfixable client-side).
+- **Regression test added:** `test_find_chats_by_include_peers_uses_dialog_date_for_flags_entities` — verifies flags entities skip GetPeerDialogsRequest.
+- **Coding process gaps identified:** TDD skipped during debug phase, ruff/pytest run late, no self-review before merge. Retroactively fixed: Sourcery (0 issues), self-review done, regression test written.
+
 ### 2026-06-02
 - **PR #105 — Image data: URIs sent as photo, not document:** Fixed `_is_likely_image_filename` to skip `filename=` parameter when parsing data: URI headers. Without the fix, `data:image/png;filename=test.png;base64,...` was parsed as MIME type `filename=test.png` (overwriting `image/png`), causing images to be sent as documents instead of inline photos.
 
