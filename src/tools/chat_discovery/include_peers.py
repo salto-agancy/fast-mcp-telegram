@@ -8,6 +8,7 @@ from typing import Any
 
 from telethon.tl.functions.messages import GetPeerDialogsRequest
 
+from src.utils.datetime_parse import parse_iso_datetime_utc
 from src.utils.entity import build_entity_dict
 
 from .constants import (
@@ -15,8 +16,6 @@ from .constants import (
     GET_ENTITY_CONCURRENCY,
     GET_PEER_DIALOGS_CHUNK_SIZE,
 )
-from src.utils.datetime_parse import parse_iso_datetime_utc
-
 from .date_helpers import (
     _dialog_in_date_range,
     _last_activity_datetime_in_range,

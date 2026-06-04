@@ -6,7 +6,6 @@ from mcp.types import ToolAnnotations
 from src.server_components import auth as server_auth
 from src.server_components import bot_restrictions
 from src.server_components import errors as server_errors
-from src.server_components.session_acl import enforce_session_acl
 from src.server_components.mcp_tool_types import (
     AllowDangerous,
     AutoExpandBatches,
@@ -35,11 +34,12 @@ from src.server_components.mcp_tool_types import (
     RemoveIfNew,
     ReplyToForThread,
     ReplyToId,
-    ThreadScope,
     ReplyToMsgId,
     ResolveEntities,
+    ThreadScope,
     TopicsLimit,
 )
+from src.server_components.session_acl import enforce_session_acl
 from src.tools.chat_discovery.chat_info import get_chat_info_impl
 from src.tools.chat_discovery.find_chats import find_chats_impl
 from src.tools.messages import (

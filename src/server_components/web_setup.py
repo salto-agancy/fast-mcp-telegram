@@ -18,12 +18,12 @@ from telethon.tl.functions.account import GetPasswordRequest
 from src.client.connection import _cache_lock, _session_cache, generate_bearer_token
 from src.config.server_config import ServerMode, get_config
 from src.config.settings import API_HASH, API_ID
+from src.server_components.auth_middleware import generate_url_based_config
 from src.server_components.session_token_validation import (
     InvalidSessionTokenError,
     session_file_path,
     validate_session_token,
 )
-from src.server_components.auth_middleware import generate_url_based_config
 from src.utils.mcp_config import generate_mcp_config_json
 from src.utils.proxy import build_mtproto_client_args
 

@@ -6,10 +6,9 @@ history fallback (dialog.date is None with active date filters).
 """
 
 import logging
+import time
 from datetime import UTC, datetime
 from typing import Any
-
-import time
 
 from telethon.tl.functions.messages import GetPeerDialogsRequest
 from telethon.tl.types import InputPeerChannel, InputPeerChat, InputPeerUser

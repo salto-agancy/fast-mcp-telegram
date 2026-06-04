@@ -6,7 +6,6 @@ from functools import wraps
 from src.client.connection import set_request_token
 from src.config.server_config import get_config
 from src.server_components.session_token_validation import (
-    RESERVED_SESSION_NAMES,
     InvalidSessionTokenError,
     validate_session_token,
 )
