@@ -546,7 +546,9 @@ class TestErrorHandling:
 
     def test_extract_bearer_token_reserved_names_rejected(self, http_auth_config):
         """Test that reserved session names are rejected as bearer tokens."""
-        from src.server_components.auth import RESERVED_SESSION_NAMES
+        from src.server_components.session_token_validation import (
+            RESERVED_SESSION_NAMES,
+        )
 
         # Test each reserved name
         for reserved_name in RESERVED_SESSION_NAMES:
@@ -634,7 +636,9 @@ class TestErrorHandling:
         self, http_auth_config
     ):
         """Test that extract_bearer_token_from_request also rejects reserved names."""
-        from src.server_components.auth import RESERVED_SESSION_NAMES
+        from src.server_components.session_token_validation import (
+            RESERVED_SESSION_NAMES,
+        )
 
         # Create a mock request object
         class MockRequest:
