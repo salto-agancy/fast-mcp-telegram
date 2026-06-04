@@ -192,6 +192,55 @@ Each scenario runs **3-5 iterations**, reports:
 - min / max / mean duration
 - iteration-by-iteration breakdown
 
+### 3.6. Project Structure
+
+```
+tests/integration/
+├── benchmark_find_chats.py           # Standalone CLI — full benchmark (9 scenarios, warmup, iterations, JSON output)
+├── benchmark_search_global.py        # Standalone CLI — search benchmark (6 scenarios, flood wait retry, cross-run compare)
+├── test_benchmark_find_chats.py      # Pytest smoke test — @pytest.mark.integration, parametrized, 1 iteration
+├── test_benchmark_search_global.py   # Pytest smoke test — @pytest.mark.integration, parametrized, 1 iteration
+├── test_date_filtering.py            # Standalone validation script (not a benchmark)
+├── test_filter_resolution.py         # Standalone validation script
+├── test_find_chats_date_filtering.py # Standalone validation script
+└── test_get_messages_timing.py       # Standalone validation script
+docs/
+└── benchmark-spec.md                  # This document — spec, targets, running instructions
+```
+
+### 3.7. Running
+
+**Full benchmark (5 iterations, all scenarios):**
+```bash
+uv run python3 tests/integration/benchmark_find_chats.py
+uv run python3 tests/integration/benchmark_search_global.py
+```
+
+**Quick validation (1 iteration, selected scenarios):**
+```bash
+pytest -m integration -k test_benchmark_find_chats
+pytest -m integration -k test_benchmark_search
+```
+
+**Custom iterations:**
+```bash
+uv run python3 tests/integration/benchmark_find_chats.py --iterations 3
+uv run python3 tests/integration/benchmark_search_global.py --iterations 3
+```
+
+**Skip specific scenarios:**
+```bash
+uv run python3 tests/integration/benchmark_find_chats.py --skip folder_include
+```
+
+**Save JSON output:**
+```bash
+uv run python3 tests/integration/benchmark_find_chats.py --output results.json
+uv run python3 tests/integration/benchmark_search_global.py --output results.json
+```
+
+The standalone CLI scripts (`benchmark_*.py`) are the primary benchmarking tool — full warmup, iteration control, per-scenario timeout, JSON output, cross-run comparison. The pytest smoke tests (`test_benchmark_*.py`) are quick pass/fail validators that ensure the API endpoints work.
+
 ---
 
 ## 4. Flood Wait Risk Assessment
