@@ -1,5 +1,6 @@
 """Folder filters with explicit include_peers and GetPeerDialogs batching."""
 
+import asyncio
 import logging
 import time
 from datetime import UTC
@@ -11,6 +12,7 @@ from src.utils.entity import build_entity_dict
 
 from .constants import (
     FLAG_MATCH_MAX_DIALOGS,
+    GET_ENTITY_CONCURRENCY,
     GET_PEER_DIALOGS_CHUNK_SIZE,
 )
 from src.utils.datetime_parse import parse_iso_datetime_utc
@@ -57,51 +59,77 @@ async def _find_chats_by_include_peers(
     ordered_peer_ids: list[int] = []
     peer_entity_map: dict[int, dict] = {}
     peer_objects: dict[int, Any] = {}
+    sem = asyncio.Semaphore(GET_ENTITY_CONCURRENCY)
 
-    # Batch-resolve include_peers — one users.GetUsersRequest / channels.GetChannelsRequest
-    # instead of 71 individual calls. This avoids the ~41s per-entity timeout issue
-    # when Telegram's DC is slow to respond to individual user lookups.
-    t_incl = time.monotonic()
-    if include_peers:
-        try:
-            resolved = await client.get_entity(include_peers)
-            resolved = list(resolved) if resolved else []
-            for idx, inp_peer in enumerate(include_peers):
-                if idx >= len(resolved):
-                    break
-                ent = resolved[idx]
+    async def _get_include(inp_peer) -> tuple[Any | None, dict | None]:
+        async with sem:
+            t_start = time.monotonic()
+            try:
+                ent = await client.get_entity(inp_peer)
+                elapsed = time.monotonic() - t_start
                 eid = getattr(ent, "id", None)
-                if eid is None or eid in ordered_peer_ids:
-                    continue
+                peer_label = repr(inp_peer)
+                if elapsed > 5.0:
+                    logger.info(
+                        "get_entity SLOW: peer=%s id=%s elapsed=%.3fs",
+                        peer_label, eid, elapsed,
+                    )
+                elif logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "get_entity: peer=%s id=%s elapsed=%.3fs",
+                        peer_label, eid, elapsed,
+                    )
+                if eid is None:
+                    return None, None
                 ed = build_entity_dict(ent)
-                if ed:
-                    ordered_peer_ids.append(eid)
-                    peer_entity_map[eid] = ed
-                    peer_objects[eid] = ent
-        except Exception as e:
-            logger.warning("Failed to batch-resolve include_peers: %s", e)
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "find_chats include_peers get_entity: n=%d duration_s=%.3f",
-                len(include_peers), time.monotonic() - t_incl,
-            )
+                return (ent, ed) if ed else (None, None)
+            except Exception as e:
+                elapsed = time.monotonic() - t_start
+                logger.warning(
+                    "get_entity FAIL: peer=%s elapsed=%.3fs error=%s",
+                    repr(inp_peer), elapsed, e,
+                )
+                return None, None
 
-    # Batch-resolve exclude_peers
+    t_incl = time.monotonic()
+    include_results: list = []
+    if include_peers:
+        include_results = list(
+            await asyncio.gather(*(_get_include(p) for p in include_peers))
+        )
+    if include_peers and logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "find_chats include_peers get_entity: n=%d duration_s=%.3f",
+            len(include_peers),
+            time.monotonic() - t_incl,
+        )
+
+    for ent, ent_dict in include_results:
+        if not ent or not ent_dict:
+            continue
+        eid = getattr(ent, "id", None)
+        if eid is None or eid in ordered_peer_ids:
+            continue
+        ordered_peer_ids.append(eid)
+        peer_entity_map[eid] = ent_dict
+        peer_objects[eid] = ent
+
+    async def _get_exclude_id(inp_peer) -> int | None:
+        async with sem:
+            try:
+                e = await client.get_entity(inp_peer)
+                eid = getattr(e, "id", None)
+                return eid if isinstance(eid, int) else None
+            except Exception as e:
+                logger.debug("Failed to resolve exclude_peer %s: %s", inp_peer, e)
+                return None
+
     if exclude_peers:
-        try:
-            exc_resolved = await client.get_entity(exclude_peers)
-            exc_resolved = list(exc_resolved) if exc_resolved else []
-            for idx, inp_peer in enumerate(exclude_peers):
-                if idx >= len(exc_resolved):
-                    break
-                ent = exc_resolved[idx]
-                eid = getattr(ent, "id", None)
-                if eid and eid in ordered_peer_ids:
-                    ordered_peer_ids.remove(eid)
-                    peer_entity_map.pop(eid, None)
-                    peer_objects.pop(eid, None)
-        except Exception as e:
-            logger.debug("Failed to batch-resolve exclude_peers: %s", e)
+        for eid in await asyncio.gather(*(_get_exclude_id(p) for p in exclude_peers)):
+            if eid and eid in ordered_peer_ids:
+                ordered_peer_ids.remove(eid)
+                peer_entity_map.pop(eid, None)
+                peer_objects.pop(eid, None)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("find_chats exclude_peers: n=%d", len(exclude_peers))
 
