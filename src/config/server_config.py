@@ -6,7 +6,6 @@ import logging
 import os
 import sys
 from enum import Enum
-from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -412,43 +411,33 @@ class ServerConfig(BaseSettings):
         return config
 
 
-# Module-level test override. When set, ``cfg()`` returns it directly without
-# touching the lru_cache. Tests use ``set_config(cfg)`` to inject a pre-built
-# instance and ``set_config(None)`` to clear.
-_test_config_override: ServerConfig | None = None
-
-
-@lru_cache(maxsize=1)
-def _load_cfg() -> ServerConfig:
-    """Load the process-wide server config (cached)."""
-    return ServerConfig.load()
+# Module-level singleton. Lazily initialized on first ``cfg()`` call.
+# Tests use ``set_config(cfg)`` to inject and ``set_config(None)`` to clear.
+_cfg: ServerConfig | None = None
 
 
 def cfg() -> ServerConfig:
-    """Return the process-wide server config, honoring any test override.
-
-    When a test override is set, it is returned directly without touching the
-    underlying LRU cache.
-    """
-    return _load_cfg() if _test_config_override is None else _test_config_override
+    """Return the process-wide server config, lazily initialized."""
+    global _cfg
+    if _cfg is None:
+        _cfg = ServerConfig.load()
+    return _cfg
 
 
 def set_config(config: ServerConfig | None) -> None:
-    """Inject or clear the test config override.
+    """Set or clear the global config.
 
     Production code should never call this — it exists for tests that need to
-    swap the config mid-run. ``None`` clears the override; the next ``cfg()``
-    call rebuilds from the environment.
+    swap the config mid-run. ``None`` clears; the next ``cfg()`` call rebuilds
+    from the environment.
     """
-    global _test_config_override
-    _test_config_override = config
-    _load_cfg.cache_clear()
+    global _cfg
+    _cfg = config
 
 
 def reset_cfg_for_tests() -> None:
     """Reset config to default state for tests.
 
-    Clears any test override and rebuilds from environment on next cfg() call.
-    Use this instead of directly accessing _test_config_override or _load_cfg.cache_clear().
+    Clears any override so the next ``cfg()`` call rebuilds from environment.
     """
     set_config(None)
