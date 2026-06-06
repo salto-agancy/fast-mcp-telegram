@@ -111,39 +111,27 @@ class TestUnifiedSessionConfig:
         assert path2.name == "work"
 
     def test_settings_module_uses_config(self):
-        """Test that settings.py is structured to use ServerConfig."""
-        # This test verifies the structure without importing settings.py
-        # (which would trigger CLI parsing at module load time)
+        """ServerConfig exposes the fields previously re-exported by settings.py.
 
-        # Test that ServerConfig has the expected properties
+        We no longer have a settings.py shim; production code calls ``cfg()``
+        and reads fields directly. This test pins the field names.
+        """
         config = ServerConfig(_cli_parse_args=[])
-        assert hasattr(config, "session_name")
-        assert hasattr(config, "session_path")
-        assert hasattr(config, "session_directory")
-
-        # Verify settings.py would use these correctly
-        # settings.py does: SESSION_NAME = config.session_name
-        assert config.session_name == "telegram"  # default
-        # settings.py does: SESSION_PATH = config.session_path
+        assert config.session_name == "telegram"
         assert (
             config.session_path
             == Path.home() / ".config" / "fast-mcp-telegram" / "telegram"
         )
 
     def test_connection_uses_settings_session_path(self):
-        """Test that connection.py would use SESSION_PATH correctly."""
-        # This test verifies that the session path property works correctly
-        # without importing settings.py (which would trigger CLI parsing)
-
+        """Session path property is the single source of truth for connection.py."""
         config = ServerConfig(_cli_parse_args=[])
         session_path = config.session_path
 
-        # Verify SESSION_PATH would be correct for connection.py
         assert isinstance(session_path, Path)
         assert session_path.parent == Path.home() / ".config" / "fast-mcp-telegram"
         assert session_path.name == "telegram"  # Default session name
 
-        # Test with custom session name
         with patch.dict(os.environ, {"SESSION_NAME": "custom"}):
             custom_config = ServerConfig(_cli_parse_args=[])
             assert custom_config.session_path.name == "custom"

@@ -14,7 +14,12 @@ from fastmcp import Client, FastMCP
 from fastmcp.server.auth import AccessToken
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 
-from src.config.server_config import ServerConfig, ServerMode, set_config
+from src.config.server_config import (
+    ServerConfig,
+    ServerMode,
+    reset_cfg_for_tests,
+    set_config,
+)
 
 # 43-char URL-safe token (same shape as generate_bearer_token) for auth tests.
 VALID_TEST_BEARER_TOKEN = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFg"
@@ -269,6 +274,13 @@ def malformed_auth_headers():
     return {"authorization": "BearerInvalidToken123"}
 
 
+@pytest.fixture(autouse=True)
+def _reset_server_config():
+    """Reset server config to default state before each test."""
+    reset_cfg_for_tests()
+    yield
+
+
 @pytest.fixture
 def async_success_func():
     """Common async function that returns 'success'."""
@@ -415,7 +427,7 @@ def make_forum_channel(chat_id, title, forum=True):
         "id": chat_id,
         "title": title,
         "forum": forum,
-        "broadcast": False if forum else True,
+        "broadcast": not forum,
         "megagroup": forum,
         "first_name": None,
         "last_name": None,

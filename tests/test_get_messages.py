@@ -8,7 +8,7 @@ Tests cover:
 - Error handling for all modes
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -547,13 +547,13 @@ class TestGetMessagesDateFiltering:
 
         # Create messages with different dates
         old_msg = make_mock_message(
-            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc)
+            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=UTC)
         )
         recent_msg = make_mock_message(
-            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc)
+            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=UTC)
         )
         future_msg = make_mock_message(
-            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc)
+            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=UTC)
         )
 
         # Return messages in order (newest to oldest when iterated)
@@ -598,13 +598,13 @@ class TestGetMessagesDateFiltering:
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
 
         old_msg = make_mock_message(
-            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc)
+            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=UTC)
         )
         recent_msg = make_mock_message(
-            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc)
+            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=UTC)
         )
         future_msg = make_mock_message(
-            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc)
+            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=UTC)
         )
 
         async def mock_iter_messages_gen():
@@ -647,13 +647,13 @@ class TestGetMessagesDateFiltering:
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
 
         old_msg = make_mock_message(
-            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=timezone.utc)
+            id=1, text="Old message", date=datetime(2023, 1, 1, tzinfo=UTC)
         )
         recent_msg = make_mock_message(
-            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=timezone.utc)
+            id=2, text="Recent message", date=datetime(2024, 6, 15, tzinfo=UTC)
         )
         future_msg = make_mock_message(
-            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=timezone.utc)
+            id=3, text="Future message", date=datetime(2025, 1, 1, tzinfo=UTC)
         )
 
         async def mock_iter_messages_gen():
@@ -696,25 +696,25 @@ class TestGetMessagesDateFiltering:
         # Create 5 messages - only 2 should be returned after min_date filter
         msgs = [
             make_mock_message(
-                id=5, text="Msg 2025", date=datetime(2025, 1, 1, tzinfo=timezone.utc)
+                id=5, text="Msg 2025", date=datetime(2025, 1, 1, tzinfo=UTC)
             ),
             make_mock_message(
                 id=4,
                 text="Msg mid 2024",
-                date=datetime(2024, 6, 15, tzinfo=timezone.utc),
+                date=datetime(2024, 6, 15, tzinfo=UTC),
             ),
             make_mock_message(
                 id=3,
                 text="Msg early 2024",
-                date=datetime(2024, 1, 15, tzinfo=timezone.utc),
+                date=datetime(2024, 1, 15, tzinfo=UTC),
             ),  # min boundary
             make_mock_message(
                 id=2,
                 text="Msg late 2023",
-                date=datetime(2023, 12, 1, tzinfo=timezone.utc),
+                date=datetime(2023, 12, 1, tzinfo=UTC),
             ),
             make_mock_message(
-                id=1, text="Msg 2022", date=datetime(2022, 1, 1, tzinfo=timezone.utc)
+                id=1, text="Msg 2022", date=datetime(2022, 1, 1, tzinfo=UTC)
             ),
         ]
 
@@ -759,7 +759,7 @@ class TestGetMessagesDateFiltering:
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
 
         msg_with_date = make_mock_message(
-            id=1, text="Dated message", date=datetime(2024, 6, 15, tzinfo=timezone.utc)
+            id=1, text="Dated message", date=datetime(2024, 6, 15, tzinfo=UTC)
         )
         msg_no_date = make_mock_message(id=2, text="Unknown date", date=None)
 
@@ -803,7 +803,7 @@ class TestGetMessagesDateFiltering:
         service_msg = make_mock_message(
             id=99,
             text="",
-            date=datetime(2024, 6, 20, tzinfo=timezone.utc),
+            date=datetime(2024, 6, 20, tzinfo=UTC),
             media=None,
             action=pin_action,
         )
@@ -812,7 +812,7 @@ class TestGetMessagesDateFiltering:
         service_msg.forward = None
 
         old_msg = make_mock_message(
-            id=1, text="old", date=datetime(2020, 1, 1, tzinfo=timezone.utc)
+            id=1, text="old", date=datetime(2020, 1, 1, tzinfo=UTC)
         )
 
         async def mock_iter_messages_gen():

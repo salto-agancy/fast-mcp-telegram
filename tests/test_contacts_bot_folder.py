@@ -8,14 +8,13 @@ import pytest
 from src.tools.chat_discovery.dialog_filters import _get_filter_by_name
 from src.tools.chat_discovery.dialog_search import search_dialogs_impl
 from src.tools.chat_discovery.find_chats import find_chats_impl
-from src.utils.helpers import normalize_whitespace_lower
 from src.utils.entity import (
     _matches_chat_type,
     _matches_public_filter,
     get_dialog_filters,
     get_normalized_chat_type,
 )
-from src.utils.error_handling import log_and_build_error
+from src.utils.helpers import normalize_whitespace_lower
 from tests.conftest import MockChannel, MockChat, MockDialog, MockUser, make_folder
 
 # ============== Bot Type Detection Tests ==============

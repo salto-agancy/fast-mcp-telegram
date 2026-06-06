@@ -101,6 +101,7 @@ dev = [
     "pytest-cov",
     "pytest-xdist",
     "pytest-html",
+    "sourcery",
 ]
 
 [tool.pytest.ini_options]

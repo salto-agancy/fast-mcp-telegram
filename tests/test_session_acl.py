@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.client.connection import set_request_token
-from src.config.server_config import ServerConfig, ServerMode, get_config, set_config
+from src.config.server_config import ServerConfig, ServerMode, cfg, set_config
 from src.server_components.attachment_tickets import (
     clear_attachment_tickets_for_tests,
     get_attachment_ticket,
@@ -748,7 +748,7 @@ principals:
     read_only: false
 """,
     )
-    config = get_config()
+    config = cfg()
     config.acl_deny_unlisted_principals = True
     set_config(config)
     set_request_token("not-in-acl-file")
@@ -767,7 +767,7 @@ principals:
       - me
 """,
     )
-    config = get_config()
+    config = cfg()
     config.acl_deny_unlisted_principals = True
     set_config(config)
     set_request_token("not-in-acl-file")
@@ -786,7 +786,7 @@ principals:
       - me
 """,
     )
-    config = get_config()
+    config = cfg()
     config.acl_deny_unlisted_principals = False
     set_config(config)
     set_request_token("not-in-acl-file")

@@ -4,7 +4,7 @@
 Run with: uv run python3 tests/integration/test_date_filtering.py
 """
 import asyncio
-from datetime import datetime, timezone
+
 from src.client.connection import get_connected_client
 from src.tools.search import search_messages_impl
 

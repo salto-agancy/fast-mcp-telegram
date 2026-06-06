@@ -4,7 +4,7 @@ from collections.abc import Callable
 from functools import wraps
 
 from src.client.connection import set_request_token
-from src.config.server_config import get_config
+from src.config.server_config import cfg
 from src.server_components.session_token_validation import (
     InvalidSessionTokenError,
     validate_session_token,
@@ -47,7 +47,7 @@ def extract_bearer_token() -> str | None:
     Validates that token is not a reserved session name to prevent session conflicts.
     """
     try:
-        config = get_config()
+        config = cfg()
         if config.transport != "http":
             return None
 
@@ -72,7 +72,7 @@ def with_auth_context(func: Callable) -> Callable:
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        config = get_config()
+        config = cfg()
 
         if config.disable_auth:
             set_request_token(None)
@@ -111,7 +111,7 @@ def extract_bearer_token_from_request(request) -> str | None:
     - Validates that token is not a reserved session name to prevent session conflicts
     """
     try:
-        config = get_config()
+        config = cfg()
         if config.transport != "http":
             return None
 

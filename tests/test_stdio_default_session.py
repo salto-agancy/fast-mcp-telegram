@@ -50,13 +50,12 @@ async def test_get_connected_client_stdio_default_session_name(stdio_config):
         "src.client.connection._get_client_by_token",
         new_callable=AsyncMock,
         return_value=mock_client,
-    ) as get_mock:
-        with patch(
-            "src.client.connection.ensure_connection",
-            new_callable=AsyncMock,
-            return_value=True,
-        ):
-            client = await get_connected_client()
+    ) as get_mock, patch(
+        "src.client.connection.ensure_connection",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        client = await get_connected_client()
 
     assert client is mock_client
     get_mock.assert_awaited_once()

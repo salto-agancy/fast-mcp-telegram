@@ -16,8 +16,7 @@ from telethon.errors.rpcerrorlist import PhoneNumberFloodError
 from telethon.tl.functions.account import GetPasswordRequest
 
 from src.client.connection import _cache_lock, _session_cache, generate_bearer_token
-from src.config.server_config import ServerMode, get_config
-from src.config.settings import API_HASH, API_ID
+from src.config.server_config import ServerMode, cfg
 from src.server_components.auth_middleware import generate_url_based_config
 from src.server_components.session_token_validation import (
     InvalidSessionTokenError,
@@ -79,8 +78,8 @@ templates = Jinja2Templates(
 
 # Simple in-memory setup session store for web setup flow
 _setup_sessions: dict[str, dict] = {}
-# Use unified config for TTL
-SETUP_SESSION_TTL_SECONDS = get_config().setup_session_ttl_seconds
+# SETUP_SESSION_TTL_SECONDS is resolved at call time via cfg() to honor
+# test overrides and dynamic config changes (not bound at import time).
 
 logger = logging.getLogger(__name__)
 
@@ -173,13 +172,14 @@ def _2fa_form_context(
 
 def create_session_client(session_path: Path) -> TelegramClient:
     """Create and return a configured TelegramClient."""
+    config = cfg()
     client_kwargs = {
         "session": session_path,
-        "api_id": int(API_ID),
-        "api_hash": API_HASH,
-        "entity_cache_limit": get_config().entity_cache_limit,
+        "api_id": int(config.api_id),
+        "api_hash": config.api_hash,
+        "entity_cache_limit": config.entity_cache_limit,
     }
-    client_kwargs |= build_mtproto_client_args(get_config().mtproto_proxy, logger.info)
+    client_kwargs |= build_mtproto_client_args(config.mtproto_proxy, logger.info)
     return TelegramClient(**client_kwargs)
 
 
@@ -190,7 +190,7 @@ async def cleanup_stale_setup_sessions():
 
     for sid, state in list(_setup_sessions.items()):
         created_at = state.get("created_at") or 0
-        if created_at and (now - float(created_at) > SETUP_SESSION_TTL_SECONDS):
+        if created_at and (now - float(created_at) > cfg().setup_session_ttl_seconds):
             stale_ids.append(sid)
 
     for sid in stale_ids:
@@ -288,7 +288,7 @@ async def setup_generate(request: Request):
         return _setup_error_fragment(request, INVALID_SETUP_STATE_MESSAGE)
 
     desired_token = state.get("desired_token")
-    session_dir = get_config().session_directory
+    session_dir = cfg().session_directory
     src = Path(temp_session_path)
 
     try:
@@ -320,7 +320,7 @@ async def setup_generate(request: Request):
     except Exception as e:
         return _setup_error_fragment(request, f"Failed to persist session: {e}")
 
-    domain = get_config().domain
+    domain = cfg().domain
 
     # Generate both header-based and URL-based configs
     # Header-based (recommended)
@@ -385,7 +385,7 @@ def register_web_setup_routes(mcp_app):
 
         setup_id = str(int(time.time() * 1000))
         temp_session_path = (
-            get_config().session_directory / f"{SETUP_SESSION_PREFIX}{setup_id}.session"
+            cfg().session_directory / f"{SETUP_SESSION_PREFIX}{setup_id}.session"
         )
 
         client = create_session_client(temp_session_path)
@@ -536,7 +536,7 @@ def register_web_setup_routes(mcp_app):
 
         try:
             _, session_path = _bearer_token_and_session_path(
-                get_config().session_directory, existing_token
+                cfg().session_directory, existing_token
             )
         except (InvalidSessionTokenError, OSError) as e:
             return _setup_token_path_error_fragment(
@@ -573,7 +573,7 @@ def register_web_setup_routes(mcp_app):
         # Session needs reauthorization - create temp session for reauth
         setup_id = str(int(time.time() * 1000))
         temp_session_path = (
-            get_config().session_directory
+            cfg().session_directory
             / f"{REAUTH_SESSION_PREFIX}{setup_id}.session"
         )
 
@@ -687,7 +687,7 @@ def register_web_setup_routes(mcp_app):
 
         try:
             token, session_path = _bearer_token_and_session_path(
-                get_config().session_directory, token
+                cfg().session_directory, token
             )
         except (InvalidSessionTokenError, OSError) as e:
             return _setup_token_path_error_fragment(
@@ -737,7 +737,7 @@ def register_web_setup_routes(mcp_app):
     @mcp_app.custom_route("/download-config/{token}", methods=["GET"])
     async def download_config(request: Request):
         token = request.path_params.get("token")
-        domain = get_config().domain
+        domain = cfg().domain
         # Web setup always uses HTTP_AUTH mode
         config_json = generate_mcp_config_json(
             ServerMode.HTTP_AUTH,

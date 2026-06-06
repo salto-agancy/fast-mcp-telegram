@@ -6,7 +6,7 @@ import contextlib
 import ipaddress
 from typing import Any
 
-from src.config.server_config import ServerMode, get_config
+from src.config.server_config import ServerMode, cfg
 from src.utils.error_handling import log_and_build_error
 
 
@@ -24,7 +24,7 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
         from urllib.parse import urlparse
 
         parsed = urlparse(url)
-        config = get_config()
+        config = cfg()
 
         if parsed.scheme == "http" and not config.allow_http_urls:
             return (
@@ -91,7 +91,7 @@ def _validate_file_paths(
         (file_list, error): file_list if valid, error dict if validation fails
     """
     file_list = [files] if isinstance(files, str) else files
-    config = get_config()
+    config = cfg()
 
     for file in file_list:
         # data: URIs are accepted in all transport modes

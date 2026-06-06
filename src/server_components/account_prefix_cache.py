@@ -3,7 +3,7 @@
 import time
 from collections import OrderedDict
 
-from src.config.server_config import get_config
+from src.config.server_config import cfg
 
 # Retry get_me after a transient None; avoids hammering Telegram every list_tools call.
 _UNRESOLVED_TTL_SECONDS = 120.0
@@ -37,7 +37,7 @@ class AccountPrefixCache:
         self._cache.pop(token, None)
 
     def put(self, token: str, label: str) -> None:
-        max_size = max(1, get_config().max_active_sessions)
+        max_size = max(1, cfg().max_active_sessions)
         self._unresolved.pop(token, None)
         if token in self._cache:
             self._cache.move_to_end(token)

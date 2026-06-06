@@ -5,7 +5,7 @@ Server configuration using pydantic_settings for clean environment and argument 
 import logging
 import os
 import sys
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
@@ -51,7 +51,7 @@ def _is_test_environment() -> bool:
     return any(module_name in sys.modules for module_name in pytest_modules)
 
 
-class ServerMode(str, Enum):
+class ServerMode(StrEnum):
     """Server operation modes with clear authentication and transport behavior."""
 
     STDIO = "stdio"  # stdio transport, no auth (default session only)
@@ -156,6 +156,16 @@ class ServerConfig(BaseSettings):
     # Session management
     max_active_sessions: int = Field(
         default=10, ge=1, description="Maximum number of active sessions in LRU cache"
+    )
+
+    max_idle_time_seconds: int = Field(
+        default=1800,
+        ge=0,
+        validation_alias=AliasChoices("max_idle_time_seconds", "MAX_IDLE_TIME"),
+        description=(
+            "Idle session TTL in seconds. Sessions unused for longer are "
+            "disconnected from the cache. 0 disables idle cleanup."
+        ),
     )
 
     setup_session_ttl_seconds: int = Field(
@@ -377,9 +387,14 @@ class ServerConfig(BaseSettings):
             )
 
         if self.acl_enabled and not self.disable_auth:
-            from src.server_components.session_acl import validate_acl_config
+            path = self.acl_config_file
+            if not path.is_file():
+                from src.server_components.session_acl import AclConfigError
 
-            validate_acl_config()
+                raise AclConfigError(
+                    f"ACL is enabled (ACL_ENABLED=true) but ACL config file not found: {path}. "
+                    "Create the file or set ACL_CONFIG_PATH to a valid path."
+                )
             logger.info(f"🔒 Session ACL enabled: {self.acl_config_file}")
 
         if self.transport == "http" and not self.public_base_url_normalized:
@@ -390,34 +405,44 @@ class ServerConfig(BaseSettings):
             )
 
     @classmethod
-    def from_args_and_env(cls) -> "ServerConfig":
-        """Create configuration from command line arguments and environment variables.
+    def load(cls) -> "ServerConfig":
+        """Build a config from environment / CLI / .env files.
 
-        With native CLI parsing, this simply creates the config instance.
-        pydantic-settings automatically handles CLI args, env vars, and .env files.
+        ``validate_config()`` runs once here; subsequent ``cfg()`` callers get the
+        cached instance and skip logging.
         """
-        global _config
         config = cls()
-        # Register before validate_config so ACL and other validators can call get_config()
-        # without re-entering from_args_and_env (RecursionError during startup).
-        _config = config
         config.validate_config()
         return config
 
 
-# Global configuration instance
-_config: ServerConfig | None = None
+# Module-level singleton. Lazily initialized on first ``cfg()`` call.
+# Tests use ``set_config(cfg)`` to inject and ``set_config(None)`` to clear.
+_cfg: ServerConfig | None = None
 
 
-def get_config() -> ServerConfig:
-    """Get the global server configuration instance."""
-    global _config
-    if _config is None:
-        _config = ServerConfig.from_args_and_env()
-    return _config
+def cfg() -> ServerConfig:
+    """Return the process-wide server config, lazily initialized."""
+    global _cfg
+    if _cfg is None:
+        _cfg = ServerConfig.load()
+    return _cfg
 
 
-def set_config(config: ServerConfig) -> None:
-    """Set the global server configuration instance (for testing)."""
-    global _config
-    _config = config
+def set_config(config: ServerConfig | None) -> None:
+    """Set or clear the global config.
+
+    Production code should never call this — it exists for tests that need to
+    swap the config mid-run. ``None`` clears; the next ``cfg()`` call rebuilds
+    from the environment.
+    """
+    global _cfg
+    _cfg = config
+
+
+def reset_cfg_for_tests() -> None:
+    """Reset config to default state for tests.
+
+    Clears any override so the next ``cfg()`` call rebuilds from environment.
+    """
+    set_config(None)

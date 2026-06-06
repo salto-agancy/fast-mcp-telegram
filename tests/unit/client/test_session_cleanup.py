@@ -1,5 +1,6 @@
 """Tests for mtime-based inactivity session cleanup."""
 
+import contextlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +19,16 @@ def make_session_file(session_dir: Path, token: str) -> Path:
     path = session_dir / f"{token}.session"
     path.write_text("fake session data")
     return path
+
+
+@contextlib.contextmanager
+def _config_mock(session_dir: Path, inactive_days: int):
+    """Context manager that patches `cfg` to return a mock config with the
+    given session directory and inactivity cutoff."""
+    with patch("src.client.connection.cfg") as mock:
+        mock.return_value.session_directory = session_dir
+        mock.return_value.inactive_session_days = inactive_days
+        yield mock
 
 
 # ---------------------------------------------------------------------------
@@ -43,11 +54,9 @@ class TestCleanupInactiveSessions:
         assert session_file.is_file()
 
         with (
-            patch("src.client.connection.SESSION_DIR", tmp_path),
             patch("src.client.connection.time.time", return_value=now),
-            patch("src.client.connection.get_config") as mock_get_config,
+            _config_mock(tmp_path, _DEFAULT_INACTIVE_DAYS),
         ):
-            mock_get_config.return_value.inactive_session_days = _DEFAULT_INACTIVE_DAYS
             deleted = await _cleanup_inactive_sessions()
 
         assert deleted == 1
@@ -65,11 +74,9 @@ class TestCleanupInactiveSessions:
         _os.utime(str(session_file), (recent_mtime, recent_mtime))
 
         with (
-            patch("src.client.connection.SESSION_DIR", tmp_path),
             patch("src.client.connection.time.time", return_value=now),
-            patch("src.client.connection.get_config") as mock_get_config,
+            _config_mock(tmp_path, _DEFAULT_INACTIVE_DAYS),
         ):
-            mock_get_config.return_value.inactive_session_days = _DEFAULT_INACTIVE_DAYS
             deleted = await _cleanup_inactive_sessions()
 
         assert deleted == 0
@@ -94,11 +101,9 @@ class TestCleanupInactiveSessions:
         _os.utime(str(recent_file), (recent_mtime, recent_mtime))
 
         with (
-            patch("src.client.connection.SESSION_DIR", tmp_path),
             patch("src.client.connection.time.time", return_value=now),
-            patch("src.client.connection.get_config") as mock_get_config,
+            _config_mock(tmp_path, _DEFAULT_INACTIVE_DAYS),
         ):
-            mock_get_config.return_value.inactive_session_days = _DEFAULT_INACTIVE_DAYS
             deleted = await _cleanup_inactive_sessions()
 
         assert deleted == 1
@@ -109,8 +114,8 @@ class TestCleanupInactiveSessions:
     async def test_skips_nonexistent_file(self, tmp_path):
         """Non-existent directory doesn't crash."""
         with (
-            patch("src.client.connection.SESSION_DIR", tmp_path / "does-not-exist"),
             patch("src.client.connection.time.time", return_value=1_000_000_000.0),
+            _config_mock(tmp_path / "does-not-exist", _DEFAULT_INACTIVE_DAYS),
         ):
             deleted = await _cleanup_inactive_sessions()
         assert deleted == 0
@@ -128,11 +133,9 @@ class TestCleanupInactiveSessions:
         _os.utime(str(session_file), (old_mtime, old_mtime))
 
         with (
-            patch("src.client.connection.SESSION_DIR", tmp_path),
             patch("src.client.connection.time.time", return_value=now),
-            patch("src.client.connection.get_config") as mock_get_config,
+            _config_mock(tmp_path, days),
         ):
-            mock_get_config.return_value.inactive_session_days = days
             deleted = await _cleanup_inactive_sessions()
 
         assert deleted == 0
@@ -144,8 +147,8 @@ class TestCleanupInactiveSessions:
         (tmp_path / "not_a_session.txt").write_text("ignore me")
 
         with (
-            patch("src.client.connection.SESSION_DIR", tmp_path),
             patch("src.client.connection.time.time", return_value=1_000_000_000.0),
+            _config_mock(tmp_path, _DEFAULT_INACTIVE_DAYS),
         ):
             deleted = await _cleanup_inactive_sessions()
         assert deleted == 0

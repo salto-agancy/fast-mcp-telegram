@@ -11,7 +11,7 @@ from starlette.responses import Response, StreamingResponse
 from telethon.types import Message
 
 from src.client.connection import get_connected_client, set_request_token
-from src.config.server_config import get_config
+from src.config.server_config import cfg
 from src.server_components.attachment_tickets import get_attachment_ticket
 
 logger = logging.getLogger(__name__)
@@ -78,8 +78,8 @@ async def handle_attachment_download(request: Any) -> Response | StreamingRespon
         # Telethon returns Message | list[Message] | None; narrow to Message
         message = cast("Message", message)
 
-        cfg = get_config()
-        max_bytes = cfg.max_file_size_mb * 1024 * 1024
+        config = cfg()
+        max_bytes = config.max_file_size_mb * 1024 * 1024
 
         mime = ticket.mime_type or "application/octet-stream"
 
