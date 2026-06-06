@@ -556,7 +556,7 @@ async def _cleanup_inactive_sessions() -> int:
     default_session = config.session_name
     deleted = 0
 
-    for session_file in cfg().session_directory.glob("*.session"):
+    for session_file in config.session_directory.glob("*.session"):
         if not session_file.is_file():
             continue
 
