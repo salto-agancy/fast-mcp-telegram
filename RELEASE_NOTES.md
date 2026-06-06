@@ -1,11 +1,10 @@
 # Release v0.29.0
 
-Send files as inline data URIs and local paths across all transport modes, with improved Telegram client identity and transcription reliability.
+Send files as inline data URIs with improved Telegram client identity and transcription reliability.
 
 ## New Features
 
 - **`send_message` / `edit_message` data: URI uploads** — Attach files inline via `data:` URIs (base64) without hosting or filesystem access. Filenames are preserved from the URI. (#103, #104)
-- **Local file paths in all transport modes** — `send_message` and `edit_message` now accept local file paths in HTTP/SSE transport modes (previously stdio-only). Files are validated against a size limit. (#106)
 - **Forum topic date filtering** — `min_date`/`max_date` now work correctly with `reply_to_id` in forum topics, using `dialog.date` as a reliable fallback. (#102)
 
 ## Fixes
