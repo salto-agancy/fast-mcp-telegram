@@ -78,8 +78,8 @@ templates = Jinja2Templates(
 
 # Simple in-memory setup session store for web setup flow
 _setup_sessions: dict[str, dict] = {}
-# Use unified config for TTL
-SETUP_SESSION_TTL_SECONDS = cfg().setup_session_ttl_seconds
+# SETUP_SESSION_TTL_SECONDS is resolved at call time via cfg() to honor
+# test overrides and dynamic config changes (not bound at import time).
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ async def cleanup_stale_setup_sessions():
 
     for sid, state in list(_setup_sessions.items()):
         created_at = state.get("created_at") or 0
-        if created_at and (now - float(created_at) > SETUP_SESSION_TTL_SECONDS):
+        if created_at and (now - float(created_at) > cfg().setup_session_ttl_seconds):
             stale_ids.append(sid)
 
     for sid in stale_ids:

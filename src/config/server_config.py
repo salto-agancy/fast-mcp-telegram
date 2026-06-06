@@ -419,11 +419,18 @@ _test_config_override: ServerConfig | None = None
 
 
 @lru_cache(maxsize=1)
-def cfg() -> ServerConfig:
-    """Return the process-wide server config, building it on first call."""
-    if _test_config_override is not None:
-        return _test_config_override
+def _load_cfg() -> ServerConfig:
+    """Load the process-wide server config (cached)."""
     return ServerConfig.load()
+
+
+def cfg() -> ServerConfig:
+    """Return the process-wide server config, honoring any test override.
+
+    When a test override is set, it is returned directly without touching the
+    underlying LRU cache.
+    """
+    return _load_cfg() if _test_config_override is None else _test_config_override
 
 
 def set_config(config: ServerConfig | None) -> None:
@@ -435,4 +442,4 @@ def set_config(config: ServerConfig | None) -> None:
     """
     global _test_config_override
     _test_config_override = config
-    cfg.cache_clear()
+    _load_cfg.cache_clear()
