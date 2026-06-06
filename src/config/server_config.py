@@ -443,3 +443,12 @@ def set_config(config: ServerConfig | None) -> None:
     global _test_config_override
     _test_config_override = config
     _load_cfg.cache_clear()
+
+
+def reset_cfg_for_tests() -> None:
+    """Reset config to default state for tests.
+
+    Clears any test override and rebuilds from environment on next cfg() call.
+    Use this instead of directly accessing _test_config_override or _load_cfg.cache_clear().
+    """
+    set_config(None)

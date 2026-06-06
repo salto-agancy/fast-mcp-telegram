@@ -306,8 +306,7 @@ class TestEnvironmentVariableBehavior:
                 # Clear config cache so the next cfg() call re-reads the env var
                 import src.config.server_config as server_config
 
-                server_config._load_cfg.cache_clear()
-                server_config._test_config_override = None
+                server_config.reset_cfg_for_tests()
 
                 assert expected == server_config.cfg().disable_auth, (
                     f"Failed for DISABLE_AUTH={env_value}"
@@ -322,8 +321,7 @@ class TestEnvironmentVariableBehavior:
             # Clear config cache so the next cfg() call re-reads the env
             import src.config.server_config as server_config
 
-            server_config._load_cfg.cache_clear()
-            server_config._test_config_override = None
+            server_config.reset_cfg_for_tests()
 
             # In STDIO mode (default), auth should be disabled
             assert server_config.cfg().disable_auth is True
