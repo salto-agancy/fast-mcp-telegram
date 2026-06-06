@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from src.config.server_config import get_config
+from src.config.server_config import cfg
 from src.server_components.attachment_tickets import (
     revoke_attachment_tickets,
     track_minted_attachment_tickets,
@@ -117,7 +117,7 @@ def clear_acl_cache() -> None:
 
 
 def _configured_acl_path() -> Path | None:
-    config = get_config()
+    config = cfg()
     if not config.acl_enabled:
         return None
     return config.acl_config_file
@@ -226,7 +226,7 @@ def _is_valid_blocked_peer_entry(value: Any) -> bool:
 
 def validate_acl_config() -> None:
     """Fail-closed: refuse startup when ACL is enabled but config is absent or invalid."""
-    config = get_config()
+    config = cfg()
     if not config.acl_enabled or config.disable_auth:
         return
     path = config.acl_config_file
@@ -282,7 +282,7 @@ def _load_acl_document() -> dict[str, Any]:
 
     _validate_acl_document(doc, path)
 
-    config = get_config()
+    config = cfg()
     if config.acl_deny_unlisted_principals:
         logger.info(
             "Session ACL: unlisted principals denied (ACL_DENY_UNLISTED_PRINCIPALS=true)"
@@ -298,7 +298,7 @@ def _load_acl_document() -> dict[str, Any]:
 def _rules_for_principal(principal_id: str | None) -> PrincipalAclRule | None:
     if not principal_id:
         return None
-    config = get_config()
+    config = cfg()
     if not config.acl_enabled or config.disable_auth:
         return None
 
@@ -352,7 +352,7 @@ def _chat_ref_matches(allowed: str | int, candidate: str | int) -> bool:
 
 
 def _load_blocked_peers() -> frozenset[str | int]:
-    config = get_config()
+    config = cfg()
     if not config.acl_enabled or config.disable_auth:
         return frozenset()
     global _blocked_peers_cache
@@ -622,7 +622,7 @@ def check_pre_tool_access(
     """Return an error dict when the tool call must be blocked, else None."""
     from src.client.connection import get_request_token
 
-    config = get_config()
+    config = cfg()
     if not config.acl_enabled or config.disable_auth:
         return None
 
@@ -699,7 +699,7 @@ def filter_tool_result(operation_name: str, result: Any) -> Any:
     if result.get("ok") is False:
         return result
 
-    config = get_config()
+    config = cfg()
     if config.acl_enabled and not config.disable_auth and blocked_peers_configured():
         result = _filter_blocked_peers_from_result(operation_name, result)
         if isinstance(result, dict) and result.get("ok") is False:

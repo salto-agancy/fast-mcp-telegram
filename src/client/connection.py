@@ -16,8 +16,7 @@ from telethon import errors as tg_errors
 from telethon.tl import functions
 
 from ..config.logging import format_diagnostic_info
-from ..config.server_config import PROJECT_ROOT, ServerMode, get_config
-from ..config.settings import SESSION_DIR
+from ..config.server_config import PROJECT_ROOT, ServerMode, cfg
 from ..server_components.session_token_validation import (
     InvalidSessionTokenError,
     validated_session_file_path,
@@ -33,16 +32,16 @@ def validate_api_credentials() -> None:
     Raises ValueError if credentials are missing when required (bot token mode or HTTP auth).
     Logs warning if credentials are missing in other modes.
     """
-    cfg = get_config()
+    config = cfg()
 
     # Bot token mode requires API credentials for auto-authentication
-    if cfg.bot_api_token:
-        if not cfg.api_id or not cfg.api_id.strip():
+    if config.bot_api_token:
+        if not config.api_id or not config.api_id.strip():
             raise ValueError(
                 "Telegram API_ID is required when using bot_api_token. "
                 "Set API_ID in .env at the project root or via --api-id argument."
             )
-        if not cfg.api_hash or not cfg.api_hash.strip():
+        if not config.api_hash or not config.api_hash.strip():
             raise ValueError(
                 "Telegram API_HASH is required when using bot_api_token. "
                 "Set API_HASH in .env at the project root or via --api-hash argument."
@@ -50,8 +49,8 @@ def validate_api_credentials() -> None:
         logger.info("✓ Telegram API credentials validated")
 
     # HTTP auth mode should have credentials (warn if missing)
-    elif cfg.server_mode == ServerMode.HTTP_AUTH:
-        if not cfg.api_id or not cfg.api_hash:
+    elif config.server_mode == ServerMode.HTTP_AUTH:
+        if not config.api_id or not config.api_hash:
             logger.warning(
                 "⚠️ HTTP_AUTH mode without API_ID/API_HASH - "
                 "web setup and session creation will fail until credentials are configured"
@@ -137,7 +136,6 @@ async def verify_authorized_connection(client: TelegramClient) -> None:
 
 
 # Token-based session management (use unified server config)
-MAX_ACTIVE_SESSIONS = get_config().max_active_sessions
 
 _current_token: ContextVar[str | None] = ContextVar("_current_token", default=None)
 _session_cache: dict[str, tuple[TelegramClient, float]] = {}
@@ -149,23 +147,24 @@ _connection_failures: dict[
 ] = {}  # token -> (failure_count, last_failure_time)
 _failure_lock = asyncio.Lock()
 
-# Idle session cleanup
-MAX_IDLE_TIME = 1800  # 30 minutes in seconds
-
 
 async def cleanup_idle_sessions():
-    """Disconnect sessions that haven't been used for MAX_IDLE_TIME."""
+    """Disconnect sessions that haven't been used for max_idle_time_seconds."""
     async with _cache_lock:
+        config = cfg()
+        max_idle_time = config.max_idle_time_seconds
+        if max_idle_time <= 0:
+            return
         current_time = time.time()
         idle_tokens = []
-        default_token = get_config().session_name
+        default_token = config.session_name
 
         for token, (_client, last_access) in _session_cache.items():
             # Skip cleanup for default session to preserve legacy behavior
             if token == default_token:
                 continue
 
-            if current_time - last_access > MAX_IDLE_TIME:
+            if current_time - last_access > max_idle_time:
                 idle_tokens.append(token)
 
         for token in idle_tokens:
@@ -229,10 +228,10 @@ def _resolve_session_path_for_token(token: str) -> Path:
     When auth is disabled (stdio / http-no-auth), the configured ``session_name``
     (e.g. ``telegram``) is not a bearer token — use ``config.session_path`` directly.
     """
-    config = get_config()
+    config = cfg()
     if config.disable_auth and token == config.session_name:
         return config.session_path
-    return validated_session_file_path(SESSION_DIR, token)
+    return validated_session_file_path(config.session_directory, token)
 
 
 def _session_file_exists(session_path: Path) -> bool:
@@ -294,10 +293,11 @@ async def _connect_client_and_verify_or_cleanup(
 
 async def _evict_lru_if_session_cache_full() -> None:
     """Evict least-recently-used session if cache is at capacity. Caller must hold _cache_lock."""
-    if len(_session_cache) < MAX_ACTIVE_SESSIONS:
+    max_active = cfg().max_active_sessions
+    if len(_session_cache) < max_active:
         return
     logger.warning(
-        f"Session cache full ({len(_session_cache)}/{MAX_ACTIVE_SESSIONS}), performing LRU eviction"
+        f"Session cache full ({len(_session_cache)}/{max_active}), performing LRU eviction"
     )
     oldest_token = min(_session_cache.keys(), key=lambda k: _session_cache[k][1])
     oldest_client, last_access = _session_cache[oldest_token]
@@ -319,7 +319,7 @@ async def _evict_lru_if_session_cache_full() -> None:
 async def _build_telegram_client_for_token(
     session_path: Path, token: str
 ) -> TelegramClient:
-    _cfg = get_config()
+    _cfg = cfg()
     raw_api = (_cfg.api_id or "").strip()
     if not raw_api:
         raise ValueError(
@@ -421,7 +421,7 @@ async def get_connected_client() -> TelegramClient:
 
     if token is None:
         # Legacy/Default behavior: use configured session name as token
-        token = get_config().session_name
+        token = cfg().session_name
 
     # Get client for token (default or specific)
     client = await _get_client_by_token(token)
@@ -547,7 +547,7 @@ async def _cleanup_inactive_sessions() -> int:
     inactivity. Returns count of deleted sessions.
     Set TELEGRAM_INACTIVE_SESSION_DAYS=0 (env var) to disable.
     """
-    config = get_config()
+    config = cfg()
     inactive_days = config.inactive_session_days
     if inactive_days <= 0:
         return 0
@@ -556,7 +556,7 @@ async def _cleanup_inactive_sessions() -> int:
     default_session = config.session_name
     deleted = 0
 
-    for session_file in SESSION_DIR.glob("*.session"):
+    for session_file in cfg().session_directory.glob("*.session"):
         if not session_file.is_file():
             continue
 

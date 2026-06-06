@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.config.server_config import ServerMode, get_config
+from src.config.server_config import ServerMode, cfg
 from src.tools.messages.file_handling import (
     _parse_data_uri,
     force_document_for_file_list,
@@ -133,7 +133,7 @@ class TestValidateFilePathsDataUri:
         """data: URIs must work in all transport modes, not just stdio."""
         raw = base64.b64encode(b"hi").decode()
         uri = f"data:text/plain;base64,{raw}"
-        with patch.object(get_config(), "server_mode", ServerMode.HTTP_AUTH):
+        with patch.object(cfg(), "server_mode", ServerMode.HTTP_AUTH):
             file_list, error = _validate_file_paths(uri, "send_message", {})
         assert error is None
         assert file_list == [uri]
@@ -141,7 +141,7 @@ class TestValidateFilePathsDataUri:
     def test_data_uri_accepted_in_stdio_mode(self) -> None:
         raw = base64.b64encode(b"hi").decode()
         uri = f"data:text/plain;base64,{raw}"
-        with patch.object(get_config(), "server_mode", ServerMode.STDIO):
+        with patch.object(cfg(), "server_mode", ServerMode.STDIO):
             file_list, error = _validate_file_paths(uri, "send_message", {})
         assert error is None
         assert file_list == [uri]
@@ -150,7 +150,7 @@ class TestValidateFilePathsDataUri:
         raw = base64.b64encode(b"hi").decode()
         uri = f"data:text/plain;base64,{raw}"
         url = "https://example.com/file.png"
-        with patch.object(get_config(), "server_mode", ServerMode.HTTP_AUTH):
+        with patch.object(cfg(), "server_mode", ServerMode.HTTP_AUTH):
             file_list, error = _validate_file_paths(
                 [uri, url], "send_message", {}
             )
@@ -224,7 +224,7 @@ class TestPrepareFilesForSendDataUri:
     @pytest.mark.asyncio
     async def test_data_uri_oversized_raises(self) -> None:
         """data: URIs exceeding max_file_size_mb should be rejected."""
-        with patch.object(get_config(), "max_file_size_mb", 0.001):  # 1 KB limit
+        with patch.object(cfg(), "max_file_size_mb", 0.001):  # 1 KB limit
             big = base64.b64encode(b"x" * 2000).decode()
             uri = f"data:application/octet-stream;base64,{big}"
             with pytest.raises(ValueError, match="too large"):

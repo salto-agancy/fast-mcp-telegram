@@ -44,7 +44,7 @@ class TestAccountPrefixCache:
     @pytest.mark.asyncio
     async def test_lru_eviction(self, monkeypatch):
         monkeypatch.setattr(
-            "src.server_components.account_prefix_cache.get_config",
+            "src.server_components.account_prefix_cache.cfg",
             lambda: SimpleNamespace(max_active_sessions=2),
         )
         _account_prefix_cache.put("token-a", "alice")
@@ -92,9 +92,8 @@ class TestResolveAccountPrefix:
         with patch(
             "src.server_components.account_tool_prefix_middleware.get_connected_client",
             side_effect=SessionNotAuthorizedError("not authorized"),
-        ):
-            with pytest.raises(SessionNotAuthorizedError):
-                await _resolve_account_prefix("tok123")
+        ), pytest.raises(SessionNotAuthorizedError):
+            await _resolve_account_prefix("tok123")
 
     @pytest.mark.asyncio
     async def test_resolve_skips_api_when_me_none_cached(self):
@@ -138,7 +137,7 @@ class TestResolveAccountPrefix:
 class TestAccountPrefixCacheMaxSize:
     def test_handles_max_sessions_one(self, monkeypatch):
         monkeypatch.setattr(
-            "src.server_components.account_prefix_cache.get_config",
+            "src.server_components.account_prefix_cache.cfg",
             lambda: SimpleNamespace(max_active_sessions=1),
         )
         _account_prefix_cache.put("token-a", "alice")

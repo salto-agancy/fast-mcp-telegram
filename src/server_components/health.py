@@ -1,20 +1,16 @@
 import time
-from pathlib import Path
 
 from starlette.responses import JSONResponse
 
-from src.client.connection import (
-    MAX_ACTIVE_SESSIONS,
-    _session_cache,
-    get_session_health_stats,
-)
-from src.config.settings import SESSION_DIR
+from src.client.connection import _session_cache, get_session_health_stats
+from src.config.server_config import cfg
 from src.server_components.web_setup import _setup_sessions
 
 
 def register_health_routes(mcp_app):
     @mcp_app.custom_route("/health", methods=["GET"])
     async def health_check(request):
+        config = cfg()
         current_time = time.time()
         session_info = []
 
@@ -36,9 +32,10 @@ def register_health_routes(mcp_app):
             {
                 "status": "healthy",
                 "active_sessions": len(_session_cache),
-                "max_sessions": MAX_ACTIVE_SESSIONS,
+                "max_sessions": config.max_active_sessions,
                 "session_files": sum(
-                    bool(p.is_file()) for p in Path(SESSION_DIR).glob("*.session")
+                    bool(p.is_file())
+                    for p in config.session_directory.glob("*.session")
                 ),
                 "setup_sessions": len(_setup_sessions),
                 "sessions": session_info,

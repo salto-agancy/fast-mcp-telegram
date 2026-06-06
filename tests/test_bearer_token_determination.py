@@ -303,19 +303,13 @@ class TestEnvironmentVariableBehavior:
 
         for env_value, expected in test_cases:
             with patch.dict(os.environ, {"DISABLE_AUTH": env_value}):
-                # Clear config cache and reload settings to re-evaluate environment variable
-                import importlib
-
+                # Clear config cache so the next cfg() call re-reads the env var
                 import src.config.server_config as server_config
 
-                # Reset the global config cache
-                server_config._config = None
+                server_config.cfg.cache_clear()
+                server_config._test_config_override = None
 
-                import src.config.settings as settings
-
-                importlib.reload(settings)
-
-                assert expected == settings.DISABLE_AUTH, (
+                assert expected == server_config.cfg().disable_auth, (
                     f"Failed for DISABLE_AUTH={env_value}"
                 )
 
@@ -325,15 +319,14 @@ class TestEnvironmentVariableBehavior:
             # Ensure DISABLE_AUTH not set
             os.environ.pop("DISABLE_AUTH", None)
 
-            # Reload settings to re-evaluate environment variable
-            import importlib
+            # Clear config cache so the next cfg() call re-reads the env
+            import src.config.server_config as server_config
 
-            import src.config.settings as settings
-
-            importlib.reload(settings)
+            server_config.cfg.cache_clear()
+            server_config._test_config_override = None
 
             # In STDIO mode (default), auth should be disabled
-            assert settings.DISABLE_AUTH is True
+            assert server_config.cfg().disable_auth is True
 
 
 class TestTransportModeDetection:

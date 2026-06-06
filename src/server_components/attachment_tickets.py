@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from src.config.server_config import get_config
+from src.config.server_config import cfg
 
 
 @dataclass(frozen=True)
@@ -73,9 +73,9 @@ async def mint_attachment_ticket(
     mime_type: str | None = None,
 ) -> str:
     """Create a ticket; returns UUID string. Multi-use until expiry."""
-    cfg = get_config()
+    config = cfg()
     tid = str(uuid.uuid4())
-    expires_at = time.time() + float(cfg.attachment_ticket_ttl_seconds)
+    expires_at = time.time() + float(config.attachment_ticket_ttl_seconds)
     rec = AttachmentTicket(
         session_token=session_token,
         chat_id=chat_id,

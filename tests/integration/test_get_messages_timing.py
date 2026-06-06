@@ -4,12 +4,12 @@
 Run with: uv run python3 tests/integration/test_get_messages_timing.py
 """
 import asyncio
+import json
 import signal
 import subprocess
 import sys
 import time
 from datetime import datetime
-import json
 
 sys.path.insert(0, "/Users/leshchenko/coding_projects/vds/deployed_projects/fast-mcp-telegram")
 

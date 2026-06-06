@@ -12,7 +12,7 @@ from telethon.errors import FloodWaitError, RPCError
 from telethon.tl.functions.messages import TranscribeAudioRequest
 
 from src.client.connection import get_connected_client, get_request_token
-from src.config.server_config import get_config
+from src.config.server_config import cfg
 from src.server_components.attachment_tickets import mint_attachment_ticket
 from src.utils.entity import (
     _extract_forward_info,
@@ -98,15 +98,15 @@ async def _maybe_set_attachment_download_url(
         return
     if isinstance(chat_id, str) and not chat_id.strip():
         return
-    cfg = get_config()
-    if cfg.transport != "http" or not cfg.public_base_url_normalized:
+    config = cfg()
+    if config.transport != "http" or not config.public_base_url_normalized:
         return
     if not _message_supports_streaming_attachment(message):
         return
 
     session_token = get_request_token()
     if session_token is None:
-        session_token = cfg.session_name
+        session_token = config.session_name
 
     filename = media_dict.get("filename")
     mime_type = media_dict.get("mime_type")
@@ -128,7 +128,7 @@ async def _maybe_set_attachment_download_url(
         filename=filename if isinstance(filename, str) else None,
         mime_type=mime_type if isinstance(mime_type, str) else None,
     )
-    base = cfg.public_base_url_normalized
+    base = config.public_base_url_normalized
     url = f"{base}/v1/attachments/{tid}"
     if tid_filename := media_dict.get("filename"):
         url = f"{url}/{quote(tid_filename, safe='')}"
@@ -578,14 +578,14 @@ def response_attachment_warning(messages: list[dict]) -> str | None:
     """
     if not messages:
         return None
-    cfg = get_config()
-    if cfg.transport != "http" or cfg.public_base_url_normalized:
+    config = cfg()
+    if config.transport != "http" or config.public_base_url_normalized:
         return None
     has_media = any(bool(m.get("media")) for m in messages)
     if not has_media:
         return None
     return (
-        f"⚠️ DOMAIN is '{cfg.domain}' — attachment_download_url DISABLED for media messages. "
+        f"⚠️ DOMAIN is '{config.domain}' — attachment_download_url DISABLED for media messages. "
         "Set DOMAIN=<your-public-host> in .env to enable download links."
     )
 

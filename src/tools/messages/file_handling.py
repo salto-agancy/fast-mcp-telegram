@@ -11,7 +11,7 @@ from urllib.parse import unquote
 
 import httpx
 
-from src.config.server_config import get_config
+from src.config.server_config import cfg
 from src.tools.messages.security import _validate_url_security
 
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ def _parse_data_uri(uri: str) -> tuple[str, bytes, str]:
         raise ValueError(f"Invalid base64 in data URI: {exc}") from exc
 
     # Enforce size limit
-    config = get_config()
+    config = cfg()
     max_bytes = config.max_file_size_mb * 1024 * 1024
     if len(decoded) > max_bytes:
         raise ValueError(
@@ -114,10 +114,10 @@ def _parse_data_uri(uri: str) -> tuple[str, bytes, str]:
 
 
 def is_own_attachment_url(url: str) -> bool:
-    cfg = get_config()
+    config = cfg()
     return bool(
-        cfg.public_base_url_normalized
-        and url.startswith(cfg.public_base_url_normalized)
+        config.public_base_url_normalized
+        and url.startswith(config.public_base_url_normalized)
     )
 
 
@@ -220,7 +220,7 @@ async def _download_single_file(
         try:
             response = await http_client.get(url, follow_redirects=False)
             content_length = response.headers.get("content-length")
-            config = get_config()
+            config = cfg()
             max_size_bytes = config.max_file_size_mb * 1024 * 1024
 
             if content_length and int(content_length) > max_size_bytes:

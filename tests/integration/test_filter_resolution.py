@@ -4,7 +4,7 @@
 Run with: uv run python3 tests/integration/test_filter_resolution.py
 """
 import asyncio
-import sys
+
 from src.client.connection import get_connected_client
 from src.tools.chat_discovery.dialog_filters import (
     _filter_matches_flags,
@@ -83,7 +83,7 @@ async def main():
             print(f"ERROR: {filter_info['error']}")
             continue
 
-        print(f"\nFilter definition:")
+        print("\nFilter definition:")
         print(f"  Include peers: {filter_info['include_peers_count']}")
         print(f"  Exclude peers: {filter_info['exclude_peers_count']}")
         print(f"  Flags: {filter_info['flags']}")
@@ -104,11 +104,11 @@ async def main():
                 print(f"    {i+1}. {p.get('type')}: {p.get('title') or p.get('first_name', 'N/A')} (id={p.get('id')})")
 
         # Test flag matching
-        print(f"\nFlag matching (checking first 500 dialogs)...")
+        print("\nFlag matching (checking first 500 dialogs)...")
         count, sample = await count_matching_dialogs(client, filter_dict)
         print(f"  Total matching: {count}")
         if sample:
-            print(f"  Sample (first 5):")
+            print("  Sample (first 5):")
             for i, (e, dialog) in enumerate(sample[:5]):
                 print(f"    {i+1}. {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})")
 
@@ -144,7 +144,7 @@ async def main():
                 for e in peer_failures:
                     print(f"    - {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})")
             else:
-                print(f"  Exclude peers verification passed: no sample chats are in exclude_peers.")
+                print("  Exclude peers verification passed: no sample chats are in exclude_peers.")
 
     print(f"\n{'='*60}")
     print("All filter tests completed")

@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -156,6 +157,16 @@ class ServerConfig(BaseSettings):
     # Session management
     max_active_sessions: int = Field(
         default=10, ge=1, description="Maximum number of active sessions in LRU cache"
+    )
+
+    max_idle_time_seconds: int = Field(
+        default=1800,
+        ge=0,
+        validation_alias=AliasChoices("max_idle_time_seconds", "MAX_IDLE_TIME"),
+        description=(
+            "Idle session TTL in seconds. Sessions unused for longer are "
+            "disconnected from the cache. 0 disables idle cleanup."
+        ),
     )
 
     setup_session_ttl_seconds: int = Field(
@@ -390,34 +401,38 @@ class ServerConfig(BaseSettings):
             )
 
     @classmethod
-    def from_args_and_env(cls) -> "ServerConfig":
-        """Create configuration from command line arguments and environment variables.
+    def load(cls) -> "ServerConfig":
+        """Build a config from environment / CLI / .env files.
 
-        With native CLI parsing, this simply creates the config instance.
-        pydantic-settings automatically handles CLI args, env vars, and .env files.
+        ``validate_config()`` runs once here; subsequent ``cfg()`` callers get the
+        cached instance and skip logging.
         """
-        global _config
         config = cls()
-        # Register before validate_config so ACL and other validators can call get_config()
-        # without re-entering from_args_and_env (RecursionError during startup).
-        _config = config
         config.validate_config()
         return config
 
 
-# Global configuration instance
-_config: ServerConfig | None = None
+# Module-level test override. When set, ``cfg()`` returns it directly without
+# touching the lru_cache. Tests use ``set_config(cfg)`` to inject a pre-built
+# instance and ``set_config(None)`` to clear.
+_test_config_override: ServerConfig | None = None
 
 
-def get_config() -> ServerConfig:
-    """Get the global server configuration instance."""
-    global _config
-    if _config is None:
-        _config = ServerConfig.from_args_and_env()
-    return _config
+@lru_cache(maxsize=1)
+def cfg() -> ServerConfig:
+    """Return the process-wide server config, building it on first call."""
+    if _test_config_override is not None:
+        return _test_config_override
+    return ServerConfig.load()
 
 
-def set_config(config: ServerConfig) -> None:
-    """Set the global server configuration instance (for testing)."""
-    global _config
-    _config = config
+def set_config(config: ServerConfig | None) -> None:
+    """Inject or clear the test config override.
+
+    Production code should never call this — it exists for tests that need to
+    swap the config mid-run. ``None`` clears the override; the next ``cfg()``
+    call rebuilds from the environment.
+    """
+    global _test_config_override
+    _test_config_override = config
+    cfg.cache_clear()

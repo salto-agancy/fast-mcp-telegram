@@ -1,7 +1,7 @@
 """Tests for FloodWaitError handling in contact_search module."""
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from telethon.errors import FloodWaitError

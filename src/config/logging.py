@@ -4,8 +4,9 @@ import logging.config
 import time
 from typing import Any
 
-from .server_config import get_config
-from .settings import SERVER_VERSION, SESSION_PATH
+from src._version import __version__
+
+from .server_config import cfg
 
 # Module-level configuration flag
 _configured = False
@@ -112,13 +113,13 @@ def setup_logging():
         return
 
     # Get configuration
-    cfg = get_config()
+    config = cfg()
 
     # Create logging configuration
-    config = create_logging_config(cfg.log_level.upper())
+    log_cfg = create_logging_config(config.log_level.upper())
 
     # Apply configuration - dictConfig handles everything for synchronous logging
-    logging.config.dictConfig(config)
+    logging.config.dictConfig(log_cfg)
 
     # Mark as configured
     _configured = True
@@ -126,7 +127,7 @@ def setup_logging():
     # Log server startup information
     startup_lines = [
         "=== Telegram MCP Server Starting ===",
-        f"Version: {SERVER_VERSION}",
+        f"Version: {__version__}",
         f"Mode: {cfg.server_mode.value}",
         f"Transport: {cfg.transport}",
     ]
@@ -136,7 +137,7 @@ def setup_logging():
 
     startup_lines.extend(
         [
-            f"Session file path: {SESSION_PATH.absolute()}",
+            f"Session file path: {cfg.session_path.absolute()}",
             "=====================================",
         ]
     )

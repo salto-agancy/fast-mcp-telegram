@@ -4,7 +4,7 @@ import logging
 from starlette.responses import JSONResponse
 
 from src.client.connection import set_request_token
-from src.config.server_config import get_config
+from src.config.server_config import cfg
 from src.server_components.auth import extract_bearer_token_from_request
 from src.server_components.session_acl import (
     INVALID_MTPROTO_JSON_DENY_MSG,
@@ -35,7 +35,7 @@ def register_mtproto_api_routes(mcp_app) -> None:
     @mcp_app.custom_route("/mtproto-api/{method}", methods=["POST"])
     @mcp_app.custom_route("/mtproto-api/v1/{method}", methods=["POST"])
     async def mtproto_api(request):
-        config = get_config()
+        config = cfg()
 
         # Auth handling per server mode
         if config.require_auth:

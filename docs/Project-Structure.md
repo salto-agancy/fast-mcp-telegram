@@ -13,8 +13,7 @@ fast-mcp-telegram/
 │   │   └── connection.py         # Token management, LRU cache, session isolation
 │   ├── config/                   # Configuration and logging
 │   │   ├── logging.py            # Logging configuration and diagnostic formatting
-│   │   ├── server_config.py      # Server configuration with pydantic
-│   │   └── settings.py           # Configuration management with dynamic version reading
+│   │   └── server_config.py      # Server configuration with pydantic (cfg() accessor)
 │   ├── server_components/        # Server modules (auth, health, tools, web setup)
 │   │   ├── auth.py               # Authentication middleware and Bearer token extraction
 │   │   ├── auth_middleware.py    # Authentication context decorator
@@ -105,10 +104,10 @@ fast-mcp-telegram/
   - Connection pooling and error handling
 
 ### Configuration System
-- **`src/config/settings.py`**: Centralized configuration
-  - Dynamic version reading from pyproject.toml
+- **`src/config/server_config.py`**: Centralized configuration (pydantic_settings)
   - Three server modes (stdio, http-no-auth, http-auth)
-  - Environment variable management
+  - `cfg()` accessor with `@lru_cache(maxsize=1)` — single source of truth
+  - `set_config()` for test injection / override
 - **`src/config/logging.py`**: Logging configuration
   - Loguru integration with stdlib bridge
   - Structured logging with parameter sanitization
