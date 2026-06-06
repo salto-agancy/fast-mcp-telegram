@@ -3,7 +3,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://github.com/leshchenko1979/fast-mcp-telegram)
-[![Health Status](https://gatus.l1979.ru/api/v1/endpoints/always-on_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/always-on_fast-mcp-telegram)
+[![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
 [![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
 
 **Fast MCP Telegram Server** — MCP/HTTP Gateway for Telegram — Multi-tenant, MTProto User API, 8 context-efficient tools
