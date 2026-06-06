@@ -128,16 +128,16 @@ def setup_logging():
     startup_lines = [
         "=== Telegram MCP Server Starting ===",
         f"Version: {__version__}",
-        f"Mode: {cfg.server_mode.value}",
-        f"Transport: {cfg.transport}",
+        f"Mode: {config.server_mode.value}",
+        f"Transport: {config.transport}",
     ]
 
-    if cfg.transport == "http":
-        startup_lines.append(f"Bind: {cfg.host}:{cfg.port}")
+    if config.transport == "http":
+        startup_lines.append(f"Bind: {config.host}:{config.port}")
 
     startup_lines.extend(
         [
-            f"Session file path: {cfg.session_path.absolute()}",
+            f"Session file path: {config.session_path.absolute()}",
             "=====================================",
         ]
     )

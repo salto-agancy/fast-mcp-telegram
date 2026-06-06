@@ -1,5 +1,6 @@
 """Tests for mtime-based inactivity session cleanup."""
 
+import contextlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,12 +21,14 @@ def make_session_file(session_dir: Path, token: str) -> Path:
     return path
 
 
+@contextlib.contextmanager
 def _config_mock(session_dir: Path, inactive_days: int):
-    """Build a mock config exposing session_directory and inactive_session_days."""
-    mock = patch("src.client.connection.cfg").start()
-    mock.return_value.session_directory = session_dir
-    mock.return_value.inactive_session_days = inactive_days
-    return mock
+    """Context manager that patches `cfg` to return a mock config with the
+    given session directory and inactivity cutoff."""
+    with patch("src.client.connection.cfg") as mock:
+        mock.return_value.session_directory = session_dir
+        mock.return_value.inactive_session_days = inactive_days
+        yield mock
 
 
 # ---------------------------------------------------------------------------
