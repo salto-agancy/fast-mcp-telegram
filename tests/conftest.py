@@ -427,7 +427,7 @@ def make_forum_channel(chat_id, title, forum=True):
         "id": chat_id,
         "title": title,
         "forum": forum,
-        "broadcast": False if forum else True,
+        "broadcast": not forum,
         "megagroup": forum,
         "first_name": None,
         "last_name": None,

@@ -5,7 +5,7 @@ Server configuration using pydantic_settings for clean environment and argument 
 import logging
 import os
 import sys
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
@@ -51,7 +51,7 @@ def _is_test_environment() -> bool:
     return any(module_name in sys.modules for module_name in pytest_modules)
 
 
-class ServerMode(str, Enum):
+class ServerMode(StrEnum):
     """Server operation modes with clear authentication and transport behavior."""
 
     STDIO = "stdio"  # stdio transport, no auth (default session only)
@@ -387,9 +387,14 @@ class ServerConfig(BaseSettings):
             )
 
         if self.acl_enabled and not self.disable_auth:
-            from src.server_components.session_acl import validate_acl_config
+            path = self.acl_config_file
+            if not path.is_file():
+                from src.server_components.session_acl import AclConfigError
 
-            validate_acl_config()
+                raise AclConfigError(
+                    f"ACL is enabled (ACL_ENABLED=true) but ACL config file not found: {path}. "
+                    "Create the file or set ACL_CONFIG_PATH to a valid path."
+                )
             logger.info(f"🔒 Session ACL enabled: {self.acl_config_file}")
 
         if self.transport == "http" and not self.public_base_url_normalized:
