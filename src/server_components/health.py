@@ -2,6 +2,7 @@ import time
 
 from starlette.responses import JSONResponse
 
+from src._version import __version__
 from src.client.connection import _session_cache, get_session_health_stats
 from src.config.server_config import cfg
 from src.server_components.web_setup import _setup_sessions
@@ -30,6 +31,7 @@ def register_health_routes(mcp_app):
 
         return JSONResponse(
             {
+                "version": __version__,
                 "status": "healthy",
                 "active_sessions": len(_session_cache),
                 "max_sessions": config.max_active_sessions,
