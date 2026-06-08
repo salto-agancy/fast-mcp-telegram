@@ -345,6 +345,78 @@ Script reads bearer→telegram mapping from legacy config, inserts corresponding
 -   [ ] ACL deny: OIDC user not in YAML gets rejected with clear error.
 -   [ ] Stdio mode: no OIDC env vars needed, works as before.
 
+## Phase 1 Sub-phases (Storage Layer)
+
+Phase 1 is split into four sub-phases. Each follows the coding process (TDD, no human gates until Phase 1 complete).
+
+### 1.1 DB Schema & Migrations
+
+**Goal:** Create tables and migration runner.
+
+1.  Write failing test: `test_migrations_create_tables` — verifies all 4 tables exist after `run_migrations()`.
+2.  Write failing test: `test_schema_version_tracking` — verifies `schema_version` row inserted per migration.
+3.  Implement `src/auth/migrations/001_initial_schema.sql` with CREATE TABLE statements from Storage Layer section.
+4.  Implement `src/auth/db.py`: `run_migrations()`, `get_connection()` context manager.
+5.  Pass tests.
+6.  Write failing test: `test_migration_idempotency` — running migrations twice doesn't fail or duplicate rows.
+7.  Pass tests.
+
+**Artifacts:** `src/auth/db.py`, `src/auth/migrations/001_initial_schema.sql`, `tests/test_db.py`.
+
+### 1.2 OIDC Identity CRUD
+
+**Goal:** Insert/query/update `oidc_identity` rows.
+
+1.  Write failing test: `test_insert_oidc_identity` — insert row, query back, verify fields.
+2.  Write failing test: `test_get_oidc_identity_by_key` — returns None for missing key.
+3.  Write failing test: `test_update_oidc_identity_timestamp` — updated_at changes on update.
+4.  Implement `src/auth/queries/oidc_identity.py`: `insert_identity()`, `get_identity()`, `update_identity()`.
+5.  Pass tests.
+6.  Write failing test: `test_unique_oidc_key_constraint` — duplicate insert raises IntegrityError.
+7.  Pass tests.
+
+**Artifacts:** `src/auth/queries/oidc_identity.py`, `tests/test_oidc_identity_queries.py`.
+
+### 1.3 Setup State Machine Persistence
+
+**Goal:** Persist elicitation state with TTL support.
+
+1.  Write failing test: `test_create_setup_state` — initial state WAITING_PHONE.
+2.  Write failing test: `test_transition_state` — WAITING_PHONE → WAITING_CODE updates row.
+3.  Write failing test: `test_ttl_expiry_query` — `get_active_states(older_than=5min)` returns expired rows.
+4.  Write failing test: `test_delete_expired_states` — removes rows + returns count.
+5.  Implement `src/auth/queries/setup_state.py`: `create_state()`, `transition_state()`, `get_active_states()`, `delete_expired()`.
+6.  Pass tests.
+7.  Write failing test: `test_retry_count_increment` — increments on failed code/password attempt.
+8.  Pass tests.
+
+**Artifacts:** `src/auth/queries/setup_state.py`, `tests/test_setup_state_queries.py`.
+
+### 1.4 Telegram Session Metadata & Legacy Migration Script
+
+**Goal:** Store session file metadata; provide bearer→OIDC linking script.
+
+1.  Write failing test: `test_insert_telegram_session` — links to oidc_identity via FK.
+2.  Write failing test: `test_get_session_by_oidc_key` — returns filename, dc_id, auth_key.
+3.  Write failing test: `test_update_last_used` — timestamp updates on access.
+4.  Implement `src/auth/queries/telegram_session.py`: `insert_session()`, `get_session()`, `touch_session()`.
+5.  Pass tests.
+6.  Write failing test: `test_migrate_legacy_script` — reads YAML, inserts placeholder rows.
+7.  Implement `scripts/migrate_legacy.py`.
+8.  Pass tests.
+9.  Manual QA: run script against sample legacy_tokens.yaml, verify DB contents.
+
+**Artifacts:** `src/auth/queries/telegram_session.py`, `scripts/migrate_legacy.py`, `tests/test_telegram_session_queries.py`, `tests/test_migrate_legacy.py`.
+
+### Phase 1 Completion Gate
+
+After all 4 sub-phases pass:
+-   Run full test suite (`pytest`).
+-   Run linter (`ruff check src/ tests/`).
+-   Human review PR.
+-   Merge to main.
+-   Proceed to Phase 2 (OAuthProvider integration).
+
 ## Open Questions (Deferred)
 
 1.  **Orphan cleanup policy:** When OIDC sub changes, should we auto-delete old session file or archive it?
