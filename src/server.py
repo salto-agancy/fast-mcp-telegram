@@ -27,14 +27,21 @@ from src.server_components.mtproto_api import register_mtproto_api_routes
 from src.server_components.server_card import register_server_card_route
 from src.server_components.tools_register import register_tools
 from src.server_components.web_setup import register_web_setup_routes
+from src.server_components.oidc_integration import (
+    create_oidc_verifier,
+    oidc_enabled,
+    register_elicitation_tools,
+    ttl_sweep_task,
+)
 
 logger = logging.getLogger(__name__)
 
 # Get configuration
 config = cfg()
 
-# Background cleanup task
+# Background cleanup tasks
 _cleanup_task = None
+_ttl_sweep_task = None
 
 
 async def cleanup_loop():
@@ -91,8 +98,12 @@ async def lifespan(app: FastMCP):
         raise
 
     # Startup: background cleanup
-    global _cleanup_task
+    global _cleanup_task, _ttl_sweep_task
     _cleanup_task = asyncio.create_task(cleanup_loop())
+
+    # Start TTL sweep for OIDC elicitation states
+    if oidc_enabled():
+        _ttl_sweep_task = asyncio.create_task(ttl_sweep_task())
 
     yield
 
@@ -101,18 +112,28 @@ async def lifespan(app: FastMCP):
         _cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await _cleanup_task
+    if _ttl_sweep_task:
+        _ttl_sweep_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await _ttl_sweep_task
 
     await cleanup_session_cache()
 
 
 setup_logging()
 
-# Auth provider only for http-auth mode; stdio and http-no-auth have no auth
+# Auth provider: OIDC when configured, otherwise legacy bearer tokens.
+# Stdio and http-no-auth modes have no auth.
 _auth_provider = None
 if config.require_auth:
-    from src.server_components.session_token_verifier import SessionFileTokenVerifier
-
-    _auth_provider = SessionFileTokenVerifier(config)
+    if oidc_enabled():
+        # Run DB migrations before creating verifier
+        from src.auth.db import run_migrations
+        run_migrations()
+        _auth_provider = create_oidc_verifier()
+    else:
+        from src.server_components.session_token_verifier import SessionFileTokenVerifier
+        _auth_provider = SessionFileTokenVerifier(config)
 
 # Initialize MCP server
 mcp = FastMCP("Telegram MCP Server", auth=_auth_provider, lifespan=lifespan)
@@ -125,6 +146,10 @@ register_attachment_routes(mcp)
 register_tools(mcp)
 register_server_card_route(mcp)
 register_mcp_middleware(mcp, config)
+
+# Register OIDC elicitation tools when OIDC is enabled
+if oidc_enabled():
+    register_elicitation_tools(mcp)
 
 
 def main():
