@@ -237,7 +237,7 @@ async def oidc_setup_code(
         try:
             meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
         except (json.JSONDecodeError, TypeError):
-            pass
+            logger.warning("Failed to decode metadata for oidc_key=%s, treating as empty", oidc_key[:8])
 
     phone_number = meta.get("phone_number")
     phone_code_hash = meta.get("phone_code_hash")
