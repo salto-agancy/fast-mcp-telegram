@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+**SUPERSEDED** — This ADR's approach (OIDC + Elicitation via FastMCP JWTVerifier) has been replaced by a simpler QR-login-based auth design. See [ADR 0004](0004-qr-login-auth.md). The `feature/oidc-phase1-storage` branch is archived as a reference.
 
 ## Date
 
@@ -133,12 +133,10 @@ Rejected: Originally planned as a DB mirror of Telethon session metadata (`dc_id
 -   No explicit concurrency control — relies on Telethon MTProto serialization + DB atomic writes.
 -   Error handling and re-elicit logic.
 
-### Phase 4: Major Version Cutover (`feature/oidc-major-cutover`)
+### Phase 4: Major Version Cutover — **Superseded**
 
--   Drop bearer token support.
--   Retire `web_setup.py`.
--   Update documentation and examples.
--   Bump major version.
+**This entire ADR is superseded by [ADR 0004](0004-qr-login-auth.md).**
+The OIDC + elicitation approach has been replaced with Telethon QR login as the primary auth path. See [ADR 0004](0004-qr-login-auth.md) for the new architecture.
 
 ## References
 

@@ -184,11 +184,11 @@ PREFIX_MCP_TOOLS_WITH_ACCOUNT=true
 
 ## Web Setup Interface
 
-The web setup interface manages Telegram sessions directly from your browser. Access it at `https://your-domain.com/setup` when running in `http-auth` mode. All operations are bound to your OIDC identity — the server validates your access token (JWT) via the configured OIDC provider before allowing any Telegram session management.
+The web setup interface manages Telegram sessions directly from your browser. Access it at `https://your-domain.com/setup` when running in `http-auth` mode.
 
 ### Create or Manage Sessions
 
-**Create New Session:** Click **"Create New Session"**, authenticate with your OIDC provider if not already signed in, then enter your phone number (with country code, e.g., `+1234567890`). Enter the verification code Telegram sends — if 2FA is enabled, enter your password as well. Download the generated `mcp.json` with your Bearer token and use it in your MCP client.
+**Create New Session:** Click **"Create New Session"**, enter your phone number (with country code, e.g., `+1234567890`), then enter the verification code Telegram sends. If 2FA is enabled, enter your password. Download the generated `mcp.json` and use it in your MCP client.
 
 **Reauthorize Existing Session:** Click **"Reauthorize Existing Session"**, enter your bearer token, confirm your phone number, then enter the verification code. If 2FA is enabled, enter your password. Your session refreshes with the same token.
 

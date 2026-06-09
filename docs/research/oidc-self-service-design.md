@@ -1,5 +1,7 @@
 # OIDC Self-Service Auth: Implementation Plan
 
+> ⚠️ **POSTPONED** — This approach (OIDC + Elicitation) has been superseded by a simpler QR-login-based auth design. See [ADR 0004](../adr/0004-qr-login-auth.md). The `feature/oidc-phase1-storage` branch is archived.
+
 > Companion document to [ADR 0002](../adr/0002-oidc-self-service-auth.md). Mirrors structure of [ACL Design Brief](./acl-design-brief.md).
 
 ## Goals
