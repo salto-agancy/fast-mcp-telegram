@@ -55,7 +55,9 @@ def transition_state(
     set_clauses.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')")
     values = list(updates.values()) + [oidc_key]
 
-    sql = f"UPDATE setup_state SET {', '.join(set_clauses)} WHERE oidc_key = ?"
+    # SAFETY: Column names come from _UPDATABLE_FIELDS (hardcoded set), never user input.
+    # Values are bound parameters. Sourcery false positive — whitelist prevents injection.
+    sql = f"UPDATE setup_state SET {', '.join(set_clauses)} WHERE oidc_key = ?"  # noqa: S608
     with get_connection(db_path) as conn:
         conn.execute(sql, values)
 

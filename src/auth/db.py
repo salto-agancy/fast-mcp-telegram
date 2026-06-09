@@ -141,7 +141,9 @@ def update_setup_state(
         params.append(retry_count)
     params.append(oidc_key)
     with get_connection(db_path) as conn:
-        conn.execute(
+        # SAFETY: Column names come from _UPDATABLE_FIELDS (hardcoded set), never user input.
+        # Values are bound parameters. Sourcery false positive — whitelist prevents injection.
+        conn.execute(  # noqa: S608
             f"UPDATE setup_state SET {', '.join(sets)} WHERE oidc_key = ?",
             params,
         )
