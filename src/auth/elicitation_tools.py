@@ -178,16 +178,6 @@ async def oidc_setup_start(
         }
 
     result = start_elicitation(oidc_key, db_path=db_path)
-    # Store sub/issuer in metadata for later retrieval
-    if result.success and result.new_state == ElicitState.WAITING_PHONE:
-        meta = {"oidc_sub": oidc_sub, "oidc_issuer": oidc_issuer}
-        with db.get_connection(db_path) as conn:
-            conn.execute(
-                "UPDATE setup_state SET metadata = ?, "
-                "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
-                "WHERE oidc_key = ?",
-                (json.dumps(meta), oidc_key),
-            )
     return _result_to_dict(result)
 
 

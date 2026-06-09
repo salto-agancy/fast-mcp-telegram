@@ -40,14 +40,12 @@ class TestSetupStatePersistence:
         transition_state(
             oidc_key="k2",
             new_state="WAITING_CODE",
-            tg_code_hash="abc123",
             db_path=db,
         )
 
         states = get_all_active_states(db_path=db)
         row = next(s for s in states if s["oidc_key"] == "k2")
         assert row["state"] == "WAITING_CODE"
-        assert row["tg_code_hash"] == "abc123"
 
     def test_transition_state_preserves_existing_fields(self, db: str) -> None:
         """Transition does not overwrite unrelated columns when not provided."""
@@ -67,14 +65,12 @@ class TestSetupStatePersistence:
         transition_state(
             oidc_key="k3",
             new_state="WAITING_CODE",
-            tg_code_hash="preserve123",
             db_path=db,
         )
 
         states = get_all_active_states(db_path=db)
         row = next(s for s in states if s["oidc_key"] == "k3")
         assert row["state"] == "WAITING_CODE"
-        assert row["tg_code_hash"] == "preserve123"
         assert row["phone_number"] == "+19998887777"
         assert row["metadata"] == '{"initial": true}'
 
@@ -95,7 +91,6 @@ class TestSetupStatePersistence:
         transition_state(
             oidc_key="k4",
             new_state="WAITING_CODE",
-            tg_code_hash="meta123",
             metadata='{"new": "value", "flag": true}',
             db_path=db,
         )
@@ -103,7 +98,6 @@ class TestSetupStatePersistence:
         states = get_all_active_states(db_path=db)
         row = next(s for s in states if s["oidc_key"] == "k4")
         assert row["state"] == "WAITING_CODE"
-        assert row["tg_code_hash"] == "meta123"
         assert row["phone_number"] == "+12223334444"
         assert row["metadata"] == '{"new": "value", "flag": true}'
 

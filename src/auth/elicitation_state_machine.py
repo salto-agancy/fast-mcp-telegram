@@ -125,17 +125,34 @@ def _handle_failed_update(
 
 def start_elicitation(oidc_key: str, db_path: str | None = None) -> ElicitResult:
     """Initialize or resume an elicitation session."""
-    existing = ss_queries.get_state_row(oidc_key, db_path=db_path)
+    with db.get_connection(db_path) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO setup_state (oidc_key, state, phone_number, retry_count) "
+            "VALUES (?, 'WAITING_PHONE', NULL, 0)",
+            (oidc_key,),
+        )
+        row = conn.execute(
+            "SELECT state, updated_at FROM setup_state WHERE oidc_key = ?",
+            (oidc_key,),
+        ).fetchone()
 
-    if existing is None:
-        ss_queries.create_state(oidc_key, db_path=db_path)
+    if row is None:
+        return ElicitResult(False, ElicitState.FAILED, "Session not available.")
+
+    state_str = row["state"]
+
+    if state_str == ElicitState.WAITING_PHONE.value:
+        if _is_expired(row["updated_at"]):
+            ss_queries.transition_state(oidc_key, "EXPIRED", db_path=db_path)
+            return ElicitResult(
+                False, ElicitState.EXPIRED, "Session expired. Please start over."
+            )
         return ElicitResult(
             success=True,
             new_state=ElicitState.WAITING_PHONE,
             message="Please provide your Telegram phone number (e.g. +1234567890).",
         )
 
-    state_str = existing["state"]
     if state_str == "EXPIRED":
         return ElicitResult(
             False, ElicitState.EXPIRED, "Session expired. Please start over."
@@ -155,7 +172,7 @@ def start_elicitation(oidc_key: str, db_path: str | None = None) -> ElicitResult
             else "Setup failed. Start a new session.",
         )
 
-    if _is_expired(existing["updated_at"]):
+    if _is_expired(row["updated_at"]):
         ss_queries.transition_state(oidc_key, "EXPIRED", db_path=db_path)
         return ElicitResult(
             False, ElicitState.EXPIRED, "Session expired. Please start over."
@@ -229,30 +246,48 @@ def submit_password(oidc_key: str, db_path: str | None = None) -> ElicitResult:
 
 def record_retry(oidc_key: str, db_path: str | None = None) -> ElicitResult:
     """Record a failed attempt. After MAX_RETRIES, transitions to FAILED."""
-    existing = ss_queries.get_state_row(oidc_key, db_path=db_path)
-    if existing is None:
-        return ElicitResult(False, ElicitState.FAILED, "No active session.")
+    with db.get_connection(db_path) as conn:
+        # Atomic: increment retry_count only if below max
+        cur = conn.execute(
+            "UPDATE setup_state SET retry_count = retry_count + 1, "
+            "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
+            "WHERE oidc_key = ? AND retry_count < ?",
+            (oidc_key, MAX_RETRIES),
+        )
+        if cur.rowcount > 0:
+            # Successfully incremented — get current state for response
+            row = conn.execute(
+                "SELECT retry_count, state FROM setup_state WHERE oidc_key = ?",
+                (oidc_key,),
+            ).fetchone()
+            if row is None:
+                return ElicitResult(False, ElicitState.FAILED, "No active session.")
+            remaining = MAX_RETRIES - row["retry_count"]
+            try:
+                state_enum = ElicitState(row["state"])
+            except ValueError:
+                state_enum = ElicitState.FAILED
+            return ElicitResult(
+                success=False,
+                new_state=state_enum,
+                message=f"Incorrect. {remaining} attempt(s) remaining.",
+            )
 
-    current_retries = existing.get("retry_count", 0)
-    retries = current_retries + 1
-    current_state = existing["state"]
+        # No row updated — either no session or already at max
+        row = conn.execute(
+            "SELECT retry_count, state FROM setup_state WHERE oidc_key = ?",
+            (oidc_key,),
+        ).fetchone()
+        if row is None:
+            return ElicitResult(False, ElicitState.FAILED, "No active session.")
 
-    if retries > MAX_RETRIES:
-        ss_queries.transition_state(oidc_key, ElicitState.FAILED.value, db_path=db_path)
+        # Already at max — transition to FAILED
+        conn.execute(
+            "UPDATE setup_state SET state = ? WHERE oidc_key = ? AND state != ?",
+            (ElicitState.FAILED.value, oidc_key, ElicitState.FAILED.value),
+        )
         return ElicitResult(
             success=False,
             new_state=ElicitState.FAILED,
             message="Too many failed attempts. Start a new session.",
         )
-
-    ss_queries.increment_retry_count(oidc_key, db_path=db_path)
-    remaining = MAX_RETRIES - retries
-    try:
-        state_enum = ElicitState(current_state)
-    except ValueError:
-        state_enum = ElicitState.FAILED
-    return ElicitResult(
-        success=False,
-        new_state=state_enum,
-        message=f"Incorrect. {remaining} attempt(s) remaining.",
-    )

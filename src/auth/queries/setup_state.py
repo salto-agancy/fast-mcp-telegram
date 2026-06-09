@@ -24,11 +24,10 @@ def create_state(
 def transition_state(
     oidc_key: str,
     new_state: str,
-    tg_code_hash: str | None = None,
     metadata: str | None = None,
     db_path: str | None = None,
 ) -> bool:
-    """Transition to a new state, optionally updating code hash or metadata.
+    """Transition to a new state, optionally updating metadata.
 
     All values are passed as bound parameters.
 
@@ -36,10 +35,6 @@ def transition_state(
     """
     set_clauses: list[str] = ["state = ?"]
     values: list[object] = [new_state]
-
-    if tg_code_hash is not None:
-        set_clauses.append("tg_code_hash = ?")
-        values.append(tg_code_hash)
 
     if metadata is not None:
         set_clauses.append("metadata = ?")

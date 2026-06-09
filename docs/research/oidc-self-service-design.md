@@ -26,7 +26,7 @@ Three orthogonal layers:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    FastMCP OAuthProvider                     │
+│                    FastMCP JWTVerifier                      │
 │         (Token verification, JWKS, issuer validation)        │
 └──────────────────────────┬──────────────────────────────────┘
                            │ oidc_sub + claims
@@ -50,7 +50,7 @@ Storage is separate from all three layers — shared SQLite DB for OIDC/state, p
 ### First-Time Sign-In
 
 1.  User connects via MCP client with OIDC bearer token.
-2.  FastMCP `OAuthProvider` validates token signature, issuer, audience, expiry.
+2.  FastMCP `JWTVerifier` validates token signature, issuer, audience, expiry.
 3.  Extract `sub` claim → hash to produce `oidc_key`.
 4.  Query `oidc_identity` table by `oidc_key`.
 5.  **Not found** → enter elicitation flow:
@@ -66,7 +66,7 @@ Storage is separate from all three layers — shared SQLite DB for OIDC/state, p
 
 ### Re-Authentication
 
-1.  Token validated by `OAuthProvider`.
+1.  Token validated by `JWTVerifier`.
 2.  `oidc_key` lookup succeeds → retrieve linked Telegram identity.
 3.  Skip elicitation entirely.
 4.  ACL check proceeds as normal.
@@ -98,7 +98,7 @@ WAITING_CODE ──valid code──▶ WAITING_PASS (if 2FA) or COMPLETED
 WAITING_CODE ──invalid code──▶ WAITING_CODE (re-elicit once) or FAILED
 WAITING_PASS ──valid pass──▶ COMPLETED
 WAITING_PASS ──invalid pass──▶ WAITING_PASS (re-elicit once) or FAILED
-Any state ──5min TTL expired──▶ FAILED (sweep task cleans up)
+Any state ──5min TTL expired──▶ EXPIRED (inline TTL check on transition)
 ```
 
 ### Concurrency Control
@@ -326,8 +326,8 @@ Script reads bearer→telegram mapping from legacy config, inserts corresponding
 -   Spin up test OIDC provider (Keycloak in Docker).
 -   Full sign-in flow: token → elicitation → session creation → ACL check.
 -   Re-auth flow: token → DB lookup → skip elicitation.
--   Concurrent sign-in: verify lockfile + single-flight prevent races.
--   TTL sweep: confirm expired states cleaned after 5 min.
+-   Concurrent sign-in: verify atomic UPDATE prevents races.
+-   TTL expiry: confirm expired states rejected on state transition.
 
 ### Manual QA Checklist
 
@@ -403,7 +403,7 @@ After all 4 sub-phases pass:
 -   Run linter (`ruff check src/ tests/`).
 -   Human review PR.
 -   Merge to main.
--   Proceed to Phase 2 (OAuthProvider integration).
+-   Proceed to Phase 2 (JWKS caching).
 
 ## Open Questions (Deferred)
 
@@ -418,5 +418,5 @@ After all 4 sub-phases pass:
 -   [ADR 0002: OIDC Self-Service Auth](../adr/0002-oidc-self-service-auth.md)
 -   [ADR 0001: Agent-Scoped Session ACL](../adr/0001-agent-scoped-session-acl.md)
 -   [ACL Design Brief](./acl-design-brief.md)
--   [FastMCP OAuthProvider Docs](https://gofastmcp.com/servers/auth)
+-   [FastMCP JWTVerifier Docs](https://gofastmcp.com/servers/auth)
 -   [Telethon Session Internals](https://docs.telethon.dev/en/stable/concepts/sessions.html)
