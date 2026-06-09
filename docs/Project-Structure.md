@@ -9,6 +9,21 @@ The fast-mcp-telegram project follows a modular architecture with clear separati
 ```
 fast-mcp-telegram/
 ├── src/                          # Source code
+│   ├── auth/                     # OIDC self-service authentication
+│   │   ├── __init__.py           # Auth package
+│   │   ├── db.py                 # SQLite connection management
+│   │   ├── elicitation_state_machine.py  # OIDC state machine (phone→code→2fa→done)
+│   │   ├── elicitation_tools.py  # OIDC tool implementations (web & MCP)
+│   │   ├── oauth_provider_adapter.py    # JWTVerifier-based OIDC token validation
+│   │   ├── principal_resolver.py # Bearer token → principal resolution
+│   │   ├── telegram_auth_service.py     # Telegram client auth service
+│   │   ├── migrations/           # Database schema
+│   │   │   ├── __init__.py
+│   │   │   └── 001_initial_schema.sql
+│   │   └── queries/              # Database query layer
+│   │       ├── __init__.py
+│   │       ├── oidc_identity.py  # OIDC identity CRUD
+│   │       └── setup_state.py    # Elicitation state machine queries
 │   ├── client/                   # Telegram client management
 │   │   └── connection.py         # Token management, LRU cache, session isolation
 │   ├── config/                   # Configuration and logging
@@ -102,6 +117,42 @@ fast-mcp-telegram/
   - LRU cache management
   - Automatic session cleanup
   - Connection pooling and error handling
+
+### Authentication (OIDC)
+- **`src/auth/__init__.py`**: Auth package initialization
+- **`src/auth/db.py`**: SQLite connection management
+  - WAL mode connection pooling
+  - Context manager for automatic commit/rollback
+  - Database path resolution with `SESSION_DIR` override
+- **`src/auth/elicitation_state_machine.py`**: OIDC elicitation state machine
+  - State machine: phone → code → 2FA (optional) → completed
+  - Atomic state transitions with TTL enforcement (5 min expiry)
+  - TOCTOU-safe operations (INSERT OR IGNORE, atomic UPDATE with WHERE)
+- **`src/auth/elicitation_tools.py`**: OIDC tool implementations
+  - `oidc_setup_start` / `oidc_setup_phone` / `oidc_setup_code` / `oidc_setup_password`
+  - FloodWait protection with retry tracking
+  - Identity persistence after successful state transition
+- **`src/auth/oauth_provider_adapter.py`**: JWTVerifier-based token validation
+  - RS256 JWT signature verification via FastMCP's built-in JWTVerifier
+  - Expiry, issuer, audience validation
+  - JWKS key caching
+- **`src/auth/principal_resolver.py`**: Bearer token ↔ principal resolution
+  - Token-derived oidc_key lookup
+  - Session directory per principal isolation
+- **`src/auth/telegram_auth_service.py`**: Telegram client authentication
+  - Phone code request, verification, 2FA submission
+  - Session file management (`oidc_` prefix naming)
+  - Sign-in flow with Telethon
+- **`src/auth/migrations/001_initial_schema.sql`**: Database schema
+  - `setup_state`: elicitation state tracking
+  - `oidc_identity`: linked OIDC sub/issuer → Telegram identity
+- **`src/auth/queries/oidc_identity.py`**: OIDC identity CRUD
+  - Lookup by oidc_key (derived from sub/issuer)
+  - Upsert on successful sign-in
+- **`src/auth/queries/setup_state.py`**: Elicitation state queries
+  - State creation, transition, expiry checks
+  - Retry count management
+  - `get_state_row` for current state inspection
 
 ### Configuration System
 - **`src/config/server_config.py`**: Centralized configuration (pydantic_settings)
