@@ -59,9 +59,8 @@ class OidcTokenVerifier(TokenVerifier):
         )
 
         if principal is None:
-            # No mapping yet — elicitation required.
-            # Return a sentinel so middleware can distinguish
-            # "invalid token" from "valid token, needs elicitation".
+            # No mapping yet — returns None (indistinguishable from invalid token).
+            # Elicitation tools handle first-time setup separately.
             logger.info("OIDC sub=%s has no Telegram mapping; elicitation needed", oidc_sub)
             return None
 

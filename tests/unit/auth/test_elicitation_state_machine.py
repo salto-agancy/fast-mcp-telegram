@@ -101,21 +101,14 @@ class TestSubmitCode:
     def test_completes_without_2fa(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
         submit_phone(oidc_key, "+1234567890", db_path=clean_db)
-        result = submit_code(oidc_key, "12345", db_path=clean_db)
+        result = submit_code(oidc_key, needs_2fa=False, db_path=clean_db)
         assert result.success is True
         assert result.new_state == ElicitState.COMPLETED
 
     def test_transitions_to_pass_with_2fa(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
         submit_phone(oidc_key, "+1234567890", db_path=clean_db)
-        # Simulate endpoint layer setting needs_2fa flag in metadata
-        db.update_setup_state(
-            oidc_key, ElicitState.WAITING_CODE.value,
-            phone_number="+1234567890",
-            metadata={"needs_2fa": True},
-            db_path=clean_db,
-        )
-        result = submit_code(oidc_key, "12345", db_path=clean_db)
+        result = submit_code(oidc_key, needs_2fa=True, db_path=clean_db)
         assert result.success is True
         assert result.new_state == ElicitState.WAITING_PASS
         assert result.needs_2fa is True

@@ -94,7 +94,6 @@ def verifier(db):
 class TestOidcTokenVerifier:
 
     @pytest.mark.asyncio
-    @pytest.mark.asyncio
     async def test_valid_token_resolves_principal(
         self, sign_token, valid_payload, mock_jwks, db, verifier
     ):

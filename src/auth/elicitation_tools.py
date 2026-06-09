@@ -13,9 +13,11 @@ Tools:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Optional
 
 from .queries import oidc_identity as id_queries
@@ -30,7 +32,6 @@ from .elicitation_state_machine import (
     submit_password,
     submit_phone,
 )
-from .principal_resolver import resolve_principal
 from .telegram_auth_service import TelegramAuthService
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,58 @@ def _result_to_dict(result: ElicitResult) -> dict:
     }
 
 
+def _save_session_file(oidc_key: str, session_string: str) -> str:
+    """Write Telethon session string to disk and return the file path."""
+    safe_name = hashlib.sha256(oidc_key.encode()).hexdigest()[:16]
+    session_dir = os.environ.get("TG_SESSION_DIR", ".sessions")
+    Path(session_dir).mkdir(parents=True, exist_ok=True)
+    session_file = Path(session_dir) / f"oidc_{safe_name}.session"
+    session_file.write_text(session_string)
+    return str(session_file)
+
+
+def _record_session_metadata(
+    oidc_key: str, session_filename: str, db_path: Optional[str] = None
+) -> None:
+    """Insert telegram_session metadata row. Non-critical — logs on failure."""
+    try:
+        from .queries.telegram_session import insert_session
+        insert_session(
+            oidc_key=oidc_key,
+            session_filename=session_filename,
+            dc_id=0,
+            server_address="",
+            port=0,
+            auth_key=b"",
+            db_path=db_path,
+        )
+    except Exception:
+        logger.debug("Session metadata insert failed for %s (non-critical)", oidc_key[:8])
+
+
+def _save_identity_and_session(
+    oidc_key: str,
+    sign_in_result,
+    phone_number: str,
+    db_path: Optional[str] = None,
+) -> None:
+    """Persist OIDC identity mapping and Telethon session after successful sign-in."""
+    oidc_sub = oidc_key.split(":")[0] if ":" in oidc_key else oidc_key
+    oidc_issuer = oidc_key.split(":")[1] if ":" in oidc_key else "unknown"
+    id_queries.insert_identity(
+        oidc_key=oidc_key,
+        oidc_sub=oidc_sub,
+        oidc_issuer=oidc_issuer,
+        telegram_user_id=sign_in_result.user_id or 0,
+        telegram_username=sign_in_result.username,
+        telegram_phone=phone_number,
+        db_path=db_path,
+    )
+    if sign_in_result.session_string:
+        session_file = _save_session_file(oidc_key, sign_in_result.session_string)
+        _record_session_metadata(oidc_key, session_file, db_path=db_path)
+
+
 async def oidc_setup_start(oidc_key: str, db_path: Optional[str] = None) -> dict:
     """Initialize or resume an OIDC Telegram elicitation session.
 
@@ -66,10 +119,8 @@ async def oidc_setup_start(oidc_key: str, db_path: Optional[str] = None) -> dict
     Returns:
         Dict with success, state, message, needs_2fa fields.
     """
-    # Check if already mapped — query DB directly since we have oidc_key
     existing_identity = id_queries.get_identity(oidc_key, db_path=db_path)
     if existing_identity is not None:
-        # Build principal string from identity row
         if existing_identity["telegram_username"]:
             principal = f"@{existing_identity['telegram_username']}"
         elif existing_identity["telegram_phone"]:
@@ -104,32 +155,12 @@ async def oidc_setup_phone(
     if not result.success:
         return _result_to_dict(result)
 
-    # Send verification code via Telethon
     try:
         service = _get_auth_service()
         code_result = await service.send_code(oidc_key, phone)
 
         # Store phone_code_hash in metadata for later verification
-        existing_row = None
-        with db.get_connection(db_path) as conn:
-            row = conn.execute(
-                "SELECT metadata FROM setup_state WHERE oidc_key = ?",
-                (oidc_key,),
-            ).fetchone()
-            if row:
-                existing_row = dict(row)
-
-        meta = {}
-        if existing_row and existing_row.get("metadata"):
-            try:
-                meta = json.loads(existing_row["metadata"]) if isinstance(
-                    existing_row["metadata"], str
-                ) else existing_row["metadata"]
-            except (json.JSONDecodeError, TypeError):
-                pass
-        meta["phone_code_hash"] = code_result.phone_code_hash
-        meta["phone_number"] = phone
-
+        meta = {"phone_code_hash": code_result.phone_code_hash, "phone_number": phone}
         ss_queries.transition_state(
             oidc_key,
             ElicitState.WAITING_CODE.value,
@@ -139,7 +170,13 @@ async def oidc_setup_phone(
         return _result_to_dict(result)
 
     except RuntimeError as e:
-        logger.error("Failed to send code for %s: %s", oidc_key[:8], e)
+        error_msg = str(e)
+        logger.error("Failed to send code for %s: %s", oidc_key[:8], error_msg)
+        # Don't record retry for concurrency conflicts — not a user error
+        if "Concurrent sign-in" in error_msg:
+            return _result_to_dict(
+                ElicitResult(False, ElicitState.WAITING_PHONE, error_msg)
+            )
         retry_result = record_retry(oidc_key, db_path=db_path)
         return _result_to_dict(retry_result)
 
@@ -157,44 +194,33 @@ async def oidc_setup_code(
     Returns:
         Dict with success, state, message, needs_2fa fields.
     """
-    # Fetch current state
-    existing = None
+    # Fetch metadata for phone_number and phone_code_hash
     with db.get_connection(db_path) as conn:
         row = conn.execute(
-            "SELECT oidc_key, state, phone_number, tg_code_hash, retry_count, metadata, created_at, updated_at "
-            "FROM setup_state WHERE oidc_key = ?",
+            "SELECT metadata FROM setup_state WHERE oidc_key = ?",
             (oidc_key,),
         ).fetchone()
-        if row:
-            existing = dict(row)
 
-    if existing is None:
+    if row is None:
         return _result_to_dict(
             ElicitResult(False, ElicitState.FAILED, "No active session.")
         )
 
-    # Extract phone_number and phone_code_hash from metadata
     meta = {}
-    if existing.get("metadata"):
+    if row["metadata"]:
         try:
-            meta = json.loads(existing["metadata"]) if isinstance(
-                existing["metadata"], str
-            ) else existing["metadata"]
+            meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
         except (json.JSONDecodeError, TypeError):
             pass
 
-    phone_number = meta.get("phone_number") or existing.get("phone_number")
+    phone_number = meta.get("phone_number")
     phone_code_hash = meta.get("phone_code_hash")
 
     if not phone_number or not phone_code_hash:
         return _result_to_dict(
-            ElicitResult(
-                False, ElicitState.FAILED,
-                "Missing phone or code hash. Restart setup.",
-            )
+            ElicitResult(False, ElicitState.FAILED, "Missing phone or code hash. Restart setup.")
         )
 
-    # Verify code via Telethon
     try:
         service = _get_auth_service()
         sign_in_result = await service.verify_code(
@@ -203,74 +229,24 @@ async def oidc_setup_code(
 
         if sign_in_result.success:
             if sign_in_result.next_state == "COMPLETED":
-                # Save identity mapping
-                oidc_sub = oidc_key.split(":")[0] if ":" in oidc_key else oidc_key
-                oidc_issuer = oidc_key.split(":")[1] if ":" in oidc_key else "unknown"
-                id_queries.insert_identity(
-                    oidc_key=oidc_key,
-                    oidc_sub=oidc_sub,
-                    oidc_issuer=oidc_issuer,
-                    telegram_user_id=sign_in_result.user_id or 0,
-                    telegram_username=sign_in_result.username,
-                    telegram_phone=phone_number,
-                    db_path=db_path,
-                )
-                # Save session file to disk and record metadata in DB
-                if sign_in_result.session_string:
-                    import hashlib
-                    safe_name = hashlib.sha256(oidc_key.encode()).hexdigest()[:16]
-                    session_dir = os.environ.get("TG_SESSION_DIR", ".sessions")
-                    from pathlib import Path
-                    Path(session_dir).mkdir(parents=True, exist_ok=True)
-                    session_file = Path(session_dir) / f"oidc_{safe_name}.session"
-                    session_file.write_text(sign_in_result.session_string)
-                    # Insert session metadata (auth_key placeholder for now;
-                    # real auth_key extracted on next Telethon connect)
-                    from src.auth.queries.telegram_session import insert_session
-                    try:
-                        insert_session(
-                            oidc_key=oidc_key,
-                            session_filename=str(session_file),
-                            dc_id=0,
-                            server_address="",
-                            port=0,
-                            auth_key=b"",
-                            db_path=db_path,
-                        )
-                    except Exception:
-                        pass  # FK may fail if identity insert failed; non-critical
-                ss_queries.transition_state(
-                    oidc_key, ElicitState.COMPLETED.value, db_path=db_path
-                )
-                return _result_to_dict(
-                    ElicitResult(
-                        True, ElicitState.COMPLETED,
-                        "Telegram account linked successfully.",
-                    )
-                )
+                _save_identity_and_session(oidc_key, sign_in_result, phone_number, db_path)
+                transition = submit_code(oidc_key, needs_2fa=False, db_path=db_path)
+                return _result_to_dict(transition)
             elif sign_in_result.next_state == "WAITING_PASS":
-                # Mark that 2FA is needed
-                meta["needs_2fa"] = True
-                ss_queries.transition_state(
-                    oidc_key,
-                    ElicitState.WAITING_PASS.value,
-                    metadata=json.dumps(meta),
-                    db_path=db_path,
-                )
-                return _result_to_dict(
-                    ElicitResult(
-                        True, ElicitState.WAITING_PASS,
-                        "2FA enabled. Enter your Telegram password.",
-                        needs_2fa=True,
-                    )
-                )
+                transition = submit_code(oidc_key, needs_2fa=True, db_path=db_path)
+                return _result_to_dict(transition)
 
-        # Code was invalid or expired
+        # Code was invalid or expired — record retry
         retry_result = record_retry(oidc_key, db_path=db_path)
         return _result_to_dict(retry_result)
 
     except RuntimeError as e:
-        logger.error("Code verification failed for %s: %s", oidc_key[:8], e)
+        error_msg = str(e)
+        logger.error("Code verification failed for %s: %s", oidc_key[:8], error_msg)
+        if "Concurrent sign-in" in error_msg:
+            return _result_to_dict(
+                ElicitResult(False, ElicitState.WAITING_CODE, error_msg)
+            )
         retry_result = record_retry(oidc_key, db_path=db_path)
         return _result_to_dict(retry_result)
 
@@ -303,54 +279,20 @@ async def oidc_setup_password(
                 if row:
                     phone_number = row["phone_number"]
 
-            oidc_sub = oidc_key.split(":")[0] if ":" in oidc_key else oidc_key
-            oidc_issuer = oidc_key.split(":")[1] if ":" in oidc_key else "unknown"
-            id_queries.insert_identity(
-                oidc_key=oidc_key,
-                oidc_sub=oidc_sub,
-                oidc_issuer=oidc_issuer,
-                telegram_user_id=sign_in_result.user_id or 0,
-                telegram_username=sign_in_result.username,
-                telegram_phone=phone_number,
-                db_path=db_path,
-            )
-            # Save session file to disk and record metadata in DB
-            if sign_in_result.session_string:
-                import hashlib
-                safe_name = hashlib.sha256(oidc_key.encode()).hexdigest()[:16]
-                session_dir = os.environ.get("TG_SESSION_DIR", ".sessions")
-                from pathlib import Path
-                Path(session_dir).mkdir(parents=True, exist_ok=True)
-                session_file = Path(session_dir) / f"oidc_{safe_name}.session"
-                session_file.write_text(sign_in_result.session_string)
-                from src.auth.queries.telegram_session import insert_session
-                try:
-                    insert_session(
-                        oidc_key=oidc_key,
-                        session_filename=str(session_file),
-                        dc_id=0,
-                        server_address="",
-                        port=0,
-                        auth_key=b"",
-                        db_path=db_path,
-                    )
-                except Exception:
-                    pass
-            ss_queries.transition_state(
-                oidc_key, ElicitState.COMPLETED.value, db_path=db_path
-            )
-            return _result_to_dict(
-                ElicitResult(
-                    True, ElicitState.COMPLETED,
-                    "Telegram account linked successfully.",
-                )
-            )
+            _save_identity_and_session(oidc_key, sign_in_result, phone_number or "", db_path)
+            transition = submit_password(oidc_key, db_path=db_path)
+            return _result_to_dict(transition)
 
         # Password was invalid
         retry_result = record_retry(oidc_key, db_path=db_path)
         return _result_to_dict(retry_result)
 
     except RuntimeError as e:
-        logger.error("Password verification failed for %s: %s", oidc_key[:8], e)
+        error_msg = str(e)
+        logger.error("Password verification failed for %s: %s", oidc_key[:8], error_msg)
+        if "Concurrent sign-in" in error_msg:
+            return _result_to_dict(
+                ElicitResult(False, ElicitState.WAITING_PASS, error_msg)
+            )
         retry_result = record_retry(oidc_key, db_path=db_path)
         return _result_to_dict(retry_result)

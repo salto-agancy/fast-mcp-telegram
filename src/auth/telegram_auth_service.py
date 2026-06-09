@@ -13,7 +13,6 @@ Design constraints (from ADR 0002 / design brief):
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 import os
@@ -140,9 +139,8 @@ class TelegramAuthService:
         """Verify a code.  Returns WAITING_PASS if 2FA required."""
         lock = _lock_path(oidc_key)
         if lock.exists():
-            return SignInResult(
-                success=False, next_state="FAILED",
-                error="Concurrent sign-in in progress",
+            raise RuntimeError(
+                f"Concurrent sign-in already in progress for {oidc_key[:8]}…"
             )
 
         try:
@@ -191,9 +189,8 @@ class TelegramAuthService:
         """Complete 2FA sign-in with password."""
         lock = _lock_path(oidc_key)
         if lock.exists():
-            return SignInResult(
-                success=False, next_state="FAILED",
-                error="Concurrent sign-in in progress",
+            raise RuntimeError(
+                f"Concurrent sign-in already in progress for {oidc_key[:8]}…"
             )
 
         try:
