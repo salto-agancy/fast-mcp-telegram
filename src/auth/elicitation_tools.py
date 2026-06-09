@@ -83,7 +83,7 @@ def _record_session_metadata(
             db_path=db_path,
         )
     except Exception:
-        logger.debug("Session metadata insert failed for %s (non-critical)", oidc_key[:8])
+        logger.warning("Session metadata insert failed for %s (non-critical)", oidc_key[:8])
 
 
 def _save_identity_and_session(
