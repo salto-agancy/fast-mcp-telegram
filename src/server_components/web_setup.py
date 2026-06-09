@@ -134,7 +134,9 @@ def _setup_error_fragment(request: Request, error: str):
     return _fragment(request, "fragments/error.html", {"error": error})
 
 
-def _bearer_token_and_session_path(session_dir: Path, raw_token: str) -> tuple[str, Path]:
+def _bearer_token_and_session_path(
+    session_dir: Path, raw_token: str
+) -> tuple[str, Path]:
     """Validate bearer token and return confined session file path."""
     token = validate_session_token(raw_token)
     return token, session_file_path(session_dir, token)
@@ -147,10 +149,14 @@ def _setup_token_path_error_fragment(
 ) -> Any:
     """Map token/path resolution errors to setup HTML fragments."""
     if isinstance(exc, InvalidSessionTokenError):
-        return _fragment(request, template, {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE})
+        return _fragment(
+            request, template, {"error": INVALID_BEARER_TOKEN_FORMAT_MESSAGE}
+        )
     if isinstance(exc, OSError):
         logger.warning("Session path access failed: %s", exc)
-        return _fragment(request, template, {"error": SESSION_PATH_ACCESS_ERROR_MESSAGE})
+        return _fragment(
+            request, template, {"error": SESSION_PATH_ACCESS_ERROR_MESSAGE}
+        )
     raise exc
 
 
@@ -298,9 +304,7 @@ async def setup_generate(request: Request):
             token = generate_bearer_token()
             dst = session_file_path(session_dir, token)
     except (InvalidSessionTokenError, OSError) as e:
-        return _setup_token_path_error_fragment(
-            request, "fragments/error.html", e
-        )
+        return _setup_token_path_error_fragment(request, "fragments/error.html", e)
 
     # Check if session already exists (only when using desired token)
     if desired_token and dst.exists():
@@ -403,9 +407,9 @@ def register_web_setup_routes(mcp_app):
             logger.info(
                 "Code sent for phone %s: type=%s, phone_code_hash=%s, timeout=%s",
                 masked,
-                getattr(sent, 'type', None),
-                getattr(sent, 'phone_code_hash', None),
-                getattr(sent, 'timeout', None),
+                getattr(sent, "type", None),
+                getattr(sent, "phone_code_hash", None),
+                getattr(sent, "timeout", None),
             )
         except PhoneNumberFloodError:
             await client.disconnect()
@@ -573,8 +577,7 @@ def register_web_setup_routes(mcp_app):
         # Session needs reauthorization - create temp session for reauth
         setup_id = str(int(time.time() * 1000))
         temp_session_path = (
-            cfg().session_directory
-            / f"{REAUTH_SESSION_PREFIX}{setup_id}.session"
+            cfg().session_directory / f"{REAUTH_SESSION_PREFIX}{setup_id}.session"
         )
 
         # Copy existing session to temp location
@@ -642,9 +645,9 @@ def register_web_setup_routes(mcp_app):
             logger.info(
                 "Reauthorization code sent for phone %s: type=%s, phone_code_hash=%s, timeout=%s",
                 mask_phone_number(phone_raw),
-                getattr(sent, 'type', None),
-                getattr(sent, 'phone_code_hash', None),
-                getattr(sent, 'timeout', None),
+                getattr(sent, "type", None),
+                getattr(sent, "phone_code_hash", None),
+                getattr(sent, "timeout", None),
             )
         except PhoneNumberFloodError:
             return _fragment(

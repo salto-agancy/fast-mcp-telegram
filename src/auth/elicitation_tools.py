@@ -18,9 +18,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
-from .queries import oidc_identity as id_queries
 from . import db
 from .elicitation_state_machine import (
     ElicitResult,
@@ -31,12 +29,13 @@ from .elicitation_state_machine import (
     submit_password,
     submit_phone,
 )
+from .queries import oidc_identity as id_queries
 from .telegram_auth_service import SignInResult, TelegramAuthService
 
 logger = logging.getLogger(__name__)
 
 # Module-level service instance (lazy init)
-_auth_service: Optional[TelegramAuthService] = None
+_auth_service: TelegramAuthService | None = None
 
 
 def _get_auth_service() -> TelegramAuthService:
@@ -57,8 +56,8 @@ def _result_to_dict(result: ElicitResult) -> dict:
 
 
 def _fetch_session_metadata(
-    oidc_key: str, db_path: Optional[str] = None
-) -> Optional[dict]:
+    oidc_key: str, db_path: str | None = None
+) -> dict | None:
     """Fetch and decode metadata JSON from setup_state.
 
     Returns the metadata dict, or None if the session row doesn't exist.
@@ -79,7 +78,9 @@ def _fetch_session_metadata(
     try:
         return json.loads(row["metadata"])
     except json.JSONDecodeError:
-        logger.warning("Failed to decode metadata for oidc_key=%s, treating as empty", oidc_key[:8])
+        logger.warning(
+            "Failed to decode metadata for oidc_key=%s, treating as empty", oidc_key[:8]
+        )
         return {}
 
 
@@ -101,7 +102,7 @@ def _handle_auth_error(
     error: RuntimeError,
     log_message: str,
     failure_state: ElicitState,
-    db_path: Optional[str] = None,
+    db_path: str | None = None,
 ) -> dict:
     """Handle a RuntimeError raised by the Telegram auth service.
 
@@ -122,7 +123,7 @@ def _save_identity_and_session(
     oidc_issuer: str,
     sign_in_result: SignInResult,
     phone_number: str,
-    db_path: Optional[str] = None,
+    db_path: str | None = None,
 ) -> None:
     """Persist OIDC identity mapping and Telethon session after successful sign-in.
 
@@ -148,7 +149,7 @@ def _save_identity_and_session(
 
 
 async def oidc_setup_start(
-    oidc_sub: str, oidc_issuer: str, db_path: Optional[str] = None
+    oidc_sub: str, oidc_issuer: str, db_path: str | None = None
 ) -> dict:
     """Initialize or resume an OIDC Telegram elicitation session.
 
@@ -191,7 +192,7 @@ async def oidc_setup_start(
 
 
 async def oidc_setup_phone(
-    oidc_sub: str, oidc_issuer: str, phone: str, db_path: Optional[str] = None
+    oidc_sub: str, oidc_issuer: str, phone: str, db_path: str | None = None
 ) -> dict:
     """Submit phone number for Telegram verification.
 
@@ -231,7 +232,7 @@ async def oidc_setup_phone(
 
 
 async def oidc_setup_code(
-    oidc_sub: str, oidc_issuer: str, code: str, db_path: Optional[str] = None
+    oidc_sub: str, oidc_issuer: str, code: str, db_path: str | None = None
 ) -> dict:
     """Submit Telegram verification code.
 
@@ -256,7 +257,9 @@ async def oidc_setup_code(
 
     if not phone_number or not phone_code_hash:
         return _result_to_dict(
-            ElicitResult(False, ElicitState.FAILED, "Missing phone or code hash. Restart setup.")
+            ElicitResult(
+                False, ElicitState.FAILED, "Missing phone or code hash. Restart setup."
+            )
         )
 
     try:
@@ -268,11 +271,16 @@ async def oidc_setup_code(
         if sign_in_result.success:
             if sign_in_result.next_state == "COMPLETED":
                 _save_identity_and_session(
-                    oidc_key, oidc_sub, oidc_issuer, sign_in_result, phone_number, db_path
+                    oidc_key,
+                    oidc_sub,
+                    oidc_issuer,
+                    sign_in_result,
+                    phone_number,
+                    db_path,
                 )
                 transition = submit_code(oidc_key, needs_2fa=False, db_path=db_path)
                 return _result_to_dict(transition)
-            elif sign_in_result.next_state == "WAITING_PASS":
+            if sign_in_result.next_state == "WAITING_PASS":
                 transition = submit_code(oidc_key, needs_2fa=True, db_path=db_path)
                 return _result_to_dict(transition)
 
@@ -287,7 +295,7 @@ async def oidc_setup_code(
 
 
 async def oidc_setup_password(
-    oidc_sub: str, oidc_issuer: str, password: str, db_path: Optional[str] = None
+    oidc_sub: str, oidc_issuer: str, password: str, db_path: str | None = None
 ) -> dict:
     """Submit Telegram 2FA password.
 
@@ -309,15 +317,19 @@ async def oidc_setup_password(
             # Fetch phone from state for identity record
             phone_number = None
             with db.get_connection(db_path) as conn:
-                row = conn.execute(
+                if row := conn.execute(
                     "SELECT phone_number FROM setup_state WHERE oidc_key = ?",
                     (oidc_key,),
-                ).fetchone()
-                if row:
+                ).fetchone():
                     phone_number = row["phone_number"]
 
             _save_identity_and_session(
-                oidc_key, oidc_sub, oidc_issuer, sign_in_result, phone_number or "", db_path
+                oidc_key,
+                oidc_sub,
+                oidc_issuer,
+                sign_in_result,
+                phone_number or "",
+                db_path,
             )
             transition = submit_password(oidc_key, db_path=db_path)
             return _result_to_dict(transition)
@@ -328,5 +340,9 @@ async def oidc_setup_password(
 
     except RuntimeError as e:
         return _handle_auth_error(
-            oidc_key, e, "Password verification failed", ElicitState.WAITING_PASS, db_path
+            oidc_key,
+            e,
+            "Password verification failed",
+            ElicitState.WAITING_PASS,
+            db_path,
         )

@@ -1,20 +1,17 @@
 """Tests for OIDC TokenVerifier adapter (Sub-phase 2.3)."""
 import hashlib
 import time
-import pytest
-from unittest.mock import patch
 
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends import default_backend
 import jwt as pyjwt
-
+import pytest
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastmcp.server.auth import JWTVerifier
 
-from src.auth.oauth_provider_adapter import OidcTokenVerifier
 from src.auth.db import run_migrations
+from src.auth.oauth_provider_adapter import OidcTokenVerifier
 from src.auth.queries.oidc_identity import insert_identity
-
 
 ISSUER = "https://auth.example.com/"
 AUDIENCE = "fast-mcp-telegram"
@@ -74,7 +71,7 @@ def valid_payload():
 @pytest.fixture
 def jwt_verifier(public_key_pem):
     """Create a JWTVerifier with a static public key for test isolation.
-    
+
     Uses a static PEM key instead of a JWKS URI, so no HTTP calls are made
     during verification. Tokens signed with the matching private key pass.
     """

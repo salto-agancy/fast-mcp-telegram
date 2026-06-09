@@ -41,10 +41,9 @@ class AccountPrefixCache:
         self._unresolved.pop(token, None)
         if token in self._cache:
             self._cache.move_to_end(token)
-        else:
-            if len(self._cache) >= max_size:
-                oldest, _ = self._cache.popitem(last=False)
-                self._unresolved.pop(oldest, None)
+        elif len(self._cache) >= max_size:
+            oldest, _ = self._cache.popitem(last=False)
+            self._unresolved.pop(oldest, None)
         self._cache[token] = label
 
     def clear(self) -> None:

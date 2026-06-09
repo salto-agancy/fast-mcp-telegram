@@ -242,9 +242,9 @@ class TestAccountPrefixedToolsMiddleware:
                 new_callable=AsyncMock,
                 return_value="alice",
             ),
+            pytest.raises(ToolError, match="account prefix 'alice_'"),
         ):
-            with pytest.raises(ToolError, match="account prefix 'alice_'"):
-                await middleware.on_call_tool(ctx, call_next)
+            await middleware.on_call_tool(ctx, call_next)
 
         call_next.assert_not_called()
 
@@ -265,9 +265,9 @@ class TestAccountPrefixedToolsMiddleware:
                 new_callable=AsyncMock,
                 return_value="alice",
             ),
+            pytest.raises(ToolError, match="account prefix 'alice_'"),
         ):
-            with pytest.raises(ToolError, match="account prefix 'alice_'"):
-                await middleware.on_call_tool(ctx, call_next)
+            await middleware.on_call_tool(ctx, call_next)
 
         call_next.assert_not_called()
 

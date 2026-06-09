@@ -29,7 +29,7 @@ import yaml
 
 # Import run_migrations to ensure schema exists before inserting
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.auth.db import run_migrations  # noqa: E402
+from src.auth.db import run_migrations
 
 
 def migrate(bearer_map_path: str, db_path: str) -> int:

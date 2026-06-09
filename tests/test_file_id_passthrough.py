@@ -71,7 +71,7 @@ class TestSendMessageFileIdPassthrough:
             mint.return_value = MagicMock(
                 session_token="tok", chat_id=-100, message_id=999
             )
-            result_error, result_msg = await _send_message_or_files(
+            _result_error, _result_msg = await _send_message_or_files(
                 client=mock_client,
                 entity="me",
                 message="test caption",
@@ -102,7 +102,7 @@ class TestSendMessageFileIdPassthrough:
 
         with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
             mint.return_value = MagicMock(session_token="tok", chat_id=-100, message_id=777)
-            result_error, result_msg = await _send_message_or_files(
+            _result_error, _result_msg = await _send_message_or_files(
                 client=mock_client,
                 entity="me",
                 message="sending doc",
@@ -205,7 +205,7 @@ class TestSendMessageFileIdPassthrough:
             mint.side_effect = lambda tid: MagicMock(
                 session_token="tok", chat_id=-100, message_id=int(tid.split("-")[1])
             )
-            result_error, result_msg = await _send_message_or_files(
+            _result_error, _result_msg = await _send_message_or_files(
                 client=mock_client,
                 entity="me",
                 message="caption for album",
@@ -248,7 +248,7 @@ class TestSendMessageFileIdPassthrough:
 
         with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
             mint.return_value = MagicMock(session_token="tok", chat_id=-100, message_id=555)
-            result_error, result_msg = await _send_message_or_files(
+            _result_error, _result_msg = await _send_message_or_files(
                 client=mock_client,
                 entity="me",
                 message="single file",

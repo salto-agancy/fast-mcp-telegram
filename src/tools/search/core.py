@@ -99,8 +99,14 @@ async def _dispatch_search_mode(
                 exception=ValueError("Missing required params"),
             )
         return await _handle_reply_mode(
-            chat_id, reply_to_id, limit, query, params, thread_scope,
-            min_date=min_date, max_date=max_date,
+            chat_id,
+            reply_to_id,
+            limit,
+            query,
+            params,
+            thread_scope,
+            min_date=min_date,
+            max_date=max_date,
         )
 
     return await _handle_query_mode(

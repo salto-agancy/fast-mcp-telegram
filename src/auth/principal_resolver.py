@@ -1,7 +1,7 @@
 """Resolve OIDC sub to Telegram ACL principal string."""
+
 import logging
 import os
-from typing import Optional
 
 from src.auth.queries.oidc_identity import get_identity, make_oidc_key
 
@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 def resolve_principal(
     oidc_sub: str,
-    issuer: Optional[str] = None,
-    db_path: Optional[str] = None,
-) -> Optional[str]:
+    issuer: str | None = None,
+    db_path: str | None = None,
+) -> str | None:
     """Resolve an OIDC sub claim to a Telegram ACL principal string.
 
     Priority: @username > +phone > str(user_id).
@@ -47,5 +47,7 @@ def resolve_principal(
     if row["telegram_user_id"]:
         return str(row["telegram_user_id"])
 
-    logger.warning("Identity row exists but has no Telegram fields: oidc_key=%s", oidc_key)
+    logger.warning(
+        "Identity row exists but has no Telegram fields: oidc_key=%s", oidc_key
+    )
     return None

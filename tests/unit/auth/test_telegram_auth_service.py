@@ -10,8 +10,6 @@ All Telethon calls are mocked; we test:
 
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -75,8 +73,8 @@ async def test_send_code_success(svc):
 @pytest.mark.asyncio
 async def test_send_code_flood_wait(svc):
     from telethon.errors import FloodWaitError
-    from telethon.tl.types import CodeSettings
     from telethon.tl.functions.auth import SendCodeRequest
+    from telethon.tl.types import CodeSettings
 
     mock_req = SendCodeRequest(
         phone_number="+1", api_id=1, api_hash="x",
@@ -90,9 +88,10 @@ async def test_send_code_flood_wait(svc):
     mock_client.connect = AsyncMock()
     mock_client.disconnect = AsyncMock()
 
-    with patch.object(svc, "_client", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="retry after 30s"):
-            await svc.send_code("oidc-key-1", "+1234567890")
+    with patch.object(svc, "_client", return_value=mock_client), pytest.raises(
+        RuntimeError, match="retry after 30s"
+    ):
+        await svc.send_code("oidc-key-1", "+1234567890")
 
 
 # ---------------------------------------------------------------------------

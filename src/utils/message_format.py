@@ -847,102 +847,15 @@ async def _transcribe_single_voice_message(
         ):
             transcription_id = result.transcription_id
 
-        # Run the polling loop whenever we have a transcription_id, whether
-        # it came from this call's kick-off (result.pending) or from a
-        # cached resume (transcription_id set at the top of the function).
         if transcription_id is not None:
-            logger.debug(
-                "Transcription pending for message %s, polling for completion...",
-                message_id,
+            return await _poll_transcription_completion(
+                client, chat_entity, message_id, transcription_id, cache_key,
             )
-            # Record (or refresh) the pending state in the cache.
-            if cache_key is not None:
-                _transcription_cache_set(
-                    cache_key,
-                    _TranscriptionCacheEntry(
-                        transcription_id=transcription_id,
-                        pending_until_ts=time.time() + _PENDING_TTL_SECONDS,
-                    ),
-                )
-
-            max_attempts = 30
-            for attempt in range(max_attempts):
-                await asyncio.sleep(1)
-
-                # If a previous poll recorded a FloodWaitError for this
-                # message, honor the cooldown instead of burning more of it
-                # on requests Telegram will reject.
-                if cache_key is not None:
-                    cached = _transcription_cache_get(cache_key)
-                    if cached is not None and cached.state() == "rate_limited":
-                        logger.debug(
-                            "Polling stopped for message %s: rate-limited",
-                            message_id,
-                        )
-                        return None
-
-                try:
-                    poll_result = await client(
-                        TranscribeAudioRequest(peer=chat_entity, msg_id=message_id)
-                    )
-
-                    if (
-                        hasattr(poll_result, "transcription_id")
-                        and poll_result.transcription_id == transcription_id
-                    ):
-                        if hasattr(poll_result, "pending") and poll_result.pending:
-                            continue
-                        if hasattr(poll_result, "text") and poll_result.text:
-                            logger.debug(
-                                "Transcription completed for message %s after %s polls",
-                                message_id,
-                                attempt + 1,
-                            )
-                            if cache_key is not None:
-                                _transcription_cache_set(
-                                    cache_key,
-                                    _TranscriptionCacheEntry(
-                                        text=poll_result.text,
-                                        done_until_ts=time.time() + _DONE_TTL_SECONDS,
-                                    ),
-                                )
-                            return poll_result.text
-                        logger.warning(
-                            "Unexpected transcription state for message %s", message_id
-                        )
-                        return None
-
-                except Exception as poll_error:
-                    if isinstance(poll_error, FloodWaitError):
-                        wait_seconds = getattr(poll_error, "seconds", 0) or 0
-                        if cache_key is not None:
-                            _transcription_cache_set(
-                                cache_key,
-                                _TranscriptionCacheEntry(
-                                    until_ts=time.time() + wait_seconds
-                                ),
-                            )
-                    logger.warning(
-                        "Error polling transcription for message %s: %s",
-                        message_id,
-                        poll_error,
-                    )
-                    return None
-
-            logger.warning(
-                "Transcription polling timeout for message %s after %s attempts",
-                message_id,
-                max_attempts,
-            )
-            return None
 
         logger.debug("No transcription available for message %s", message_id)
         return None
 
     except FloodWaitError as e:
-        # Telegram refuses to even start a fresh transcription for this
-        # voice message until the cooldown expires. Record it so subsequent
-        # calls within the window don't re-issue the request.
         wait_seconds = getattr(e, "seconds", 0) or 0
         if cache_key is not None:
             _transcription_cache_set(
@@ -966,6 +879,89 @@ async def _transcribe_single_voice_message(
             e,
         )
         return None
+
+
+async def _poll_transcription_completion(
+    client, chat_entity, message_id: int,
+    transcription_id: str, cache_key: str | None,
+) -> str | None:
+    """Poll TranscribeAudioRequest until completed, rate-limited, or timed out."""
+    logger.debug(
+        "Transcription pending for message %s, polling for completion...",
+        message_id,
+    )
+    if cache_key is not None:
+        _transcription_cache_set(
+            cache_key,
+            _TranscriptionCacheEntry(
+                transcription_id=transcription_id,
+                pending_until_ts=time.time() + _PENDING_TTL_SECONDS,
+            ),
+        )
+
+    max_attempts = 30
+    for attempt in range(max_attempts):
+        await asyncio.sleep(1)
+
+        if cache_key is not None:
+            cached = _transcription_cache_get(cache_key)
+            if cached is not None and cached.state() == "rate_limited":
+                logger.debug(
+                    "Polling stopped for message %s: rate-limited", message_id,
+                )
+                return None
+
+        try:
+            poll_result = await client(
+                TranscribeAudioRequest(peer=chat_entity, msg_id=message_id)
+            )
+
+            if (
+                hasattr(poll_result, "transcription_id")
+                and poll_result.transcription_id == transcription_id
+            ):
+                if hasattr(poll_result, "pending") and poll_result.pending:
+                    continue
+                if hasattr(poll_result, "text") and poll_result.text:
+                    logger.debug(
+                        "Transcription completed for message %s after %s polls",
+                        message_id, attempt + 1,
+                    )
+                    if cache_key is not None:
+                        _transcription_cache_set(
+                            cache_key,
+                            _TranscriptionCacheEntry(
+                                text=poll_result.text,
+                                done_until_ts=time.time() + _DONE_TTL_SECONDS,
+                            ),
+                        )
+                    return poll_result.text
+                logger.warning(
+                    "Unexpected transcription state for message %s", message_id,
+                )
+                return None
+
+        except Exception as poll_error:
+            if isinstance(poll_error, FloodWaitError):
+                wait_seconds = getattr(poll_error, "seconds", 0) or 0
+                if cache_key is not None:
+                    _transcription_cache_set(
+                        cache_key,
+                        _TranscriptionCacheEntry(
+                            until_ts=time.time() + wait_seconds
+                        ),
+                    )
+            logger.warning(
+                "Error polling transcription for message %s: %s",
+                message_id, poll_error,
+            )
+            return None
+
+    logger.warning(
+        "Transcription polling timeout for message %s after %s attempts",
+        message_id, max_attempts,
+    )
+    return None
 
 
 async def transcribe_voice_messages(

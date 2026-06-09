@@ -24,15 +24,15 @@ from src.server_components.auth_middleware import UrlTokenMiddleware
 from src.server_components.health import register_health_routes
 from src.server_components.middleware_register import register_mcp_middleware
 from src.server_components.mtproto_api import register_mtproto_api_routes
-from src.server_components.server_card import register_server_card_route
-from src.server_components.tools_register import register_tools
-from src.server_components.web_setup import register_web_setup_routes
 from src.server_components.oidc_integration import (
     create_oidc_verifier,
     oidc_enabled,
     register_elicitation_tools,
     ttl_sweep_task,
 )
+from src.server_components.server_card import register_server_card_route
+from src.server_components.tools_register import register_tools
+from src.server_components.web_setup import register_web_setup_routes
 
 logger = logging.getLogger(__name__)
 
@@ -129,10 +129,14 @@ if config.require_auth:
     if oidc_enabled():
         # Run DB migrations before creating verifier
         from src.auth.db import run_migrations
+
         run_migrations()
         _auth_provider = create_oidc_verifier()
     else:
-        from src.server_components.session_token_verifier import SessionFileTokenVerifier
+        from src.server_components.session_token_verifier import (
+            SessionFileTokenVerifier,
+        )
+
         _auth_provider = SessionFileTokenVerifier(config)
 
 # Initialize MCP server

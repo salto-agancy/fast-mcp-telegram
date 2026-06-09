@@ -107,7 +107,9 @@ _DESC_INVOKE_MTPROTO = _tool_description(
 )
 
 
-def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool = False):
+def mcp_tool_with_restrictions(
+    operation_name: str, *, allow_bot_sessions: bool = False
+):
     """
     Combined decorator for MCP tools: error handling, ACL, auth context, bot restrictions.
 
@@ -122,7 +124,9 @@ def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool 
 
     def decorator(func):
         decorated_func = enforce_session_acl(operation_name)(func)
-        decorated_func = server_errors.with_error_handling(operation_name)(decorated_func)
+        decorated_func = server_errors.with_error_handling(operation_name)(
+            decorated_func
+        )
         decorated_func = server_auth.with_auth_context(decorated_func)
         if allow_bot_sessions:
             return decorated_func

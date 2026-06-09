@@ -97,9 +97,7 @@ class PrincipalAclRule:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PrincipalAclRule:
         raw_chats = data.get("chats") or []
-        chats: set[str | int] = set()
-        for item in raw_chats:
-            chats.add(_normalize_chat_ref(item))
+        chats: set[str | int] = {_normalize_chat_ref(item) for item in raw_chats}
         return cls(
             chats=frozenset(chats),
             read_only=bool(data.get("read_only", False)),
@@ -118,9 +116,7 @@ def clear_acl_cache() -> None:
 
 def _configured_acl_path() -> Path | None:
     config = cfg()
-    if not config.acl_enabled:
-        return None
-    return config.acl_config_file
+    return config.acl_config_file if config.acl_enabled else None
 
 
 class AclConfigError(ValueError):
@@ -129,8 +125,7 @@ class AclConfigError(ValueError):
 
 def _validate_acl_document(doc: dict[str, Any], path: Path) -> None:
     """Fail-closed startup validation for principal entries."""
-    legacy = doc.get("tokens")
-    if legacy:
+    if doc.get("tokens"):
         raise AclConfigError(
             "ACL config key 'tokens:' was renamed to 'principals:' in 0.23.0. "
             f"Rename the top-level key in your acl.yaml; see SECURITY.md. ({path})"
@@ -178,13 +173,12 @@ def _warn_principal_acl_entry(
     path: Path,
 ) -> None:
     """Log operator hygiene warnings (non-fatal)."""
-    prefix = str(principal_key)[:8]
-    unknown = {
+    prefix = principal_key[:8]
+    if unknown := {
         key
         for key in raw
         if key not in _KNOWN_TOKEN_ACL_KEYS and not str(key).startswith("x_")
-    }
-    if unknown:
+    }:
         logger.warning(
             "ACL config principal identifier prefix %s... has unknown key(s) %s (ignored): %s",
             prefix,
@@ -242,9 +236,7 @@ def _blocked_peers_from_doc(doc: dict[str, Any]) -> frozenset[str | int]:
     raw = doc.get("blocked_peers")
     if not isinstance(raw, list):
         return frozenset()
-    peers: set[str | int] = set()
-    for item in raw:
-        peers.add(_normalize_chat_ref(item))
+    peers: set[str | int] = {_normalize_chat_ref(item) for item in raw}
     return frozenset(peers)
 
 
@@ -387,10 +379,7 @@ def _deny_blocked_peer(
 
 
 def _first_blocked_ref(refs: list[str | int]) -> str | int | None:
-    for ref in refs:
-        if _is_blocked_peer(ref):
-            return ref
-    return None
+    return next((ref for ref in refs if _is_blocked_peer(ref)), None)
 
 
 def _peer_refs_from_result(operation: str, result: dict[str, Any]) -> list[str | int]:
@@ -440,7 +429,7 @@ def merge_mtproto_request_params(
         raise json.JSONDecodeError(
             "params_json must decode to a JSON object", params_json, 0
         )
-    merged.update(parsed)
+    merged |= parsed
     return merged
 
 
@@ -473,12 +462,15 @@ def check_blocked_peer_mtproto_params(
     blocked = _load_blocked_peers()
     if not blocked:
         return None
-    numeric_blocked = {peer for peer in blocked if isinstance(peer, int)}
-    if not numeric_blocked:
-        return None
-    for peer_id in _extract_peer_ids_from_mtproto_params(params):
-        if peer_id in numeric_blocked:
-            return _deny_blocked_peer(operation, peer_id, params=params)
+    if numeric_blocked := {peer for peer in blocked if isinstance(peer, int)}:
+        return next(
+            (
+                _deny_blocked_peer(operation, peer_id, params=params)
+                for peer_id in _extract_peer_ids_from_mtproto_params(params)
+                if peer_id in numeric_blocked
+            ),
+            None,
+        )
     return None
 
 
@@ -503,11 +495,14 @@ def _check_blocked_peer_pre(
         return check_blocked_peer_mtproto_params(merged)
 
     chat_id = kwargs.get("chat_id")
-    if chat_id is not None and operation in _CHAT_SCOPED_OPERATIONS:
-        if _is_blocked_peer(chat_id):
-            return _deny_blocked_peer(
-                operation, _normalize_chat_ref(chat_id), {"chat_id": chat_id}
-            )
+    if (
+        chat_id is not None
+        and operation in _CHAT_SCOPED_OPERATIONS
+        and _is_blocked_peer(chat_id)
+    ):
+        return _deny_blocked_peer(
+            operation, _normalize_chat_ref(chat_id), {"chat_id": chat_id}
+        )
     return None
 
 
@@ -626,9 +621,8 @@ def check_pre_tool_access(
     if not config.acl_enabled or config.disable_auth:
         return None
 
-    if blocked_peers_configured():
-        if blocked_denial := _check_blocked_peer_pre(operation_name, kwargs):
-            return blocked_denial
+    if blocked_peers_configured() and (blocked_denial := _check_blocked_peer_pre(operation_name, kwargs)):
+        return blocked_denial
 
     rule = _rules_for_principal(get_request_token())
     if rule is None:
@@ -659,16 +653,21 @@ def check_pre_tool_access(
         )
 
     chat_id = kwargs.get("chat_id")
-    if chat_id is not None and operation_name in _WRITE_OPERATIONS | {
-        "get_messages",
-        "get_chat_info",
-    }:
-        if not _is_chat_allowed(chat_id, rule):
-            return _deny(
-                operation_name,
-                "Session ACL: chat is not in the allowed list for this principal.",
-                params={"chat_id": chat_id},
-            )
+    if (
+        chat_id is not None
+        and operation_name
+        in _WRITE_OPERATIONS
+        | {
+            "get_messages",
+            "get_chat_info",
+        }
+        and not _is_chat_allowed(chat_id, rule)
+    ):
+        return _deny(
+            operation_name,
+            "Session ACL: chat is not in the allowed list for this principal.",
+            params={"chat_id": chat_id},
+        )
 
     if operation_name == "send_message_to_phone" and not _is_empty_lane(rule):
         return _deny(

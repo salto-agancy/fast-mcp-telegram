@@ -77,13 +77,12 @@ class TestConnection:
         """Connection rolls back on exception."""
         run_migrations(tmp_db)
 
-        with pytest.raises(ValueError):
-            with get_connection(tmp_db) as conn:
-                conn.execute(
-                    "INSERT INTO oidc_identity (oidc_key, oidc_sub, oidc_issuer, telegram_user_id) VALUES (?, ?, ?, ?)",
-                    ("k", "s", "i", 1),
-                )
-                raise ValueError("boom")
+        with pytest.raises(ValueError), get_connection(tmp_db) as conn:
+            conn.execute(
+                "INSERT INTO oidc_identity (oidc_key, oidc_sub, oidc_issuer, telegram_user_id) VALUES (?, ?, ?, ?)",
+                ("k", "s", "i", 1),
+            )
+            raise ValueError("boom")
 
         # Row should NOT exist after rollback
         with get_connection(tmp_db) as conn:

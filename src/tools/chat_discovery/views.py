@@ -31,8 +31,7 @@ class ChatView:
     @classmethod
     def from_entity(cls, entity) -> "ChatView":
         d = dict(build_entity_dict(entity) or {})
-        ph = getattr(entity, "phone", None)
-        if ph:
+        if ph := getattr(entity, "phone", None):
             d["phone"] = ph
         return cls.from_dict(d)
 

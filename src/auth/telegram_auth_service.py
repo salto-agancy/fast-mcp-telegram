@@ -76,7 +76,8 @@ class TelegramAuthService:
                 f"Set TG_API_ID and TG_API_HASH for Telethon sign-in."
             ) from e
         self._session_dir = Path(
-            session_dir or os.environ.get(
+            session_dir
+            or os.environ.get(
                 "TG_SESSION_DIR",
                 str(Path.home() / ".config" / "fast-mcp-telegram" / "sessions"),
             )
@@ -93,9 +94,7 @@ class TelegramAuthService:
         session_path = str(self._session_dir / f"oidc_{safe_name}")
         return TelegramClient(session_path, self._api_id, self._api_hash)
 
-    async def send_code(
-        self, oidc_key: str, phone_number: str
-    ) -> SendCodeResult:
+    async def send_code(self, oidc_key: str, phone_number: str) -> SendCodeResult:
         """Send a verification code to *phone_number*.
 
         Returns the phone_code_hash needed for the subsequent sign_in call.
@@ -112,9 +111,7 @@ class TelegramAuthService:
                 next_state="WAITING_CODE",
             )
         except FloodWaitError as e:
-            raise RuntimeError(
-                f"Telegram rate limit: retry after {e.seconds}s"
-            ) from e
+            raise RuntimeError(f"Telegram rate limit: retry after {e.seconds}s") from e
         finally:
             # Disconnect but DON'T destroy the session — we need it
             # for the subsequent sign_in call.
@@ -167,9 +164,7 @@ class TelegramAuthService:
         finally:
             await client.disconnect()
 
-    async def verify_password(
-        self, oidc_key: str, password: str
-    ) -> SignInResult:
+    async def verify_password(self, oidc_key: str, password: str) -> SignInResult:
         """Complete 2FA sign-in with password.
 
         Concurrency: caller must hold DB lock before calling this method.

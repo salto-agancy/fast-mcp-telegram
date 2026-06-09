@@ -1,10 +1,10 @@
 """Tests for principal resolver (Sub-phase 2.2)."""
 import hashlib
-import os
+
 import pytest
 
-from src.auth.principal_resolver import resolve_principal
 from src.auth.db import run_migrations
+from src.auth.principal_resolver import resolve_principal
 from src.auth.queries.oidc_identity import insert_identity
 
 

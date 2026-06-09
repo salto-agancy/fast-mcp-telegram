@@ -109,7 +109,7 @@ async def main():
         print(f"  Total matching: {count}")
         if sample:
             print("  Sample (first 5):")
-            for i, (e, dialog) in enumerate(sample[:5]):
+            for i, (e, _dialog) in enumerate(sample[:5]):
                 print(f"    {i+1}. {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})")
 
         # Verify each sample complies with filter flags (but not include_peers/exclude_peers)

@@ -12,19 +12,18 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from src.auth import db
+from src.auth.elicitation_state_machine import ElicitState
 from src.auth.elicitation_tools import (
     oidc_setup_code,
     oidc_setup_password,
     oidc_setup_phone,
     oidc_setup_start,
 )
-from src.auth.elicitation_state_machine import ElicitState
 from src.auth.queries import oidc_identity as id_queries
 from src.auth.queries.oidc_identity import make_oidc_key
 from src.auth.queries.setup_state import get_state_row
 from src.auth.telegram_auth_service import SendCodeResult, SignInResult
-from src.auth import db
-
 
 ISSUER = "https://auth.example.com/"
 

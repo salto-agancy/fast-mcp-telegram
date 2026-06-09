@@ -2,9 +2,9 @@
 
 import os
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 DEFAULT_DB_PATH = "./data/auth.db"
@@ -62,7 +62,9 @@ def run_migrations(db_path: str | None = None) -> None:
 
 
 @contextmanager
-def get_connection(db_path: str | None = None) -> Generator[sqlite3.Connection, None, None]:
+def get_connection(
+    db_path: str | None = None,
+) -> Generator[sqlite3.Connection, None, None]:
     """Yield a sqlite3.Connection with row_factory, FK enforcement, and auto-commit/rollback."""
     target = _resolve_db_path(db_path)
     conn = sqlite3.connect(target)

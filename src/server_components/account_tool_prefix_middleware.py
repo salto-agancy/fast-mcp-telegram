@@ -34,9 +34,7 @@ def _prefixed_tool_name(label: str, internal: str) -> str:
 
 def _strip_account_prefix(label: str, external: str) -> str | None:
     prefix = f"{label}_"
-    if external.startswith(prefix):
-        return external[len(prefix) :]
-    return None
+    return external[len(prefix) :] if external.startswith(prefix) else None
 
 
 @contextmanager

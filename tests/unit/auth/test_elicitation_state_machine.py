@@ -1,18 +1,19 @@
 """Tests for OIDC Elicitation State Machine."""
 
-import time
+from datetime import UTC
+
 import pytest
 
+from src.auth import db
 from src.auth.elicitation_state_machine import (
+    TTL_SECONDS,
     ElicitState,
+    record_retry,
     start_elicitation,
-    submit_phone,
     submit_code,
     submit_password,
-    record_retry,
-    TTL_SECONDS,
+    submit_phone,
 )
-from src.auth import db
 from src.auth.queries.setup_state import get_state_row, transition_state
 
 
@@ -58,8 +59,8 @@ class TestStartElicitation:
     def test_expires_old_session(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
         # Backdate updated_at using ISO format to simulate expiry
-        from datetime import datetime, timezone, timedelta
-        old_time = (datetime.now(timezone.utc) - timedelta(seconds=TTL_SECONDS + 10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        from datetime import datetime, timedelta
+        old_time = (datetime.now(UTC) - timedelta(seconds=TTL_SECONDS + 10)).strftime("%Y-%m-%dT%H:%M:%SZ")
         import sqlite3
         conn = sqlite3.connect(clean_db)
         conn.execute("UPDATE setup_state SET updated_at = ? WHERE oidc_key = ?", (old_time, oidc_key))

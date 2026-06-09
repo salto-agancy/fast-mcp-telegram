@@ -1,15 +1,14 @@
 """CRUD operations for the setup_state table (elicitation state machine)."""
 
 import sqlite3
-from typing import Optional
 
 from src.auth.db import get_connection
 
 
 def create_state(
     oidc_key: str,
-    phone_number: Optional[str] = None,
-    db_path: Optional[str] = None,
+    phone_number: str | None = None,
+    db_path: str | None = None,
 ) -> None:
     """Create initial WAITING_PHONE state for an OIDC key."""
     with get_connection(db_path) as conn:
@@ -25,9 +24,9 @@ def create_state(
 def transition_state(
     oidc_key: str,
     new_state: str,
-    tg_code_hash: Optional[str] = None,
-    metadata: Optional[str] = None,
-    db_path: Optional[str] = None,
+    tg_code_hash: str | None = None,
+    metadata: str | None = None,
+    db_path: str | None = None,
 ) -> bool:
     """Transition to a new state, optionally updating code hash or metadata.
 
@@ -51,16 +50,13 @@ def transition_state(
 
     # SAFETY: Column names are hardcoded in SET clauses.
     # Sourcery false positive on dynamic SQL building.
-    sql = (
-        f"UPDATE setup_state SET {', '.join(set_clauses)} "
-        f"WHERE oidc_key = ?"
-    )  # noqa: S608
+    sql = f"UPDATE setup_state SET {', '.join(set_clauses)} WHERE oidc_key = ?"
     with get_connection(db_path) as conn:
         cursor = conn.execute(sql, values)
         return cursor.rowcount > 0
 
 
-def get_all_active_states(db_path: Optional[str] = None) -> list[sqlite3.Row]:
+def get_all_active_states(db_path: str | None = None) -> list[sqlite3.Row]:
     """Return all non-COMPLETED, non-FAILED states (for active session tracking)."""
     with get_connection(db_path) as conn:
         return conn.execute(
@@ -70,7 +66,7 @@ def get_all_active_states(db_path: Optional[str] = None) -> list[sqlite3.Row]:
 
 def increment_retry_count(
     oidc_key: str,
-    db_path: Optional[str] = None,
+    db_path: str | None = None,
 ) -> None:
     """Increment retry_count and refresh updated_at."""
     with get_connection(db_path) as conn:
@@ -85,7 +81,7 @@ def increment_retry_count(
         )
 
 
-def get_state_row(oidc_key: str, db_path: Optional[str] = None) -> Optional[dict]:
+def get_state_row(oidc_key: str, db_path: str | None = None) -> dict | None:
     """Fetch a single setup_state row as a dict, or None if not found."""
     with get_connection(db_path) as conn:
         row = conn.execute(

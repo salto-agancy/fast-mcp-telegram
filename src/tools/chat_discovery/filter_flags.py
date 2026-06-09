@@ -53,7 +53,9 @@ async def _batch_fetch_last_activity(
     """Fetch last activity dates for entities in bulk via GetPeerDialogsRequest."""
     peer_ids = list(entity_dicts.keys())
     peer_id_to_activity: dict[int, datetime] = {}
-    total_chunks = (len(peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1) // GET_PEER_DIALOGS_CHUNK_SIZE
+    total_chunks = (
+        len(peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1
+    ) // GET_PEER_DIALOGS_CHUNK_SIZE
     chunk_idx = 0
 
     for chunk_start in range(0, len(peer_ids), GET_PEER_DIALOGS_CHUNK_SIZE):
@@ -75,25 +77,124 @@ async def _batch_fetch_last_activity(
         t_chunk = time.monotonic()
         try:
             result = await client(GetPeerDialogsRequest(peers=input_peers))
-            for d, m in zip(result.dialogs or [], result.messages or []):
+            for d, m in zip(result.dialogs or [], result.messages or [], strict=False):
                 peer_id = _extract_peer_id(d.peer)
                 if not peer_id or m is None:
                     continue
-                msg_date = getattr(m, "date", None)
-                if msg_date:
+                if msg_date := getattr(m, "date", None):
                     if msg_date.tzinfo is None:
                         msg_date = msg_date.replace(tzinfo=UTC)
                     peer_id_to_activity[peer_id] = msg_date
             logger.info(
                 "batch_fetch chunk %d/%d | peers=%d got=%d chunk_elapsed=%.3fs",
-                chunk_idx, total_chunks, len(input_peers),
-                len([d for d in result.dialogs if _extract_peer_id(d.peer) in chunk_ids]) if hasattr(result, 'dialogs') else 0,
+                chunk_idx,
+                total_chunks,
+                len(input_peers),
+                len(
+                    [d for d in result.dialogs if _extract_peer_id(d.peer) in chunk_ids]
+                )
+                if hasattr(result, "dialogs")
+                else 0,
                 time.monotonic() - t_chunk,
             )
         except Exception as e:
             logger.debug("GetPeerDialogsRequest chunk failed: %s", e)
 
     return peer_id_to_activity
+
+
+async def _pass1_iterate_dialogs(
+    client,
+    filter_dict: dict,
+    query: str | None,
+    limit: int,
+    chat_type: str | None,
+    public: bool | None,
+    has_date_filter: bool,
+    min_date_dt,
+    max_date_dt,
+    iter_limit: int,
+) -> tuple[list[dict], list[tuple[Any, Any, Any]], int]:
+    """Pass 1: iterate dialogs, apply flag/chat_type/public/query filters.
+
+    Returns (immediate_results, pending_date_entities, iter_count).
+    Entities whose dialog.date is None and date filters are active are
+    deferred to Pass 2 for batch date resolution.
+    """
+    results: list[dict] = []
+    pending_date: list[tuple[Any, Any, Any]] = []
+    iter_count = 0
+
+    async for dialog in client.iter_dialogs(limit=iter_limit):
+        iter_count += 1
+        entity = getattr(dialog, "entity", None)
+        if not entity:
+            continue
+
+        dialog_date = getattr(dialog, "date", None)
+        if _dialog_top_date_outside_find_chats_bounds(
+            dialog_date, min_date_dt, max_date_dt
+        ):
+            continue
+
+        if not _filter_matches_flags(entity, dialog, filter_dict):
+            continue
+
+        view = ChatView.from_entity(entity)
+
+        if not _match_chat_type(view, chat_type):
+            continue
+        if not _match_public(view, public):
+            continue
+        if not _find_chats_query_matches_entity(view, query):
+            continue
+
+        if dialog_date is None and has_date_filter:
+            pending_date.append((entity, dialog, view))
+        elif result := build_dialog_entity_dict(dialog, entity):
+            results.append(result)
+            if len(results) >= limit:
+                break
+
+    return results, pending_date, iter_count
+
+
+async def _pass2_merge_pending_date(
+    client,
+    pending_date: list[tuple[Any, Any, Any]],
+    results: list[dict],
+    limit: int,
+    min_date_dt,
+    max_date_dt,
+) -> list[dict]:
+    """Pass 2: batch-fetch last activity dates for pending entities and merge."""
+    if not pending_date:
+        return results
+
+    entity_dicts: dict[int, dict] = {}
+    for entity, _dialog, _view in pending_date:
+        if (eid := getattr(entity, "id", None)) and (ent_dict := build_entity_dict(entity)):
+            entity_dicts[eid] = ent_dict
+
+    peer_id_to_activity = (
+        await _batch_fetch_last_activity(client, entity_dicts) if entity_dicts else {}
+    )
+
+    for entity, dialog, _view in pending_date:
+        if len(results) >= limit:
+            break
+
+        eid = getattr(entity, "id", None)
+        activity = peer_id_to_activity.get(eid) if eid else None
+
+        if activity is not None:
+            if not _last_activity_datetime_in_range(activity, min_date_dt, max_date_dt):
+                continue
+            if result := build_dialog_entity_dict(dialog, entity):
+                result["last_activity_date"] = activity.isoformat()
+                results.append(result)
+
+    return results
 
 
 async def _find_chats_by_filter_flags(
@@ -126,125 +227,45 @@ async def _find_chats_by_filter_flags(
     has_date_filter = min_date_dt is not None or max_date_dt is not None
     iter_limit = min(limit * 10, FLAG_MATCH_MAX_DIALOGS)
     logger.info(
-        "find_chats_by_filter_flags start | "
-        "filter=%s limit=%d date=%s iter_limit=%d",
+        "find_chats_by_filter_flags start | filter=%s limit=%d date=%s iter_limit=%d",
         filter_dict.get("title", "?") if hasattr(filter_dict, "get") else "?",
         limit,
         "yes" if has_date_filter else "no",
         iter_limit,
     )
 
-    # Pass 1: iterate dialogs, apply all non-date filters
-    results: list[dict] = []
-    pending_date: list[tuple[Any, Any, Any]] = []  # (entity, dialog, view)
-    iter_count = 0
-
-    async for dialog in client.iter_dialogs(limit=iter_limit):
-        iter_count += 1
-        entity = getattr(dialog, "entity", None)
-        if not entity:
-            continue
-
-        dialog_date = getattr(dialog, "date", None)
-        if _dialog_top_date_outside_find_chats_bounds(
-            dialog_date, min_date_dt, max_date_dt
-        ):
-            continue
-
-        if not _filter_matches_flags(entity, dialog, filter_dict):
-            continue
-
-        view = ChatView.from_entity(entity)
-
-        if not _match_chat_type(view, chat_type):
-            continue
-        if not _match_public(view, public):
-            continue
-
-        if not _find_chats_query_matches_entity(view, query):
-            continue
-
-        if dialog_date is not None or not has_date_filter:
-            # Date is known or no date filter — include immediately
-            if result := build_dialog_entity_dict(dialog, entity):
-                results.append(result)
-                if len(results) >= limit:
-                    t1 = time.monotonic()
-                    logger.info(
-                        "find_chats_by_filter_flags done early | "
-                        "iterated=%d results=%d pending=%d elapsed=%.3fs",
-                        iter_count, len(results), len(pending_date), t1 - t0,
-                    )
-                    return {"chats": results}
-        else:
-            # Needs date fallback — defer to pass 2
-            pending_date.append((entity, dialog, view))
+    results, pending_date, iter_count = await _pass1_iterate_dialogs(
+        client, filter_dict, query, limit, chat_type, public,
+        has_date_filter, min_date_dt, max_date_dt, iter_limit,
+    )
 
     t1 = time.monotonic()
     logger.info(
         "find_chats_by_filter_flags pass1 done | "
         "iterated=%d results=%d pending=%d iter_limit=%d elapsed=%.3fs",
-        iter_count, len(results), len(pending_date), iter_limit, t1 - t0,
+        iter_count,
+        len(results),
+        len(pending_date),
+        iter_limit,
+        t1 - t0,
     )
 
-    if not pending_date:
-        logger.info(
-            "find_chats_by_filter_flags done (no pending) | total=%.3fs",
-            time.monotonic() - t0,
-        )
+    if not pending_date or len(results) >= limit:
         return {"chats": results}
 
-    # Pass 2: batch fetch last activity dates for pending entities
     logger.info(
         "find_chats_by_filter_flags pass2 start | pending=%d",
         len(pending_date),
     )
-    entity_dicts: dict[int, dict] = {}
-    for entity, dialog, view in pending_date:
-        eid = getattr(entity, "id", None)
-        if eid:
-            ent_dict = build_entity_dict(entity)
-            if ent_dict:
-                entity_dicts[eid] = ent_dict
-
-    t_batch_start = time.monotonic()
-    peer_id_to_activity = (
-        await _batch_fetch_last_activity(client, entity_dicts)
-        if entity_dicts
-        else {}
+    results = await _pass2_merge_pending_date(
+        client, pending_date, results, limit, min_date_dt, max_date_dt,
     )
-    t_batch_end = time.monotonic()
-    logger.info(
-        "find_chats_by_filter_flags pass2 batch_done | "
-        "dicts=%d results=%d batch_elapsed=%.3fs",
-        len(entity_dicts),
-        len(peer_id_to_activity),
-        t_batch_end - t_batch_start,
-    )
-
-    for entity, dialog, view in pending_date:
-        if len(results) >= limit:
-            break
-
-        eid = getattr(entity, "id", None)
-        activity = peer_id_to_activity.get(eid) if eid else None
-
-        if activity is not None:
-            if not _last_activity_datetime_in_range(
-                activity, min_date_dt, max_date_dt
-            ):
-                continue
-            result = build_dialog_entity_dict(dialog, entity)
-            if result:
-                result["last_activity_date"] = activity.isoformat()
-                results.append(result)
-        # activity is None: no date info available from Telegram, skip this entity
 
     total = time.monotonic() - t0
     logger.info(
-        "find_chats_by_filter_flags done | "
-        "results=%d total=%.3fs",
-        len(results), total,
+        "find_chats_by_filter_flags done | results=%d total=%.3fs",
+        len(results),
+        total,
     )
 
     return {"chats": results}

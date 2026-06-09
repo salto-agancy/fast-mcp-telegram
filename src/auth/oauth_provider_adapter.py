@@ -1,9 +1,9 @@
 """FastMCP TokenVerifier adapter for OIDC self-service auth."""
+
 import logging
 import os
-from typing import Optional
 
-from fastmcp.server.auth import AccessToken, TokenVerifier, JWTVerifier
+from fastmcp.server.auth import AccessToken, JWTVerifier, TokenVerifier
 
 from src.auth.principal_resolver import resolve_principal
 
@@ -21,11 +21,11 @@ class OidcTokenVerifier(TokenVerifier):
     def __init__(
         self,
         *,
-        issuer: Optional[str] = None,
-        audience: Optional[str] = None,
-        db_path: Optional[str] = None,
-        algorithm: Optional[str] = None,
-        jwt_verifier: Optional[JWTVerifier] = None,
+        issuer: str | None = None,
+        audience: str | None = None,
+        db_path: str | None = None,
+        algorithm: str | None = None,
+        jwt_verifier: JWTVerifier | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -46,7 +46,7 @@ class OidcTokenVerifier(TokenVerifier):
             else None
         )
 
-    async def verify_token(self, token: str) -> Optional[AccessToken]:
+    async def verify_token(self, token: str) -> AccessToken | None:
         """Verify OIDC JWT and resolve to Telegram principal.
 
         Returns:
@@ -73,7 +73,9 @@ class OidcTokenVerifier(TokenVerifier):
         if principal is None:
             # No mapping yet — returns None (indistinguishable from invalid token).
             # Elicitation tools handle first-time setup separately.
-            logger.info("OIDC sub=%s has no Telegram mapping; elicitation needed", oidc_sub)
+            logger.info(
+                "OIDC sub=%s has no Telegram mapping; elicitation needed", oidc_sub
+            )
             return None
 
         return AccessToken(

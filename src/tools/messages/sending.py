@@ -74,52 +74,71 @@ async def _send_message_or_files(
 
     Handles validation and routing to appropriate send method.
     """
-    effective_reply_to = reply_to_msg_id
-
-    if files:
-        file_list = files if isinstance(files, list) else [files]
-        if own_urls := [f for f in file_list if is_own_attachment_url(f)]:
-            media_list = []
-            for url in own_urls:
-                ticket_id = url.rstrip("/").split("/")[-2]
-                ticket = await get_attachment_ticket(ticket_id)
-                if ticket:
-                    msgs = await client.get_messages(
-                        ticket.chat_id, ids=ticket.message_id
-                    )
-                    msg = msgs[0] if isinstance(msgs, list) else msgs
-                    if msg and getattr(msg, "media", None):
-                        media_list.append(msg.media)
-
-            if media_list:
-                force_doc = force_document_for_file_list(file_list)
-                file_arg = media_list[0] if len(media_list) == 1 else media_list
-                result = await client.send_file(
-                    entity=entity,
-                    file=file_arg,
-                    caption=message or None,
-                    reply_to=reply_to_msg_id,
-                    parse_mode=parse_mode,
-                    force_document=force_doc,
-                )
-                return None, _extract_first_message(result)
-
-        file_list, validation_error = _validate_file_paths(files, operation, params)
-        if validation_error or file_list is None:
-            return validation_error or {}, None
-
-        sent_message = await _send_files_to_entity(
-            client, entity, file_list, message, effective_reply_to, parse_mode
+    if not files:
+        sent_message = await client.send_message(
+            entity=entity,
+            message=message,
+            reply_to=reply_to_msg_id,
+            parse_mode=parse_mode,
         )
         return None, sent_message
 
-    sent_message = await client.send_message(
-        entity=entity,
-        message=message,
-        reply_to=effective_reply_to,
-        parse_mode=parse_mode,
+    return await _route_files_send(
+        client, entity, message, files, reply_to_msg_id,
+        parse_mode, operation, params,
+    )
+
+
+async def _route_files_send(
+    client,
+    entity,
+    message: str,
+    files: str | list[str] | None,
+    reply_to: int | None,
+    parse_mode: str | None,
+    operation: str,
+    params: dict[str, Any],
+):
+    """Send files to an entity, handling own attachment URLs and local paths."""
+    file_list = files if isinstance(files, list) else [files]
+
+    if own_urls := [f for f in file_list if is_own_attachment_url(f)]:
+        media_list = await _resolve_own_attachments(client, own_urls)
+        if media_list:
+            force_doc = force_document_for_file_list(file_list)
+            file_arg = media_list[0] if len(media_list) == 1 else media_list
+            result = await client.send_file(
+                entity=entity,
+                file=file_arg,
+                caption=message or None,
+                reply_to=reply_to,
+                parse_mode=parse_mode,
+                force_document=force_doc,
+            )
+            return None, _extract_first_message(result)
+
+    file_list, validation_error = _validate_file_paths(files, operation, params)
+    if validation_error or file_list is None:
+        return validation_error or {}, None
+
+    sent_message = await _send_files_to_entity(
+        client, entity, file_list, message, reply_to, parse_mode,
     )
     return None, sent_message
+
+
+async def _resolve_own_attachments(client, own_urls: list[str]) -> list:
+    """Fetch attachment tickets and return list of Telegram media objects."""
+    media_list = []
+    for url in own_urls:
+        ticket_id = url.rstrip("/").split("/")[-2]
+        ticket = await get_attachment_ticket(ticket_id)
+        if ticket:
+            msgs = await client.get_messages(ticket.chat_id, ids=ticket.message_id)
+            msg = msgs[0] if isinstance(msgs, list) else msgs
+            if msg and getattr(msg, "media", None):
+                media_list.append(msg.media)
+    return media_list
 
 
 def _extract_send_message_params(

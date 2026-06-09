@@ -6,20 +6,16 @@ Activated only when TG_OIDC_ISSUER and TG_OIDC_AUDIENCE are set.
 
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 def oidc_enabled() -> bool:
     """Check if OIDC auth is configured via environment variables."""
-    return bool(
-        os.environ.get("TG_OIDC_ISSUER")
-        and os.environ.get("TG_OIDC_AUDIENCE")
-    )
+    return bool(os.environ.get("TG_OIDC_ISSUER") and os.environ.get("TG_OIDC_AUDIENCE"))
 
 
-def create_oidc_verifier(db_path: Optional[str] = None):
+def create_oidc_verifier(db_path: str | None = None):
     """Create OidcTokenVerifier instance from env vars.
 
     Returns None if OIDC is not configured.
@@ -55,9 +51,12 @@ def register_elicitation_tools(mcp) -> None:
     logger.info("Registered 4 OIDC elicitation tools")
 
 
-async def ttl_sweep_task(interval_seconds: int = 60, max_age_seconds: int = 300) -> None:
+async def ttl_sweep_task(
+    interval_seconds: int = 60, max_age_seconds: int = 300
+) -> None:
     """Background task: clean up expired elicitation states every interval."""
     import asyncio
+
     from src.auth.queries.setup_state import delete_expired
 
     logger.info(
@@ -68,9 +67,10 @@ async def ttl_sweep_task(interval_seconds: int = 60, max_age_seconds: int = 300)
     while True:
         try:
             await asyncio.sleep(interval_seconds)
-            deleted = delete_expired(max_age_seconds)
-            if deleted:
-                logger.info("TTL sweep: cleaned %d expired elicitation session(s)", deleted)
+            if deleted := delete_expired(max_age_seconds):
+                logger.info(
+                    "TTL sweep: cleaned %d expired elicitation session(s)", deleted
+                )
         except asyncio.CancelledError:
             logger.info("TTL sweep task cancelled")
             break
