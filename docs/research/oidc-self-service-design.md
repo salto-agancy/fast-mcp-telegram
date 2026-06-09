@@ -1,5 +1,7 @@
 # OIDC Self-Service Auth: Implementation Plan
 
+> ⚠️ **POSTPONED** — This approach (OIDC + Elicitation) has been superseded by a simpler QR-login-based auth design. See [ADR 0004](../adr/0004-qr-login-auth.md). The `feature/oidc-phase1-storage` branch is archived.
+
 > Companion document to [ADR 0002](../adr/0002-oidc-self-service-auth.md). Mirrors structure of [ACL Design Brief](./acl-design-brief.md).
 
 ## Goals
@@ -26,7 +28,7 @@ Three orthogonal layers:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    FastMCP OAuthProvider                     │
+│                    FastMCP JWTVerifier                      │
 │         (Token verification, JWKS, issuer validation)        │
 └──────────────────────────┬──────────────────────────────────┘
                            │ oidc_sub + claims
@@ -50,7 +52,7 @@ Storage is separate from all three layers — shared SQLite DB for OIDC/state, p
 ### First-Time Sign-In
 
 1.  User connects via MCP client with OIDC bearer token.
-2.  FastMCP `OAuthProvider` validates token signature, issuer, audience, expiry.
+2.  FastMCP `JWTVerifier` validates token signature, issuer, audience, expiry.
 3.  Extract `sub` claim → hash to produce `oidc_key`.
 4.  Query `oidc_identity` table by `oidc_key`.
 5.  **Not found** → enter elicitation flow:
@@ -59,14 +61,14 @@ Storage is separate from all three layers — shared SQLite DB for OIDC/state, p
     c.  Prompt for code.
     d.  Verify code via Telethon.
     e.  (Optional) Prompt for password if 2FA enabled.
-    f.  On success: write `oidc_identity` + `telegram_session` rows, create `.session` file.
+    f.  On success: write `oidc_identity` row, create `.session` file.
 6.  Resolve Telegram identity (`@username`, `+phone`, or `user_id`) from DB.
 7.  Match against ACL rules.
 8.  Grant or deny access.
 
 ### Re-Authentication
 
-1.  Token validated by `OAuthProvider`.
+1.  Token validated by `JWTVerifier`.
 2.  `oidc_key` lookup succeeds → retrieve linked Telegram identity.
 3.  Skip elicitation entirely.
 4.  ACL check proceeds as normal.
@@ -98,21 +100,23 @@ WAITING_CODE ──valid code──▶ WAITING_PASS (if 2FA) or COMPLETED
 WAITING_CODE ──invalid code──▶ WAITING_CODE (re-elicit once) or FAILED
 WAITING_PASS ──valid pass──▶ COMPLETED
 WAITING_PASS ──invalid pass──▶ WAITING_PASS (re-elicit once) or FAILED
-Any state ──5min TTL expired──▶ FAILED (sweep task cleans up)
+Any state ──5min TTL expired──▶ EXPIRED (inline TTL check on transition)
 ```
 
 ### Concurrency Control
 
--   Lockfile: `{data_dir}/{oidc_key}.setup.lock` prevents parallel elicitation for same OIDC sub.
--   In-process single-flight: dict keyed by `oidc_key` ensures only one coroutine handles elicitation per user.
--   Stale lock detection: if lockfile mtime > 10 min, delete and retry.
+-   DB atomic UPDATE with rowcount check prevents parallel elicitation for the same OIDC sub.
+-   TTL enforcement via `updated_at >= cutoff` clause in every state transition — no separate sweep task.
+-   Telethon MTProto auto-serializes requests per session file — no lockfile needed.
 
-### TTL Sweep
+### TTL Enforcement
 
-Background task runs every 60 seconds:
--   Delete `setup_state` rows where `updated_at < now() - 5 minutes`.
--   Remove corresponding lockfiles.
--   Log count of expired sessions cleaned.
+TTL is enforced atomically at the query level — no background task:
+
+-   Every state transition includes `AND updated_at >= datetime('now', '-5 minutes')` in the WHERE clause.
+-   If the row has expired, the UPDATE affects zero rows → the caller receives a failure response.
+-   Expired states are effectively "fail-closed": the user must restart elicitation.
+-   No periodic sweep, no cron, no background task running on the process.
 
 ## Storage Layer
 
@@ -131,17 +135,6 @@ CREATE TABLE IF NOT EXISTS oidc_identity (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
--- Links OIDC identity to Telethon session file
-CREATE TABLE IF NOT EXISTS telegram_session (
-    oidc_key TEXT PRIMARY KEY REFERENCES oidc_identity(oidc_key),
-    session_filename TEXT NOT NULL,     -- e.g., "a1b2c3d4.session"
-    dc_id INTEGER NOT NULL,
-    server_address TEXT NOT NULL,
-    port INTEGER NOT NULL,
-    auth_key BLOB NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    last_used_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
 
 -- Elicitation state machine
 CREATE TABLE IF NOT EXISTS setup_state (
@@ -277,7 +270,7 @@ Per-user `.session` files retain all 5 Telethon tables:
 -   `update_state` — PTS/QTS/seq for gap handling.
 -   `version` — Telethon internal schema version.
 
-These are NOT migrated to the shared DB. They remain as-is in `{data_dir}/sessions/`.
+These are NOT migrated to the shared DB. They remain as-is in `~/.config/fast-mcp-telegram/sessions/` (configurable via `TG_SESSION_DIR`).
 
 ## Environment Variables
 
@@ -286,6 +279,7 @@ These are NOT migrated to the shared DB. They remain as-is in `{data_dir}/sessio
 | `TG_OIDC_ISSUER`      | Yes*     | —                  | OIDC issuer URL (e.g., `https://dev-xxx.auth0.com/`) |
 | `TG_OIDC_AUDIENCE`    | Yes*     | —                  | Expected audience claim value        |
 | `TG_DATABASE_URL`     | No       | `./data/auth.db`   | SQLite database path                 |
+| `TG_SESSION_DIR`      | No       | `~/.config/fast-mcp-telegram/sessions/` | Telethon session file directory |
 | `ACL_DENY_UNLISTED_PRINCIPALS` | No | `false`      | Deny access if principal not in ACL  |
 
 \* Required only when OIDC auth is enabled. Stdio/bot-token modes don't need these.
@@ -333,8 +327,8 @@ Script reads bearer→telegram mapping from legacy config, inserts corresponding
 -   Spin up test OIDC provider (Keycloak in Docker).
 -   Full sign-in flow: token → elicitation → session creation → ACL check.
 -   Re-auth flow: token → DB lookup → skip elicitation.
--   Concurrent sign-in: verify lockfile + single-flight prevent races.
--   TTL sweep: confirm expired states cleaned after 5 min.
+-   Concurrent sign-in: verify atomic UPDATE prevents races.
+-   TTL expiry: confirm expired states rejected on state transition.
 
 ### Manual QA Checklist
 
@@ -344,6 +338,73 @@ Script reads bearer→telegram mapping from legacy config, inserts corresponding
 -   [ ] Server restart mid-elicitation: state recovered from DB.
 -   [ ] ACL deny: OIDC user not in YAML gets rejected with clear error.
 -   [ ] Stdio mode: no OIDC env vars needed, works as before.
+
+## Phase 1 Sub-phases (Storage Layer)
+
+Phase 1 is split into four sub-phases. Each follows the coding process (TDD, no human gates until Phase 1 is complete).
+
+### 1.1 DB Schema & Migrations
+
+**Goal:** Create tables and migration runner.
+
+1.  Write failing test: `test_migrations_create_tables` — verifies all 3 tables exist after `run_migrations()`.
+2.  Write failing test: `test_schema_version_tracking` — verifies `schema_version` row inserted per migration.
+3.  Implement `src/auth/migrations/001_initial_schema.sql` with CREATE TABLE statements from Storage Layer section.
+4.  Implement `src/auth/db.py`: `run_migrations()`, `get_connection()` context manager.
+5.  Pass tests.
+6.  Write failing test: `test_migration_idempotency` — running migrations twice doesn't fail or duplicate rows.
+7.  Pass tests.
+
+**Artifacts:** `src/auth/db.py`, `src/auth/migrations/001_initial_schema.sql`, `tests/test_db.py`.
+
+### 1.2 OIDC Identity CRUD
+
+**Goal:** Insert/query/update `oidc_identity` rows.
+
+1.  Write failing test: `test_insert_oidc_identity` — insert row, query back, verify fields.
+2.  Write failing test: `test_get_oidc_identity_by_key` — returns None for missing key.
+3.  Write failing test: `test_update_oidc_identity_timestamp` — updated_at changes on update.
+4.  Implement `src/auth/queries/oidc_identity.py`: `insert_identity()`, `get_identity()`, `update_identity()`.
+5.  Pass tests.
+6.  Write failing test: `test_unique_oidc_key_constraint` — duplicate insert raises IntegrityError.
+7.  Pass tests.
+
+**Artifacts:** `src/auth/queries/oidc_identity.py`, `tests/test_oidc_identity_queries.py`.
+
+### 1.3 Setup State Machine Persistence
+
+**Goal:** Persist elicitation state with TTL support.
+
+1.  Write failing test: `test_create_setup_state` — initial state WAITING_PHONE.
+2.  Write failing test: `test_transition_state` — WAITING_PHONE → WAITING_CODE updates row.
+3.  Write failing test: `test_ttl_expiry_query` — `get_active_states(older_than=5min)` returns expired rows.
+4.  Write failing test: `test_delete_expired_states` — removes rows + returns count.
+5.  Implement `src/auth/queries/setup_state.py`: `create_state()`, `transition_state()`, `get_active_states()`, `delete_expired()`.
+6.  Pass tests.
+7.  Write failing test: `test_retry_count_increment` — increments on failed code/password attempt.
+8.  Pass tests.
+
+**Artifacts:** `src/auth/queries/setup_state.py`, `tests/test_setup_state_queries.py`.
+
+### 1.4 Telegram Session Metadata & Legacy Migration Script
+
+**Goal:** Provide bearer→OIDC linking script.
+
+1.  Write failing test: `test_migrate_legacy_script` — reads YAML, inserts placeholder rows.
+2.  Implement `scripts/migrate_legacy.py`.
+3.  Pass tests.
+4.  Manual QA: run script against sample legacy_tokens.yaml, verify DB contents.
+
+**Artifacts:** `scripts/migrate_legacy.py`, `tests/test_migrate_legacy.py`.
+
+### Phase 1 Completion Gate
+
+After all 4 sub-phases pass:
+-   Run full test suite (`pytest`).
+-   Run linter (`ruff check src/ tests/`).
+-   Human review PR.
+-   Merge to main.
+-   Proceed to Phase 2 (JWKS caching).
 
 ## Open Questions (Deferred)
 
@@ -358,5 +419,5 @@ Script reads bearer→telegram mapping from legacy config, inserts corresponding
 -   [ADR 0002: OIDC Self-Service Auth](../adr/0002-oidc-self-service-auth.md)
 -   [ADR 0001: Agent-Scoped Session ACL](../adr/0001-agent-scoped-session-acl.md)
 -   [ACL Design Brief](./acl-design-brief.md)
--   [FastMCP OAuthProvider Docs](https://gofastmcp.com/servers/auth)
+-   [FastMCP JWTVerifier Docs](https://gofastmcp.com/servers/auth)
 -   [Telethon Session Internals](https://docs.telethon.dev/en/stable/concepts/sessions.html)

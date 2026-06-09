@@ -67,6 +67,7 @@ flowchart LR
 | `feature/acl` | Trust | Session ACL implementation and design docs |
 | `feature/evals` | QA / Gategrid | [evals/](../evals/), [gategrid-eval.yml](../.github/workflows/gategrid-eval.yml) |
 | `feature/telemetry` | Telemetry | *Planned* — production observability for QA triage |
+| `feature/oidc-phase1-storage` | OIDC | **POSTPONED** — OIDC + elicitation storage layer. Superseded by QR-login auth. See [ADR 0004](adr/0004-qr-login-auth.md) |
 
 ## Decisions (2026-05-26)
 
@@ -93,6 +94,8 @@ flowchart LR
 | 9. Smithery URL-based listing | In progress | Infrastructure | — | Register tg-mcp.l1979.ru on Smithery as URL-based deployment |
 | 10. Database session storage | Planned | Infrastructure | — | Replace file-based .session with PostgreSQL/Redis storage |
 | 11. Smithery Hosted migration | Planned | Infrastructure | — | Move from URL-based to Smithery-hosted containers |
+| 12. OIDC self-service Phase 1 | **Postponed** | OIDC | `feature/oidc-phase1-storage` | Storage layer for OIDC + elicitation. Superseded by QR login. See [ADR 0004](adr/0004-qr-login-auth.md) |
+| 13. QR login auth | **Designing** | Auth | `feature/qr-login-auth` | Replace OIDC/elicitation with Telethon QR login. See [ADR 0004](adr/0004-qr-login-auth.md) |
 
 ## Shipped on `master`
 
@@ -152,7 +155,8 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 | Prompt-injection scanner | Trust | After ACL + QA coverage |
 | OAuth2 / IdP | Enterprise | Federation path |
 | **External session storage** (PostgreSQL / Redis) | Infrastructure | **Phase 2 of Smithery plan.** Persistent Telethon sessions for ephemeral deployments (Smithery Hosted). Options: PostgreSQL-backed session store or Redis-based StringSession cache. Unblocks userbot scenarios in hosted Docker environments. See [research/session-storage-design.md](research/session-storage-design.md) |
-| **Setup via agent dialog** | Infrastructure | OAuth + interactive MCP-based phone/code elicitation for remote deployment setup (Telegram login via agent dialog) |
+| **QR login auth** | Auth | Replace OIDC/elicitation with Telethon's `client.qr_login()` for session creation. Single unauthenticated tool behavior: all tools guide to QR/web setup. See [ADR 0004](adr/0004-qr-login-auth.md) |
+| **Setup via agent dialog** | Infrastructure | ⛔ **SUPERSEDED** by QR login approach (see [ADR 0004](adr/0004-qr-login-auth.md)) — OIDC + MCP elicitation replaced by Telethon QR login |
 | **Remote file upload (base64)** ✅ PR #103, #104, #105 | Features | `data:...;base64` inline payloads in `files` param (all modes). `;filename=name.ext` preserves original names. Images sent as inline photos, docs as documents. `tg-mcp-call` auto-inlines local paths as data: URIs. |
 | Stdio path sandbox | Trust | Local stdio users |
 | Multi-replica attachment tickets | Ops | Shared ticket store |
