@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Optional
 
 from .queries import oidc_identity as id_queries
-from .queries import setup_state as ss_queries
 from . import db
 from .elicitation_state_machine import (
     ElicitResult,
@@ -87,7 +86,10 @@ def _fetch_session_metadata(
 def _save_session_file(oidc_key: str, session_string: str) -> str:
     """Write Telethon session string to disk and return the file path."""
     safe_name = hashlib.sha256(oidc_key.encode()).hexdigest()[:16]
-    session_dir = os.environ.get("TG_SESSION_DIR", ".sessions")
+    session_dir = os.environ.get(
+        "TG_SESSION_DIR",
+        str(Path.home() / ".config" / "fast-mcp-telegram" / "sessions"),
+    )
     Path(session_dir).mkdir(parents=True, exist_ok=True)
     session_file = Path(session_dir) / f"oidc_{safe_name}.session"
     session_file.write_text(session_string)
@@ -178,12 +180,13 @@ async def oidc_setup_start(
     # Store sub/issuer in metadata for later retrieval
     if result.success and result.new_state == ElicitState.WAITING_PHONE:
         meta = {"oidc_sub": oidc_sub, "oidc_issuer": oidc_issuer}
-        ss_queries.transition_state(
-            oidc_key,
-            ElicitState.WAITING_PHONE.value,
-            metadata=json.dumps(meta),
-            db_path=db_path,
-        )
+        with db.get_connection(db_path) as conn:
+            conn.execute(
+                "UPDATE setup_state SET metadata = ?, "
+                "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
+                "WHERE oidc_key = ?",
+                (json.dumps(meta), oidc_key),
+            )
     return _result_to_dict(result)
 
 
@@ -212,12 +215,13 @@ async def oidc_setup_phone(
 
         # Store phone_code_hash in metadata for later verification
         meta = {"phone_code_hash": code_result.phone_code_hash, "phone_number": phone}
-        ss_queries.transition_state(
-            oidc_key,
-            ElicitState.WAITING_CODE.value,
-            metadata=json.dumps(meta),
-            db_path=db_path,
-        )
+        with db.get_connection(db_path) as conn:
+            conn.execute(
+                "UPDATE setup_state SET metadata = ?, "
+                "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
+                "WHERE oidc_key = ?",
+                (json.dumps(meta), oidc_key),
+            )
         return _result_to_dict(result)
 
     except RuntimeError as e:

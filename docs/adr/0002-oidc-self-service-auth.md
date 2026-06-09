@@ -51,6 +51,8 @@ Implement OIDC-based self-service authentication using FastMCP's built-in `JWTVe
 -   TTL (5 minutes) enforced atomically by the state machine via `WHERE updated_at >= ?` on every UPDATE. No separate TTL sweep task — rows are never deleted outside the elicitation flow. `EXPIRED` state set by the state machine when a user acts on a stale session; `FAILED` set on excessive retries or TTL-less errors.
 -   No explicit concurrent-sign-in control. Telethon's MTProto transport serializes API calls over a single TCP connection — only one `sign_in()` per `phone_code_hash` can succeed at the transport level. The DB atomic `UPDATE` prevents double-insertion. The double-`submit_phone` edge case (two parallel `send_code()` calls overwriting the `phone_code_hash`) is accepted as UX-grade risk (negligible probability, no data integrity impact).
 -   Re-elicit once on wrong code/password, then error.
+-   `get_state_row(oidc_key, db_path)` — public row-level query returning the full row dict (state, phone_number, metadata, updated_at, retry_count). Used by `telegram_auth_service.py` for diagnostic lookups and by `_handle_failed_update()` when an atomic UPDATE misses. Read-only — no state transition.
+-   `metadata` — TEXT column in `setup_state` storing ephemeral JSON context across state transitions. Set by `oidc_setup_start` (stores OIDC sub/issuer for later identity creation) and `oidc_setup_phone` (stores phone_code_hash for code verification). Decoded by `_fetch_session_metadata()` in `elicitation_tools.py`. Not part of the formal state machine — a convenience column for transient auth data.
 
 ### 5. Migration Strategy
 

@@ -76,7 +76,10 @@ class TelegramAuthService:
                 f"Set TG_API_ID and TG_API_HASH for Telethon sign-in."
             ) from e
         self._session_dir = Path(
-            session_dir or os.environ.get("TG_SESSION_DIR", ".sessions")
+            session_dir or os.environ.get(
+                "TG_SESSION_DIR",
+                str(Path.home() / ".config" / "fast-mcp-telegram" / "sessions"),
+            )
         )
         self._session_dir.mkdir(parents=True, exist_ok=True)
 
