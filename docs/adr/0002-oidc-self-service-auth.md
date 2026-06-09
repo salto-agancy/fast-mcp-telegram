@@ -47,7 +47,8 @@ Implement OIDC-based self-service authentication using FastMCP's built-in `JWTVe
 ### 4. Elicitation State Machine
 
 -   Multi-round sign-in: phone number → verification code → optional password.
--   State persisted in `setup_state` table with 5-minute TTL.
+-   States: `WAITING_PHONE` → `WAITING_CODE` → `WAITING_PASS` → `COMPLETED`; any state → `EXPIRED` (after TTL); `FAILED` on excessive retries or non-recoverable errors.
+-   TTL (5 minutes) enforced atomically by the state machine via `WHERE updated_at >= ?` on every UPDATE. No separate TTL sweep task — rows are never deleted outside the elicitation flow. `EXPIRED` state set by the state machine when a user acts on a stale session; `FAILED` set on excessive retries or TTL-less errors.
 -   No explicit concurrent-sign-in control. Telethon's MTProto transport serializes API calls over a single TCP connection — only one `sign_in()` per `phone_code_hash` can succeed at the transport level. The DB atomic `UPDATE` prevents double-insertion. The double-`submit_phone` edge case (two parallel `send_code()` calls overwriting the `phone_code_hash`) is accepted as UX-grade risk (negligible probability, no data integrity impact).
 -   Re-elicit once on wrong code/password, then error.
 
@@ -70,7 +71,7 @@ Implement OIDC-based self-service authentication using FastMCP's built-in `JWTVe
 ### Negative
 
 -   ⚠️ Opaque filenames for session files (hash-based, not human-readable).
--   ⚠️ Elicitation complexity: state machine, TTL sweep.
+-   ⚠️ Elicitation complexity: state machine with TTL enforcement, 6 states, retry tracking.
 -   ⚠️ New dependency on SaaS OIDC provider (Auth0/Clerk/WorkOS).
 -   ⚠️ Migration window requires dual-auth support.
 
@@ -126,8 +127,7 @@ Rejected: Originally planned as a DB mirror of Telethon session metadata (`dc_id
 
 ### Phase 3: Elicitation State Machine (`feature/oidc-elicitation`)
 
--   Sign-in flow controller.
--   TTL sweep background task.
+-   Sign-in flow controller with atomic TTL-aware state transitions.
 -   No explicit concurrency control — relies on Telethon MTProto serialization + DB atomic writes.
 -   Error handling and re-elicit logic.
 

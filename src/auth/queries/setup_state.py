@@ -68,37 +68,6 @@ def get_all_active_states(db_path: Optional[str] = None) -> list[sqlite3.Row]:
         ).fetchall()
 
 
-def get_expired_states(
-    older_than_seconds: int,
-    db_path: Optional[str] = None,
-) -> list[sqlite3.Row]:
-    """Return states whose updated_at is older than *older_than_seconds* (expired by TTL)."""
-    with get_connection(db_path) as conn:
-        return conn.execute(
-            """
-            SELECT * FROM setup_state
-            WHERE updated_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ? || ' seconds')
-            """,
-            (f"-{older_than_seconds}",),
-        ).fetchall()
-
-
-def delete_expired(
-    older_than_seconds: int,
-    db_path: Optional[str] = None,
-) -> int:
-    """Delete states older than threshold. Returns number of deleted rows."""
-    with get_connection(db_path) as conn:
-        cursor = conn.execute(
-            """
-            DELETE FROM setup_state
-            WHERE updated_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ? || ' seconds')
-            """,
-            (f"-{older_than_seconds}",),
-        )
-        return cursor.rowcount
-
-
 def increment_retry_count(
     oidc_key: str,
     db_path: Optional[str] = None,

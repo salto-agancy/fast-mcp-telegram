@@ -9,9 +9,7 @@ import pytest
 from src.auth.db import run_migrations
 from src.auth.queries.setup_state import (
     create_state,
-    delete_expired,
     get_all_active_states,
-    get_expired_states,
     increment_retry_count,
     transition_state,
 )
@@ -128,74 +126,6 @@ class TestSetupStatePersistence:
         assert "completed" not in keys
         assert "failed" not in keys
 
-    def test_ttl_query_includes_non_waiting_when_expired(self, db: str) -> None:
-        """TTL path returns expired COMPLETED/FAILED rows."""
-        create_state(oidc_key="old_completed", db_path=db)
-        transition_state(oidc_key="old_completed", new_state="COMPLETED", db_path=db)
-        create_state(oidc_key="old_failed", db_path=db)
-        transition_state(oidc_key="old_failed", new_state="FAILED", db_path=db)
-        create_state(oidc_key="fresh_completed", db_path=db)
-        transition_state(oidc_key="fresh_completed", new_state="COMPLETED", db_path=db)
-
-        from src.auth.db import get_connection
-        with get_connection(db) as conn:
-            old_time = (datetime.now(timezone.utc) - timedelta(minutes=10)).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            )
-            conn.execute(
-                "UPDATE setup_state SET updated_at = ? WHERE oidc_key IN (?, ?)",
-                (old_time, "old_completed", "old_failed"),
-            )
-
-        expired = get_expired_states(older_than_seconds=300, db_path=db)
-        keys = {s["oidc_key"] for s in expired}
-        assert "old_completed" in keys
-        assert "old_failed" in keys
-        assert "fresh_completed" not in keys
-
-    def test_ttl_expiry_query(self, db: str) -> None:
-        """get_expired_states(older_than=5min) returns expired rows."""
-        create_state(oidc_key="old", db_path=db)
-        create_state(oidc_key="new", db_path=db)
-
-        from src.auth.db import get_connection
-        with get_connection(db) as conn:
-            old_time = (datetime.now(timezone.utc) - timedelta(minutes=6)).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            )
-            conn.execute(
-                "UPDATE setup_state SET updated_at = ? WHERE oidc_key = ?",
-                (old_time, "old"),
-            )
-
-        expired = get_expired_states(older_than_seconds=300, db_path=db)
-        keys = {s["oidc_key"] for s in expired}
-        assert "old" in keys
-        assert "new" not in keys
-
-    def test_delete_expired_states(self, db: str) -> None:
-        """Removes expired rows and returns count."""
-        create_state(oidc_key="exp1", db_path=db)
-        create_state(oidc_key="exp2", db_path=db)
-        create_state(oidc_key="fresh", db_path=db)
-
-        from src.auth.db import get_connection
-        with get_connection(db) as conn:
-            old_time = (datetime.now(timezone.utc) - timedelta(minutes=10)).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            )
-            conn.execute(
-                "UPDATE setup_state SET updated_at = ? WHERE oidc_key IN ('exp1','exp2')",
-                (old_time,),
-            )
-
-        count = delete_expired(older_than_seconds=300, db_path=db)
-        assert count == 2
-
-        remaining = get_all_active_states(db_path=db)
-        assert len(remaining) == 1
-        assert remaining[0]["oidc_key"] == "fresh"
-
     def test_retry_count_increment(self, db: str) -> None:
         """Increments retry_count on failed attempt."""
         create_state(oidc_key="retry", db_path=db)
@@ -207,37 +137,3 @@ class TestSetupStatePersistence:
         row = next(s for s in states if s["oidc_key"] == "retry")
         assert row["retry_count"] == 2
 
-
-class TestSplitQueryFunctions:
-    """Direct tests for get_all_active_states() and get_expired_states()."""
-
-    def test_get_all_active_states_excludes_terminal(self, db: str) -> None:
-        """get_all_active_states returns only non-COMPLETED/FAILED rows."""
-        create_state(oidc_key="active", db_path=db)
-        create_state(oidc_key="done", db_path=db)
-        transition_state(oidc_key="done", new_state="COMPLETED", db_path=db)
-
-        states = get_all_active_states(db_path=db)
-        keys = {s["oidc_key"] for s in states}
-        assert "active" in keys
-        assert "done" not in keys
-
-    def test_get_expired_states_older_than_threshold(self, db: str) -> None:
-        """get_expired_states returns rows older than threshold."""
-        create_state(oidc_key="young", db_path=db)
-        create_state(oidc_key="ancient", db_path=db)
-
-        from src.auth.db import get_connection
-        with get_connection(db) as conn:
-            old_time = (datetime.now(timezone.utc) - timedelta(minutes=10)).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            )
-            conn.execute(
-                "UPDATE setup_state SET updated_at = ? WHERE oidc_key = ?",
-                (old_time, "ancient"),
-            )
-
-        expired = get_expired_states(older_than_seconds=300, db_path=db)
-        keys = {s["oidc_key"] for s in expired}
-        assert "ancient" in keys
-        assert "young" not in keys
