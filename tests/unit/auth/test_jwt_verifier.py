@@ -186,26 +186,26 @@ class TestVerifyOidcToken:
         """JWKS client is cached for TTL window, reused across verify calls."""
         token = sign_token(valid_payload)
 
-        # First call — creates cache entry
-        verify_oidc_token(
-            token,
-            issuer="https://auth.example.com/",
-            audience="fast-mcp-telegram",
-        )
+        with patch("src.auth.jwt_verifier.PyJWKClient", return_value=mock_jwks_client) as mock_cls:
+            # First call — creates cache entry
+            verify_oidc_token(
+                token,
+                issuer="https://auth.example.com/",
+                audience="fast-mcp-telegram",
+            )
 
-        # Second call — should reuse cached client
-        verify_oidc_token(
-            token,
-            issuer="https://auth.example.com/",
-            audience="fast-mcp-telegram",
-        )
+            # Second call — should reuse cached client
+            verify_oidc_token(
+                token,
+                issuer="https://auth.example.com/",
+                audience="fast-mcp-telegram",
+            )
 
-        # PyJWKClient should be cached for the TTL window; if the cache
-        # is bypassed, the underlying signer is fetched again. We assert
-        # the signer is fetched twice (once per call) but the client is
-        # reused across calls.
-        # We patched it, so check the mock call count
-        assert mock_jwks_client.get_signing_key_from_jwt.call_count == 2
+            # PyJWKClient should be cached for the TTL window. We assert:
+            # 1. The class is constructed exactly once (client reuse proven)
+            # 2. The signer is fetched once per call (TTL-aware cache, not signer cache)
+            assert mock_cls.call_count == 1
+            assert mock_jwks_client.get_signing_key_from_jwt.call_count == 2
 
     def test_missing_sub_claim_returns_none(
         self, sign_token, mock_jwks_client
