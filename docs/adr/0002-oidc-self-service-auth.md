@@ -48,7 +48,7 @@ Implement OIDC-based self-service authentication using FastMCP's built-in `OAuth
 
 -   Multi-round sign-in: phone number → verification code → optional password.
 -   State persisted in `setup_state` table with 5-minute TTL.
--   Concurrent sign-in protection via `{oidc_key}.setup.lock` lockfile + in-process single-flight.
+-   No explicit concurrent-sign-in control. Telethon's MTProto transport serializes API calls over a single TCP connection — only one `sign_in()` per `phone_code_hash` can succeed at the transport level. The DB atomic `UPDATE` prevents double-insertion. The double-`submit_phone` edge case (two parallel `send_code()` calls overwriting the `phone_code_hash`) is accepted as UX-grade risk (negligible probability, no data integrity impact).
 -   Re-elicit once on wrong code/password, then error.
 
 ### 5. Migration Strategy
@@ -70,7 +70,7 @@ Implement OIDC-based self-service authentication using FastMCP's built-in `OAuth
 ### Negative
 
 -   ⚠️ Opaque filenames for session files (hash-based, not human-readable).
--   ⚠️ Elicitation complexity: state machine, TTL sweep, concurrency control.
+-   ⚠️ Elicitation complexity: state machine, TTL sweep.
 -   ⚠️ New dependency on SaaS OIDC provider (Auth0/Clerk/WorkOS).
 -   ⚠️ Migration window requires dual-auth support.
 
@@ -124,7 +124,7 @@ Rejected: No clear use case for multi-tenant restriction in v1. Single-tenant Sa
 
 -   Sign-in flow controller.
 -   TTL sweep background task.
--   Lockfile + single-flight concurrency control.
+-   No explicit concurrency control — relies on Telethon MTProto serialization + DB atomic writes.
 -   Error handling and re-elicit logic.
 
 ### Phase 4: Major Version Cutover (`feature/oidc-major-cutover`)
