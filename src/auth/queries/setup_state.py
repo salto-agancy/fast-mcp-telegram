@@ -22,6 +22,12 @@ def create_state(
         )
 
 
+_TRANSITIONABLE_FIELDS = {
+    "tg_code_hash",
+    "metadata",
+}
+
+
 def transition_state(
     oidc_key: str,
     new_state: str,
@@ -29,24 +35,29 @@ def transition_state(
     metadata: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> None:
-    """Transition to a new state, optionally updating code hash or metadata."""
-    fields = ["state = ?", "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"]
-    values: list = [new_state]
+    """Transition to a new state, optionally updating code hash or metadata.
 
+    Uses a whitelist of allowed column names to prevent SQL injection.
+    All values are passed as bound parameters.
+    """
+    updates: dict[str, object] = {"state": new_state}
     if tg_code_hash is not None:
-        fields.append("tg_code_hash = ?")
-        values.append(tg_code_hash)
+        updates["tg_code_hash"] = tg_code_hash
     if metadata is not None:
-        fields.append("metadata = ?")
-        values.append(metadata)
+        updates["metadata"] = metadata
 
-    values.append(oidc_key)
+    # Whitelist check for optional fields
+    for col in updates:
+        if col not in _TRANSITIONABLE_FIELDS and col != "state":
+            raise ValueError(f"Invalid column name: {col}")
 
+    set_clauses = [f"{col} = ?" for col in updates]
+    set_clauses.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')")
+    values = list(updates.values()) + [oidc_key]
+
+    sql = f"UPDATE setup_state SET {', '.join(set_clauses)} WHERE oidc_key = ?"
     with get_connection(db_path) as conn:
-        conn.execute(
-            f"UPDATE setup_state SET {', '.join(fields)} WHERE oidc_key = ?",
-            values,
-        )
+        conn.execute(sql, values)
 
 
 def get_active_states(

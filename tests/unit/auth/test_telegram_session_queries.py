@@ -138,6 +138,7 @@ class TestLegacyMigrationScript:
         import subprocess
         import sys
 
+        project_root = Path(__file__).resolve().parents[3]
         result = subprocess.run(
             [
                 sys.executable,
@@ -149,7 +150,7 @@ class TestLegacyMigrationScript:
             ],
             capture_output=True,
             text=True,
-            cwd="/root/fast-mcp-telegram",
+            cwd=str(project_root),
         )
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 

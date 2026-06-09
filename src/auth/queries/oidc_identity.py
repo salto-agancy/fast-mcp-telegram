@@ -30,13 +30,21 @@ def insert_identity(
         )
 
 
-def get_identity(oidc_key: str, db_path: Optional[str] = None) -> Optional[sqlite3.Row]:
-    """Retrieve an OIDC identity by key. Returns None if not found."""
+def get_identity(oidc_key: str, db_path: Optional[str] = None) -> Optional[dict]:
+    """Retrieve an OIDC identity by key. Returns dict or None if not found."""
     with get_connection(db_path) as conn:
-        return conn.execute(
+        row = conn.execute(
             "SELECT * FROM oidc_identity WHERE oidc_key = ?",
             (oidc_key,),
         ).fetchone()
+        return dict(row) if row else None
+
+
+_UPDATABLE_FIELDS = {
+    "telegram_username",
+    "telegram_phone",
+    "telegram_user_id",
+}
 
 
 def update_identity(
@@ -46,28 +54,31 @@ def update_identity(
     telegram_user_id: Optional[int] = None,
     db_path: Optional[str] = None,
 ) -> None:
-    """Update Telegram identity fields and refresh updated_at timestamp."""
-    fields = []
-    values: list = []
+    """Update Telegram identity fields and refresh updated_at timestamp.
 
+    Uses a whitelist of allowed column names to prevent SQL injection.
+    All values are passed as bound parameters.
+    """
+    updates: dict[str, object] = {}
     if telegram_username is not None:
-        fields.append("telegram_username = ?")
-        values.append(telegram_username)
+        updates["telegram_username"] = telegram_username
     if telegram_phone is not None:
-        fields.append("telegram_phone = ?")
-        values.append(telegram_phone)
+        updates["telegram_phone"] = telegram_phone
     if telegram_user_id is not None:
-        fields.append("telegram_user_id = ?")
-        values.append(telegram_user_id)
+        updates["telegram_user_id"] = telegram_user_id
 
-    if not fields:
+    if not updates:
         return
 
-    fields.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')")
-    values.append(oidc_key)
+    # Whitelist check: only allow known column names
+    for col in updates:
+        if col not in _UPDATABLE_FIELDS:
+            raise ValueError(f"Invalid column name: {col}")
 
+    set_clauses = [f"{col} = ?" for col in updates]
+    set_clauses.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')")
+    values = list(updates.values()) + [oidc_key]
+
+    sql = f"UPDATE oidc_identity SET {', '.join(set_clauses)} WHERE oidc_key = ?"
     with get_connection(db_path) as conn:
-        conn.execute(
-            f"UPDATE oidc_identity SET {', '.join(fields)} WHERE oidc_key = ?",
-            values,
-        )
+        conn.execute(sql, values)
