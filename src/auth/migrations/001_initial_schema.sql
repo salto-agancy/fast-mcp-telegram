@@ -1,3 +1,7 @@
+-- Timestamp convention: all timestamps are ISO 8601 UTC with explicit Z suffix
+-- Format: YYYY-MM-DDTHH:MM:SSZ (e.g. 2026-06-09T04:48:39Z)
+-- Enforced at application layer; SQLite stores as TEXT.
+
 -- OIDC identity mapping
 CREATE TABLE IF NOT EXISTS oidc_identity (
     oidc_key TEXT PRIMARY KEY,
@@ -25,7 +29,7 @@ CREATE TABLE IF NOT EXISTS telegram_session (
 -- Elicitation state machine
 CREATE TABLE IF NOT EXISTS setup_state (
     oidc_key TEXT PRIMARY KEY,
-    state TEXT NOT NULL CHECK (state IN ('WAITING_PHONE','WAITING_CODE','WAITING_PASS','COMPLETED','FAILED')),
+    state TEXT NOT NULL CHECK (state IN ('WAITING_PHONE','WAITING_CODE','WAITING_PASS','COMPLETED','FAILED','EXPIRED')),
     phone_number TEXT,
     tg_code_hash TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
