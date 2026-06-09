@@ -21,7 +21,7 @@ We need an authentication layer that supports self-service onboarding, integrate
 
 ## Decision
 
-Implement OIDC-based self-service authentication using FastMCP's built-in `OAuthProvider`, with the following architectural choices:
+Implement OIDC-based self-service authentication using FastMCP's built-in `JWTVerifier`, with the following architectural choices:
 
 ### 1. Storage: stdlib sqlite3 + Option B
 
@@ -37,9 +37,9 @@ Implement OIDC-based self-service authentication using FastMCP's built-in `OAuth
 -   Principal resolution happens at runtime: OIDC token → DB lookup → Telegram identity → ACL match.
 -   Reuse existing `ACL_DENY_UNLISTED_PRINCIPALS` for default policy. No new `default_oidc_policy` variable.
 
-### 3. Auth Flow: FastMCP OAuthProvider
+### 3. Auth Flow: FastMCP JWTVerifier
 
--   Use FastMCP's built-in `OAuthProvider` for token verification and JWKS handling.
+-   Use FastMCP's built-in `JWTVerifier` for token verification and JWKS handling.
 -   Required env vars: `TG_OIDC_ISSUER`, `TG_OIDC_AUDIENCE`.
 -   Stdio transport skips OIDC entirely (env-configured single user).
 -   Bot API tokens skip OIDC (service accounts configured via env).
@@ -83,7 +83,7 @@ Implement OIDC-based self-service authentication using FastMCP's built-in `OAuth
 
 ### Custom JWT Verifier
 
-Rejected: FastMCP already provides battle-tested `OAuthProvider`. Building our own adds maintenance burden with no benefit.
+Rejected: FastMCP already provides battle-tested `JWTVerifier`. Building our own adds maintenance burden with no benefit.
 
 ### SQLAlchemy ORM
 
@@ -120,7 +120,7 @@ Rejected: Originally planned as a DB mirror of Telethon session metadata (`dc_id
 
 ### Phase 2: Verifier Integration (`feature/oidc-verifier`)
 
--   FastMCP `OAuthProvider` configuration.
+-   FastMCP `JWTVerifier` configuration.
 -   Principal-ID resolution middleware.
 -   Environment variable validation.
 
@@ -142,4 +142,4 @@ Rejected: Originally planned as a DB mirror of Telethon session metadata (`dc_id
 
 -   [ADR 0001: Agent-Scoped Session ACL](./0001-agent-scoped-session-acl.md)
 -   [OIDC Self-Service Design Brief](../research/oidc-self-service-design.md)
--   [FastMCP OAuthProvider Documentation](https://gofastmcp.com/servers/auth)
+-   [FastMCP JWTVerifier Documentation](https://gofastmcp.com/servers/auth#jwtverifier)
