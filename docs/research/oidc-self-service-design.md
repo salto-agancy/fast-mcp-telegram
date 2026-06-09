@@ -347,7 +347,7 @@ Script reads bearer→telegram mapping from legacy config, inserts corresponding
 
 ## Phase 1 Sub-phases (Storage Layer)
 
-Phase 1 is split into four sub-phases. Each follows the coding process (TDD, no human gates until Phase 1 complete).
+Phase 1 is split into four sub-phases. Each follows the coding process (TDD, no human gates until Phase 1 is complete).
 
 ### 1.1 DB Schema & Migrations
 

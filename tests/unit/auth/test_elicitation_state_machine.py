@@ -130,7 +130,7 @@ class TestRecordRetry:
         result = record_retry(oidc_key, db_path=clean_db)
         assert result.success is False
         assert result.new_state == ElicitState.WAITING_PHONE
-        assert "1 attempt" in result.message
+        assert "0 attempt" in result.message
 
     def test_fails_after_max_retries(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)

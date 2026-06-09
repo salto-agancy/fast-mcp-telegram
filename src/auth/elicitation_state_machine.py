@@ -218,7 +218,7 @@ def record_retry(oidc_key: str, db_path: Optional[str] = None) -> ElicitResult:
         )
 
     ss_queries.increment_retry_count(oidc_key, db_path=db_path)
-    remaining = MAX_RETRIES - current_retries
+    remaining = MAX_RETRIES - retries
     try:
         state_enum = ElicitState(current_state)
     except ValueError:

@@ -67,8 +67,14 @@ class TelegramAuthService:
         api_hash: str | None = None,
         session_dir: str | None = None,
     ) -> None:
-        self._api_id = api_id or int(os.environ["TG_API_ID"])
-        self._api_hash = api_hash or os.environ["TG_API_HASH"]
+        try:
+            self._api_id = api_id or int(os.environ["TG_API_ID"])
+            self._api_hash = api_hash or os.environ["TG_API_HASH"]
+        except KeyError as e:
+            raise KeyError(
+                f"Missing required env var: {e}. "
+                f"Set TG_API_ID and TG_API_HASH for Telethon sign-in."
+            ) from e
         self._session_dir = Path(
             session_dir or os.environ.get("TG_SESSION_DIR", ".sessions")
         )
