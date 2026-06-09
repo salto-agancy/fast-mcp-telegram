@@ -22,12 +22,6 @@ def create_state(
         )
 
 
-_TRANSITIONABLE_FIELDS = {
-    "tg_code_hash",
-    "metadata",
-}
-
-
 def transition_state(
     oidc_key: str,
     new_state: str,
@@ -46,25 +40,22 @@ def transition_state(
     updated within the last ``ttl_seconds`` — expired sessions are
     rejected at the DB level without a separate SELECT.
 
-    Uses a whitelist of allowed column names to prevent SQL injection.
     All values are passed as bound parameters.
 
     Returns True if a row was updated, False otherwise.
     """
-    updates: dict[str, object] = {"state": new_state}
+    set_clauses: list[str] = ["state = ?"]
+    values: list[object] = [new_state]
+
     if tg_code_hash is not None:
-        updates["tg_code_hash"] = tg_code_hash
+        set_clauses.append("tg_code_hash = ?")
+        values.append(tg_code_hash)
+
     if metadata is not None:
-        updates["metadata"] = metadata
+        set_clauses.append("metadata = ?")
+        values.append(metadata)
 
-    # Whitelist check for optional fields
-    for col in updates:
-        if col not in _TRANSITIONABLE_FIELDS and col != "state":
-            raise ValueError(f"Invalid column name: {col}")
-
-    set_clauses = [f"{col} = ?" for col in updates]
     set_clauses.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')")
-    values = list(updates.values())
 
     where_clauses: list[str] = []
     where_values: list[object] = []
@@ -80,7 +71,7 @@ def transition_state(
 
     all_values = values + where_values
 
-    # SAFETY: Column names come from _TRANSITIONABLE_FIELDS (hardcoded set).
+    # SAFETY: Column names are hardcoded in SET clauses.
     # WHERE conditions are bound parameters. Sourcery false positive.
     sql = (
         f"UPDATE setup_state SET {', '.join(set_clauses)} "
@@ -147,3 +138,80 @@ def increment_retry_count(
             """,
             (oidc_key,),
         )
+
+
+def create_setup_state(
+    oidc_key: str,
+    state: str,
+    phone_number: str | None = None,
+    metadata: dict | None = None,
+    db_path: str | None = None,
+) -> None:
+    """Create a new setup_state row (consolidated wrapper)."""
+    import json
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with get_connection(db_path) as conn:
+        conn.execute(
+            "INSERT INTO setup_state (oidc_key, state, phone_number, metadata, retry_count, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, 0, ?, ?)",
+            (oidc_key, state, phone_number, json.dumps(metadata) if metadata else None, now, now),
+        )
+
+
+def get_setup_state(oidc_key: str, db_path: str | None = None) -> dict | None:
+    """Fetch setup_state row as dict, or None if not found (consolidated)."""
+    with get_connection(db_path) as conn:
+        row = conn.execute(
+            "SELECT oidc_key, state, phone_number, tg_code_hash, retry_count, metadata, created_at, updated_at "
+            "FROM setup_state WHERE oidc_key = ?",
+            (oidc_key,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def update_setup_state(
+    oidc_key: str,
+    state: str,
+    phone_number: str | None = None,
+    tg_code_hash: str | None = None,
+    metadata: dict | None = None,
+    retry_count: int | None = None,
+    db_path: str | None = None,
+) -> None:
+    """Update state and related fields. Refreshes updated_at (consolidated)."""
+    import json
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    sets = ["state = ?", "updated_at = ?"]
+    params: list = [state, now]
+    if phone_number is not None:
+        sets.append("phone_number = ?")
+        params.append(phone_number)
+    if tg_code_hash is not None:
+        sets.append("tg_code_hash = ?")
+        params.append(tg_code_hash)
+    if metadata is not None:
+        sets.append("metadata = ?")
+        params.append(json.dumps(metadata))
+    if retry_count is not None:
+        sets.append("retry_count = ?")
+        params.append(retry_count)
+    params.append(oidc_key)
+    with get_connection(db_path) as conn:
+        # SAFETY: Column names from hardcoded SET clauses. Bound params. Sourcery false positive.
+        conn.execute(  # noqa: S608
+            f"UPDATE setup_state SET {', '.join(sets)} WHERE oidc_key = ?",
+            params,
+        )
+
+
+def expire_old_states(cutoff_iso: str, db_path: str | None = None) -> int:
+    """Mark sessions with updated_at before cutoff_iso as EXPIRED. Returns count (consolidated)."""
+    with get_connection(db_path) as conn:
+        cur = conn.execute(
+            "UPDATE setup_state SET state = 'EXPIRED' "
+            "WHERE updated_at < ? AND state NOT IN ('COMPLETED', 'FAILED', 'EXPIRED')",
+            (cutoff_iso,),
+        )
+        return cur.rowcount

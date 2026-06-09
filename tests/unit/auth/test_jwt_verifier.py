@@ -180,10 +180,10 @@ class TestVerifyOidcToken:
 
         assert result is None
 
-    def test_jwks_cached_within_ttl(
+    def test_jwks_caches_client_for_ttl(
         self, sign_token, valid_payload, mock_jwks_client
     ):
-        """JWKS client should be cached within TTL window."""
+        """JWKS client is cached for TTL window, reused across verify calls."""
         token = sign_token(valid_payload)
 
         # First call — creates cache entry
