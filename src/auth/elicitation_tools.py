@@ -57,6 +57,35 @@ def _result_to_dict(result: ElicitResult) -> dict:
     }
 
 
+def _fetch_session_metadata(
+    oidc_key: str, db_path: Optional[str] = None
+) -> Optional[dict]:
+    """Fetch and decode metadata JSON from setup_state.
+
+    Returns the metadata dict, or None if the session row doesn't exist.
+    Returns empty dict on decode failure or empty metadata.
+    """
+    with db.get_connection(db_path) as conn:
+        row = conn.execute(
+            "SELECT metadata FROM setup_state WHERE oidc_key = ?",
+            (oidc_key,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    if not row["metadata"]:
+        return {}
+
+    try:
+        meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
+        assert isinstance(meta, dict)
+        return meta
+    except (json.JSONDecodeError, TypeError, AssertionError):
+        logger.warning("Failed to decode metadata for oidc_key=%s, treating as empty", oidc_key[:8])
+        return {}
+
+
 def _save_session_file(oidc_key: str, session_string: str) -> str:
     """Write Telethon session string to disk and return the file path."""
     safe_name = hashlib.sha256(oidc_key.encode()).hexdigest()[:16]
@@ -220,24 +249,11 @@ async def oidc_setup_code(
         Dict with success, state, message, needs_2fa fields.
     """
     oidc_key = id_queries.make_oidc_key(oidc_sub, oidc_issuer)
-    # Fetch metadata for phone_number and phone_code_hash
-    with db.get_connection(db_path) as conn:
-        row = conn.execute(
-            "SELECT metadata FROM setup_state WHERE oidc_key = ?",
-            (oidc_key,),
-        ).fetchone()
-
-    if row is None:
+    meta = _fetch_session_metadata(oidc_key, db_path)
+    if meta is None:
         return _result_to_dict(
             ElicitResult(False, ElicitState.FAILED, "No active session.")
         )
-
-    meta = {}
-    if row["metadata"]:
-        try:
-            meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Failed to decode metadata for oidc_key=%s, treating as empty", oidc_key[:8])
 
     phone_number = meta.get("phone_number")
     phone_code_hash = meta.get("phone_code_hash")

@@ -54,6 +54,11 @@ def _is_expired(updated_at_iso: str) -> bool:
         return True
 
 
+def _ttl_cutoff() -> str:
+    """Return ISO timestamp of TTL_SECONDS ago for atomic TTL-aware updates."""
+    return (datetime.now(timezone.utc) - timedelta(seconds=TTL_SECONDS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _get_state_row(oidc_key: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Fetch current state row as dict via get_active_states or direct query."""
     with db.get_connection(db_path) as conn:
@@ -115,7 +120,7 @@ def submit_phone(oidc_key: str, phone: str, db_path: Optional[str] = None) -> El
     
     Uses atomic UPDATE with TTL check to avoid race with sweep task.
     """
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=TTL_SECONDS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cutoff = _ttl_cutoff()
     with db.get_connection(db_path) as conn:
         cur = conn.execute(
             "UPDATE setup_state SET state = ?, phone_number = ?, "
@@ -152,7 +157,7 @@ def submit_code(oidc_key: str, needs_2fa: bool = False, db_path: Optional[str] =
         db_path: Optional DB path override.
     """
     target_state = ElicitState.WAITING_PASS if needs_2fa else ElicitState.COMPLETED
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=TTL_SECONDS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cutoff = _ttl_cutoff()
     
     with db.get_connection(db_path) as conn:
         cur = conn.execute(
@@ -180,7 +185,7 @@ def submit_password(oidc_key: str, db_path: Optional[str] = None) -> ElicitResul
     
     Uses atomic UPDATE with TTL check to avoid race with sweep task.
     """
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=TTL_SECONDS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cutoff = _ttl_cutoff()
     with db.get_connection(db_path) as conn:
         cur = conn.execute(
             "UPDATE setup_state SET state = ?, "

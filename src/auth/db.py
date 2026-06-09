@@ -81,10 +81,3 @@ def get_connection(db_path: str | None = None) -> Generator[sqlite3.Connection, 
 # ---------------------------------------------------------------------------
 # setup_state CRUD — re-exported from queries module (source of truth)
 # ---------------------------------------------------------------------------
-
-from src.auth.queries.setup_state import (
-    create_setup_state,
-    get_setup_state,
-    update_setup_state,
-    expire_old_states,
-)

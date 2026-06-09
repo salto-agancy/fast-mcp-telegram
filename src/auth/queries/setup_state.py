@@ -82,29 +82,40 @@ def transition_state(
         return cursor.rowcount > 0
 
 
+def get_all_active_states(db_path: Optional[str] = None) -> list[sqlite3.Row]:
+    """Return all non-COMPLETED, non-FAILED states (for active session tracking)."""
+    with get_connection(db_path) as conn:
+        return conn.execute(
+            "SELECT * FROM setup_state WHERE state NOT IN ('COMPLETED', 'FAILED')"
+        ).fetchall()
+
+
+def get_expired_states(
+    older_than_seconds: int,
+    db_path: Optional[str] = None,
+) -> list[sqlite3.Row]:
+    """Return states whose updated_at is older than *older_than_seconds* (expired by TTL)."""
+    with get_connection(db_path) as conn:
+        return conn.execute(
+            """
+            SELECT * FROM setup_state
+            WHERE updated_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ? || ' seconds')
+            """,
+            (f"-{older_than_seconds}",),
+        ).fetchall()
+
+
 def get_active_states(
     older_than_seconds: int = 0,
     db_path: Optional[str] = None,
 ) -> list[sqlite3.Row]:
-    """Return all setup states.
+    """DEPRECATED: use :func:`get_all_active_states` or :func:`get_expired_states` instead.
 
-    If older_than_seconds > 0, only return rows whose updated_at is older
-    than that many seconds from now (for TTL sweep).
-    If older_than_seconds == 0, return all non-COMPLETED/FAILED states.
+    Kept for backward compatibility. Delegates to the appropriate split function.
     """
-    with get_connection(db_path) as conn:
-        if older_than_seconds > 0:
-            return conn.execute(
-                """
-                SELECT * FROM setup_state
-                WHERE updated_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ? || ' seconds')
-                """,
-                (f"-{older_than_seconds}",),
-            ).fetchall()
-        else:
-            return conn.execute(
-                "SELECT * FROM setup_state WHERE state NOT IN ('COMPLETED', 'FAILED')"
-            ).fetchall()
+    if older_than_seconds > 0:
+        return get_expired_states(older_than_seconds, db_path)
+    return get_all_active_states(db_path)
 
 
 def delete_expired(

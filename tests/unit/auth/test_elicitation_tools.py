@@ -21,6 +21,7 @@ from src.auth.elicitation_tools import (
 from src.auth.elicitation_state_machine import ElicitState
 from src.auth.queries import oidc_identity as id_queries
 from src.auth.queries.oidc_identity import make_oidc_key
+from src.auth.queries.setup_state import get_setup_state
 from src.auth.telegram_auth_service import SendCodeResult, SignInResult
 from src.auth import db
 
@@ -101,7 +102,7 @@ class TestOidcSetupPhone:
         assert result["success"] is True
         assert result["state"] == ElicitState.WAITING_CODE.value
 
-        state = db.get_setup_state(oidc_key, db_path=test_db)
+        state = get_setup_state(oidc_key, db_path=test_db)
         meta = json.loads(state["metadata"])
         assert meta["phone_code_hash"] == "hash123"
         assert meta["phone_number"] == "+1234567890"
