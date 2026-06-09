@@ -1,9 +1,21 @@
 """CRUD operations for the oidc_identity table."""
 
+import hashlib
 import sqlite3
 from typing import Optional
 
 from src.auth.db import get_connection
+
+
+def make_oidc_key(oidc_sub: str, oidc_issuer: str) -> str:
+    """Derive a deterministic OIDC identity key from sub + issuer.
+
+    Returns the first 32 hex chars of sha256(sub:issuer).
+    This is the canonical way to produce oidc_key values — all modules
+    MUST use this function to avoid hash mismatches.
+    """
+    raw = f"{oidc_sub}:{oidc_issuer}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
 def insert_identity(

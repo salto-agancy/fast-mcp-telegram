@@ -20,7 +20,6 @@ from src.auth.telegram_auth_service import (
     SendCodeResult,
     SignInResult,
     TelegramAuthService,
-    _lock_path,
 )
 
 
@@ -213,33 +212,8 @@ async def test_verify_password_wrong(svc):
 
 
 # ---------------------------------------------------------------------------
-# Concurrency lockfile
+# Concurrency: DB-based locking (state machine owns lock acquisition)
 # ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_send_code_lockfile_blocks_concurrent(svc):
-    """If lockfile exists, send_code raises immediately."""
-    lock = _lock_path("concurrent-key")
-    lock.parent.mkdir(parents=True, exist_ok=True)
-    lock.touch()
-
-    try:
-        with pytest.raises(RuntimeError, match="Concurrent sign-in"):
-            await svc.send_code("concurrent-key", "+123")
-    finally:
-        lock.unlink(missing_ok=True)
-
-
-@pytest.mark.asyncio
-async def test_lockfile_cleaned_after_send_code(svc):
-    """Lockfile is removed even on error."""
-    mock_client = AsyncMock()
-    mock_client.send_code_request = AsyncMock(side_effect=Exception("boom"))
-    mock_client.connect = AsyncMock()
-    mock_client.disconnect = AsyncMock()
-
-    with patch.object(svc, "_client", return_value=mock_client):
-        with pytest.raises(Exception):
-            await svc.send_code("cleanup-key", "+123")
-
-    assert not _lock_path("cleanup-key").exists()
+# Concurrency is enforced atomically in setup_state table (see
+# elicitation_state_machine tests).  TelegramAuthService is stateless
+# w.r.t. locking — caller must hold the DB lock before calling.

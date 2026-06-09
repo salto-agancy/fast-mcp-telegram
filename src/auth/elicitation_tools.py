@@ -88,13 +88,22 @@ def _record_session_metadata(
 
 def _save_identity_and_session(
     oidc_key: str,
+    oidc_sub: str,
+    oidc_issuer: str,
     sign_in_result,
     phone_number: str,
     db_path: Optional[str] = None,
 ) -> None:
-    """Persist OIDC identity mapping and Telethon session after successful sign-in."""
-    oidc_sub = oidc_key.split(":")[0] if ":" in oidc_key else oidc_key
-    oidc_issuer = oidc_key.split(":")[1] if ":" in oidc_key else "unknown"
+    """Persist OIDC identity mapping and Telethon session after successful sign-in.
+
+    Args:
+        oidc_key: Pre-hashed identity key (sha256 of sub:issuer).
+        oidc_sub: Raw OIDC subject claim from JWT.
+        oidc_issuer: Raw OIDC issuer URL from JWT.
+        sign_in_result: SignInResult with user_id, username, session_string.
+        phone_number: Telegram phone number used for verification.
+        db_path: Optional DB path override.
+    """
     id_queries.insert_identity(
         oidc_key=oidc_key,
         oidc_sub=oidc_sub,
@@ -109,16 +118,20 @@ def _save_identity_and_session(
         _record_session_metadata(oidc_key, session_file, db_path=db_path)
 
 
-async def oidc_setup_start(oidc_key: str, db_path: Optional[str] = None) -> dict:
+async def oidc_setup_start(
+    oidc_sub: str, oidc_issuer: str, db_path: Optional[str] = None
+) -> dict:
     """Initialize or resume an OIDC Telegram elicitation session.
 
     Args:
-        oidc_key: Hashed OIDC identity key (sub:issuer).
+        oidc_sub: Raw OIDC subject claim from JWT.
+        oidc_issuer: Raw OIDC issuer URL from JWT.
         db_path: Optional DB path override (for testing).
 
     Returns:
         Dict with success, state, message, needs_2fa fields.
     """
+    oidc_key = id_queries.make_oidc_key(oidc_sub, oidc_issuer)
     existing_identity = id_queries.get_identity(oidc_key, db_path=db_path)
     if existing_identity is not None:
         if existing_identity["telegram_username"]:
@@ -135,22 +148,33 @@ async def oidc_setup_start(oidc_key: str, db_path: Optional[str] = None) -> dict
         }
 
     result = start_elicitation(oidc_key, db_path=db_path)
+    # Store sub/issuer in metadata for later retrieval
+    if result.success and result.new_state == ElicitState.WAITING_PHONE:
+        meta = {"oidc_sub": oidc_sub, "oidc_issuer": oidc_issuer}
+        ss_queries.transition_state(
+            oidc_key,
+            ElicitState.WAITING_PHONE.value,
+            metadata=json.dumps(meta),
+            db_path=db_path,
+        )
     return _result_to_dict(result)
 
 
 async def oidc_setup_phone(
-    oidc_key: str, phone: str, db_path: Optional[str] = None
+    oidc_sub: str, oidc_issuer: str, phone: str, db_path: Optional[str] = None
 ) -> dict:
     """Submit phone number for Telegram verification.
 
     Args:
-        oidc_key: Hashed OIDC identity key.
+        oidc_sub: Raw OIDC subject claim.
+        oidc_issuer: Raw OIDC issuer URL.
         phone: Telegram phone number (e.g. +1234567890).
         db_path: Optional DB path override.
 
     Returns:
         Dict with success, state, message fields.
     """
+    oidc_key = id_queries.make_oidc_key(oidc_sub, oidc_issuer)
     result = submit_phone(oidc_key, phone, db_path=db_path)
     if not result.success:
         return _result_to_dict(result)
@@ -182,18 +206,20 @@ async def oidc_setup_phone(
 
 
 async def oidc_setup_code(
-    oidc_key: str, code: str, db_path: Optional[str] = None
+    oidc_sub: str, oidc_issuer: str, code: str, db_path: Optional[str] = None
 ) -> dict:
     """Submit Telegram verification code.
 
     Args:
-        oidc_key: Hashed OIDC identity key.
+        oidc_sub: Raw OIDC subject claim.
+        oidc_issuer: Raw OIDC issuer URL.
         code: Verification code from Telegram.
         db_path: Optional DB path override.
 
     Returns:
         Dict with success, state, message, needs_2fa fields.
     """
+    oidc_key = id_queries.make_oidc_key(oidc_sub, oidc_issuer)
     # Fetch metadata for phone_number and phone_code_hash
     with db.get_connection(db_path) as conn:
         row = conn.execute(
@@ -229,7 +255,9 @@ async def oidc_setup_code(
 
         if sign_in_result.success:
             if sign_in_result.next_state == "COMPLETED":
-                _save_identity_and_session(oidc_key, sign_in_result, phone_number, db_path)
+                _save_identity_and_session(
+                    oidc_key, oidc_sub, oidc_issuer, sign_in_result, phone_number, db_path
+                )
                 transition = submit_code(oidc_key, needs_2fa=False, db_path=db_path)
                 return _result_to_dict(transition)
             elif sign_in_result.next_state == "WAITING_PASS":
@@ -252,18 +280,20 @@ async def oidc_setup_code(
 
 
 async def oidc_setup_password(
-    oidc_key: str, password: str, db_path: Optional[str] = None
+    oidc_sub: str, oidc_issuer: str, password: str, db_path: Optional[str] = None
 ) -> dict:
     """Submit Telegram 2FA password.
 
     Args:
-        oidc_key: Hashed OIDC identity key.
+        oidc_sub: Raw OIDC subject claim.
+        oidc_issuer: Raw OIDC issuer URL.
         password: Telegram 2FA password.
         db_path: Optional DB path override.
 
     Returns:
         Dict with success, state, message fields.
     """
+    oidc_key = id_queries.make_oidc_key(oidc_sub, oidc_issuer)
     try:
         service = _get_auth_service()
         sign_in_result = await service.verify_password(oidc_key, password)
@@ -279,7 +309,9 @@ async def oidc_setup_password(
                 if row:
                     phone_number = row["phone_number"]
 
-            _save_identity_and_session(oidc_key, sign_in_result, phone_number or "", db_path)
+            _save_identity_and_session(
+                oidc_key, oidc_sub, oidc_issuer, sign_in_result, phone_number or "", db_path
+            )
             transition = submit_password(oidc_key, db_path=db_path)
             return _result_to_dict(transition)
 

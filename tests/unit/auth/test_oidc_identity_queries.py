@@ -99,3 +99,35 @@ class TestOidcIdentityCRUD:
                 telegram_user_id=2,
                 db_path=db,
             )
+
+
+class TestMakeOidcKey:
+    """OIDC key derivation — must be deterministic and collision-resistant."""
+
+    def test_deterministic(self) -> None:
+        """Same input always produces same key."""
+        from src.auth.queries.oidc_identity import make_oidc_key
+        k1 = make_oidc_key("user-123", "https://auth.example.com/")
+        k2 = make_oidc_key("user-123", "https://auth.example.com/")
+        assert k1 == k2
+
+    def test_different_sub_different_key(self) -> None:
+        """Different sub claims produce different keys."""
+        from src.auth.queries.oidc_identity import make_oidc_key
+        k1 = make_oidc_key("user-123", "https://auth.example.com/")
+        k2 = make_oidc_key("user-456", "https://auth.example.com/")
+        assert k1 != k2
+
+    def test_different_issuer_different_key(self) -> None:
+        """Same sub from different issuers produces different keys."""
+        from src.auth.queries.oidc_identity import make_oidc_key
+        k1 = make_oidc_key("user-123", "https://auth.example.com/")
+        k2 = make_oidc_key("user-123", "https://other.auth.com/")
+        assert k1 != k2
+
+    def test_key_length_is_32_hex(self) -> None:
+        """Key is 32 hex chars (first half of sha256)."""
+        from src.auth.queries.oidc_identity import make_oidc_key
+        k = make_oidc_key("user-123", "https://auth.example.com/")
+        assert len(k) == 32
+        assert all(c in "0123456789abcdef" for c in k)
