@@ -230,13 +230,11 @@ def record_retry(oidc_key: str, db_path: Optional[str] = None) -> ElicitResult:
     )
 
 
-def sweep_expired(db_path: Optional[str] = None) -> int:
-    """Mark all expired sessions as EXPIRED. Returns count of swept sessions."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=TTL_SECONDS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    with db.get_connection(db_path) as conn:
-        cur = conn.execute(
-            "UPDATE setup_state SET state = 'EXPIRED' "
-            "WHERE updated_at < ? AND state NOT IN ('COMPLETED', 'FAILED', 'EXPIRED')",
-            (cutoff,),
-        )
-        return cur.rowcount
+def sweep_expired(db_path: Optional[str] = None) -> int:  # noqa: D401
+    """DEPRECATED: use queries.setup_state.delete_expired() instead.
+    
+    Kept as a no-op for backwards compatibility. The TTL sweep task in
+    server_components.oidc_integration.ttl_sweep_task now performs
+    the single source of truth for expiry cleanup.
+    """
+    return 0

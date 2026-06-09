@@ -10,10 +10,10 @@ from src.auth.elicitation_state_machine import (
     submit_code,
     submit_password,
     record_retry,
-    sweep_expired,
     TTL_SECONDS,
 )
 from src.auth import db
+from src.auth.queries.setup_state import delete_expired
 
 
 @pytest.fixture
@@ -140,8 +140,13 @@ class TestRecordRetry:
         assert result.new_state == ElicitState.FAILED
 
 
-class TestSweepExpired:
-    def test_sweeps_old_sessions(self, clean_db, oidc_key):
+class TestDeleteExpired:
+    """Expiry cleanup is owned by queries.setup_state.delete_expired()
+    (called by server_components.ttl_sweep_task). The state machine
+    does not maintain its own sweep path.
+    """
+
+    def test_deletes_old_sessions(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
         from datetime import datetime, timezone, timedelta
         old_time = (datetime.now(timezone.utc) - timedelta(seconds=TTL_SECONDS + 10)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -151,14 +156,14 @@ class TestSweepExpired:
         conn.commit()
         conn.close()
 
-        count = sweep_expired(db_path=clean_db)
+        count = delete_expired(TTL_SECONDS, db_path=clean_db)
         assert count >= 1
         row = db.get_setup_state(oidc_key, db_path=clean_db)
-        assert row["state"] == ElicitState.EXPIRED.value
+        assert row is None  # physically deleted
 
     def test_keeps_active_sessions(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
-        count = sweep_expired(db_path=clean_db)
+        count = delete_expired(TTL_SECONDS, db_path=clean_db)
         assert count == 0
         row = db.get_setup_state(oidc_key, db_path=clean_db)
         assert row["state"] == ElicitState.WAITING_PHONE.value

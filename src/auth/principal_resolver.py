@@ -1,16 +1,10 @@
 """Resolve OIDC sub to Telegram ACL principal string."""
-import hashlib
 import logging
 from typing import Optional
 
-from src.auth.queries.oidc_identity import get_identity
+from src.auth.queries.oidc_identity import get_identity, make_oidc_key
 
 logger = logging.getLogger(__name__)
-
-
-def _hash_sub(oidc_sub: str, issuer: str) -> str:
-    """Produce oidc_key from sub + issuer (matches migration script logic)."""
-    return hashlib.sha256(f"{oidc_sub}:{issuer}".encode()).hexdigest()[:32]
 
 
 def resolve_principal(
@@ -38,7 +32,7 @@ def resolve_principal(
         logger.warning("resolve_principal: TG_OIDC_ISSUER not set")
         return None
 
-    oidc_key = _hash_sub(oidc_sub, issuer)
+    oidc_key = make_oidc_key(oidc_sub, issuer)
     row = get_identity(oidc_key, db_path=db_path)
 
     if row is None:
