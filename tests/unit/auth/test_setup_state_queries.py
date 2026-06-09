@@ -10,7 +10,6 @@ from src.auth.db import run_migrations
 from src.auth.queries.setup_state import (
     create_state,
     delete_expired,
-    get_active_states,
     get_all_active_states,
     get_expired_states,
     increment_retry_count,
@@ -33,7 +32,7 @@ class TestSetupStatePersistence:
         """Initial state is WAITING_PHONE."""
         create_state(oidc_key="k1", phone_number="+1234567890", db_path=db)
 
-        states = get_active_states(older_than_seconds=0, db_path=db)
+        states = get_all_active_states(db_path=db)
         assert len(states) == 1
         assert states[0]["state"] == "WAITING_PHONE"
         assert states[0]["phone_number"] == "+1234567890"
@@ -49,7 +48,7 @@ class TestSetupStatePersistence:
             db_path=db,
         )
 
-        states = get_active_states(older_than_seconds=0, db_path=db)
+        states = get_all_active_states(db_path=db)
         row = next(s for s in states if s["oidc_key"] == "k2")
         assert row["state"] == "WAITING_CODE"
         assert row["tg_code_hash"] == "abc123"
@@ -76,7 +75,7 @@ class TestSetupStatePersistence:
             db_path=db,
         )
 
-        states = get_active_states(older_than_seconds=0, db_path=db)
+        states = get_all_active_states(db_path=db)
         row = next(s for s in states if s["oidc_key"] == "k3")
         assert row["state"] == "WAITING_CODE"
         assert row["tg_code_hash"] == "preserve123"
@@ -105,15 +104,15 @@ class TestSetupStatePersistence:
             db_path=db,
         )
 
-        states = get_active_states(older_than_seconds=0, db_path=db)
+        states = get_all_active_states(db_path=db)
         row = next(s for s in states if s["oidc_key"] == "k4")
         assert row["state"] == "WAITING_CODE"
         assert row["tg_code_hash"] == "meta123"
         assert row["phone_number"] == "+12223334444"
         assert row["metadata"] == '{"new": "value", "flag": true}'
 
-    def test_get_active_states_excludes_non_waiting_without_ttl(self, db: str) -> None:
-        """older_than_seconds=0 excludes COMPLETED/FAILED states."""
+    def test_get_all_active_states_excludes_terminal(self, db: str) -> None:
+        """get_all_active_states excludes COMPLETED/FAILED states."""
         create_state(oidc_key="waiting", db_path=db)
         transition_state(oidc_key="waiting", new_state="WAITING_CODE", db_path=db)
 
@@ -123,7 +122,7 @@ class TestSetupStatePersistence:
         create_state(oidc_key="failed", db_path=db)
         transition_state(oidc_key="failed", new_state="FAILED", db_path=db)
 
-        states = get_active_states(older_than_seconds=0, db_path=db)
+        states = get_all_active_states(db_path=db)
         keys = {s["oidc_key"] for s in states}
         assert "waiting" in keys
         assert "completed" not in keys
@@ -148,14 +147,14 @@ class TestSetupStatePersistence:
                 (old_time, "old_completed", "old_failed"),
             )
 
-        expired = get_active_states(older_than_seconds=300, db_path=db)
+        expired = get_expired_states(older_than_seconds=300, db_path=db)
         keys = {s["oidc_key"] for s in expired}
         assert "old_completed" in keys
         assert "old_failed" in keys
         assert "fresh_completed" not in keys
 
     def test_ttl_expiry_query(self, db: str) -> None:
-        """get_active_states(older_than=5min) returns expired rows."""
+        """get_expired_states(older_than=5min) returns expired rows."""
         create_state(oidc_key="old", db_path=db)
         create_state(oidc_key="new", db_path=db)
 
@@ -169,7 +168,7 @@ class TestSetupStatePersistence:
                 (old_time, "old"),
             )
 
-        expired = get_active_states(older_than_seconds=300, db_path=db)
+        expired = get_expired_states(older_than_seconds=300, db_path=db)
         keys = {s["oidc_key"] for s in expired}
         assert "old" in keys
         assert "new" not in keys
@@ -193,7 +192,7 @@ class TestSetupStatePersistence:
         count = delete_expired(older_than_seconds=300, db_path=db)
         assert count == 2
 
-        remaining = get_active_states(older_than_seconds=0, db_path=db)
+        remaining = get_all_active_states(db_path=db)
         assert len(remaining) == 1
         assert remaining[0]["oidc_key"] == "fresh"
 
@@ -204,7 +203,7 @@ class TestSetupStatePersistence:
         increment_retry_count("retry", db_path=db)
         increment_retry_count("retry", db_path=db)
 
-        states = get_active_states(older_than_seconds=0, db_path=db)
+        states = get_all_active_states(db_path=db)
         row = next(s for s in states if s["oidc_key"] == "retry")
         assert row["retry_count"] == 2
 

@@ -32,7 +32,7 @@ from .elicitation_state_machine import (
     submit_password,
     submit_phone,
 )
-from .telegram_auth_service import TelegramAuthService
+from .telegram_auth_service import SignInResult, TelegramAuthService
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +78,8 @@ def _fetch_session_metadata(
         return {}
 
     try:
-        meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"]
-        assert isinstance(meta, dict)
-        return meta
-    except (json.JSONDecodeError, TypeError, AssertionError):
+        return json.loads(row["metadata"])
+    except json.JSONDecodeError:
         logger.warning("Failed to decode metadata for oidc_key=%s, treating as empty", oidc_key[:8])
         return {}
 
@@ -94,6 +92,26 @@ def _save_session_file(oidc_key: str, session_string: str) -> str:
     session_file = Path(session_dir) / f"oidc_{safe_name}.session"
     session_file.write_text(session_string)
     return str(session_file)
+
+
+def _handle_auth_error(
+    oidc_key: str,
+    error: RuntimeError,
+    log_message: str,
+    failure_state: ElicitState,
+    db_path: Optional[str] = None,
+) -> dict:
+    """Handle a RuntimeError raised by the Telegram auth service.
+
+    Concurrency conflicts ("Concurrent sign-in") are surfaced verbatim to
+    the user. All other failures count as user errors and record a retry.
+    """
+    error_msg = str(error)
+    logger.error("%s for %s: %s", log_message, oidc_key[:8], error_msg)
+    if "Concurrent sign-in" in error_msg:
+        return _result_to_dict(ElicitResult(False, failure_state, error_msg))
+    retry_result = record_retry(oidc_key, db_path=db_path)
+    return _result_to_dict(retry_result)
 
 
 def _record_session_metadata(
@@ -119,7 +137,7 @@ def _save_identity_and_session(
     oidc_key: str,
     oidc_sub: str,
     oidc_issuer: str,
-    sign_in_result,
+    sign_in_result: SignInResult,
     phone_number: str,
     db_path: Optional[str] = None,
 ) -> None:
@@ -223,15 +241,9 @@ async def oidc_setup_phone(
         return _result_to_dict(result)
 
     except RuntimeError as e:
-        error_msg = str(e)
-        logger.error("Failed to send code for %s: %s", oidc_key[:8], error_msg)
-        # Don't record retry for concurrency conflicts — not a user error
-        if "Concurrent sign-in" in error_msg:
-            return _result_to_dict(
-                ElicitResult(False, ElicitState.WAITING_PHONE, error_msg)
-            )
-        retry_result = record_retry(oidc_key, db_path=db_path)
-        return _result_to_dict(retry_result)
+        return _handle_auth_error(
+            oidc_key, e, "Failed to send code", ElicitState.WAITING_PHONE, db_path
+        )
 
 
 async def oidc_setup_code(
@@ -285,14 +297,9 @@ async def oidc_setup_code(
         return _result_to_dict(retry_result)
 
     except RuntimeError as e:
-        error_msg = str(e)
-        logger.error("Code verification failed for %s: %s", oidc_key[:8], error_msg)
-        if "Concurrent sign-in" in error_msg:
-            return _result_to_dict(
-                ElicitResult(False, ElicitState.WAITING_CODE, error_msg)
-            )
-        retry_result = record_retry(oidc_key, db_path=db_path)
-        return _result_to_dict(retry_result)
+        return _handle_auth_error(
+            oidc_key, e, "Code verification failed", ElicitState.WAITING_CODE, db_path
+        )
 
 
 async def oidc_setup_password(
@@ -336,11 +343,6 @@ async def oidc_setup_password(
         return _result_to_dict(retry_result)
 
     except RuntimeError as e:
-        error_msg = str(e)
-        logger.error("Password verification failed for %s: %s", oidc_key[:8], error_msg)
-        if "Concurrent sign-in" in error_msg:
-            return _result_to_dict(
-                ElicitResult(False, ElicitState.WAITING_PASS, error_msg)
-            )
-        retry_result = record_retry(oidc_key, db_path=db_path)
-        return _result_to_dict(retry_result)
+        return _handle_auth_error(
+            oidc_key, e, "Password verification failed", ElicitState.WAITING_PASS, db_path
+        )

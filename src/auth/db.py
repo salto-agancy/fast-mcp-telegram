@@ -76,8 +76,3 @@ def get_connection(db_path: str | None = None) -> Generator[sqlite3.Connection, 
         raise
     finally:
         conn.close()
-
-
-# ---------------------------------------------------------------------------
-# setup_state CRUD — re-exported from queries module (source of truth)
-# ---------------------------------------------------------------------------

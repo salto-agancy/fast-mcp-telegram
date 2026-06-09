@@ -71,7 +71,7 @@ class TelegramAuthService:
             self._api_id = api_id or int(os.environ["TG_API_ID"])
             self._api_hash = api_hash or os.environ["TG_API_HASH"]
         except KeyError as e:
-            raise KeyError(
+            raise RuntimeError(
                 f"Missing required env var: {e}. "
                 f"Set TG_API_ID and TG_API_HASH for Telethon sign-in."
             ) from e

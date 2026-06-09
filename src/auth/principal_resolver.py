@@ -1,5 +1,6 @@
 """Resolve OIDC sub to Telegram ACL principal string."""
 import logging
+import os
 from typing import Optional
 
 from src.auth.queries.oidc_identity import get_identity, make_oidc_key
@@ -26,7 +27,6 @@ def resolve_principal(
     Returns:
         ACL-compatible principal string or None.
     """
-    import os
     issuer = issuer or os.environ.get("TG_OIDC_ISSUER", "")
     if not issuer:
         logger.warning("resolve_principal: TG_OIDC_ISSUER not set")

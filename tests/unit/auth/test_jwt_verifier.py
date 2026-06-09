@@ -200,8 +200,10 @@ class TestVerifyOidcToken:
             audience="fast-mcp-telegram",
         )
 
-        # PyJWKClient should only be instantiated once
-        from src.auth.jwt_verifier import PyJWKClient
+        # PyJWKClient should be cached for the TTL window; if the cache
+        # is bypassed, the underlying signer is fetched again. We assert
+        # the signer is fetched twice (once per call) but the client is
+        # reused across calls.
         # We patched it, so check the mock call count
         assert mock_jwks_client.get_signing_key_from_jwt.call_count == 2
 

@@ -13,12 +13,10 @@ Retry: 1 retry allowed per state (wrong code/password), then FAILED.
 """
 
 import enum
-import json
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from .queries import setup_state as ss_queries
-from .queries import oidc_identity as id_queries
 from . import db
 
 TTL_SECONDS = 300  # 5 minutes
@@ -68,6 +66,30 @@ def _get_state_row(oidc_key: str, db_path: Optional[str] = None) -> Optional[dic
             (oidc_key,),
         ).fetchone()
         return dict(row) if row else None
+
+
+def _handle_failed_update(
+    oidc_key: str,
+    expected_state: ElicitState,
+    db_path: Optional[str] = None,
+) -> ElicitResult:
+    """Diagnose why an atomic UPDATE matched no rows.
+
+    Called when a TTL-aware UPDATE returns rowcount=0. The row may not
+    exist, may be expired, or may be in the wrong state. Returns a
+    user-facing ElicitResult for whichever reason applies.
+    """
+    row = _get_state_row(oidc_key, db_path=db_path)
+    if row is None:
+        return ElicitResult(False, ElicitState.FAILED, "No active session.")
+    if _is_expired(row["updated_at"]):
+        ss_queries.transition_state(oidc_key, "EXPIRED", db_path=db_path)
+        return ElicitResult(False, ElicitState.EXPIRED, "Session expired.")
+    return ElicitResult(
+        False,
+        ElicitState.FAILED,
+        f"Expected {expected_state.value}, got {row['state']}.",
+    )
 
 
 def start_elicitation(oidc_key: str, db_path: Optional[str] = None) -> ElicitResult:
@@ -129,14 +151,7 @@ def submit_phone(oidc_key: str, phone: str, db_path: Optional[str] = None) -> El
             (ElicitState.WAITING_CODE.value, phone, oidc_key, ElicitState.WAITING_PHONE.value, cutoff),
         )
         if cur.rowcount == 0:
-            # Either no session, wrong state, or expired
-            row = _get_state_row(oidc_key, db_path=db_path)
-            if row is None:
-                return ElicitResult(False, ElicitState.FAILED, "No active session. Call start first.")
-            if _is_expired(row["updated_at"]):
-                ss_queries.transition_state(oidc_key, "EXPIRED", db_path=db_path)
-                return ElicitResult(False, ElicitState.EXPIRED, "Session expired.")
-            return ElicitResult(False, ElicitState.FAILED, f"Expected WAITING_PHONE, got {row['state']}.")
+            return _handle_failed_update(oidc_key, ElicitState.WAITING_PHONE, db_path=db_path)
     return ElicitResult(
         success=True,
         new_state=ElicitState.WAITING_CODE,
@@ -167,13 +182,7 @@ def submit_code(oidc_key: str, needs_2fa: bool = False, db_path: Optional[str] =
             (target_state.value, oidc_key, ElicitState.WAITING_CODE.value, cutoff),
         )
         if cur.rowcount == 0:
-            row = _get_state_row(oidc_key, db_path=db_path)
-            if row is None:
-                return ElicitResult(False, ElicitState.FAILED, "No active session.")
-            if _is_expired(row["updated_at"]):
-                ss_queries.transition_state(oidc_key, "EXPIRED", db_path=db_path)
-                return ElicitResult(False, ElicitState.EXPIRED, "Session expired.")
-            return ElicitResult(False, ElicitState.FAILED, f"Expected WAITING_CODE, got {row['state']}.")
+            return _handle_failed_update(oidc_key, ElicitState.WAITING_CODE, db_path=db_path)
     
     if needs_2fa:
         return ElicitResult(True, ElicitState.WAITING_PASS, "2FA enabled. Enter your Telegram password.", needs_2fa=True)
@@ -194,13 +203,7 @@ def submit_password(oidc_key: str, db_path: Optional[str] = None) -> ElicitResul
             (ElicitState.COMPLETED.value, oidc_key, ElicitState.WAITING_PASS.value, cutoff),
         )
         if cur.rowcount == 0:
-            row = _get_state_row(oidc_key, db_path=db_path)
-            if row is None:
-                return ElicitResult(False, ElicitState.FAILED, "No active session.")
-            if _is_expired(row["updated_at"]):
-                ss_queries.transition_state(oidc_key, "EXPIRED", db_path=db_path)
-                return ElicitResult(False, ElicitState.EXPIRED, "Session expired.")
-            return ElicitResult(False, ElicitState.FAILED, f"Expected WAITING_PASS, got {row['state']}.")
+            return _handle_failed_update(oidc_key, ElicitState.WAITING_PASS, db_path=db_path)
     return ElicitResult(True, ElicitState.COMPLETED, "Telegram account linked successfully.")
 
 
@@ -233,13 +236,3 @@ def record_retry(oidc_key: str, db_path: Optional[str] = None) -> ElicitResult:
         new_state=state_enum,
         message=f"Incorrect. {remaining} attempt(s) remaining.",
     )
-
-
-def sweep_expired(db_path: Optional[str] = None) -> int:  # noqa: D401
-    """DEPRECATED: use queries.setup_state.delete_expired() instead.
-    
-    Kept as a no-op for backwards compatibility. The TTL sweep task in
-    server_components.oidc_integration.ttl_sweep_task now performs
-    the single source of truth for expiry cleanup.
-    """
-    return 0

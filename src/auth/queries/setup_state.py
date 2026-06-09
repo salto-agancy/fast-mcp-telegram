@@ -27,18 +27,9 @@ def transition_state(
     new_state: str,
     tg_code_hash: Optional[str] = None,
     metadata: Optional[str] = None,
-    expected_state: Optional[str] = None,
-    ttl_seconds: Optional[int] = None,
     db_path: Optional[str] = None,
 ) -> bool:
     """Transition to a new state, optionally updating code hash or metadata.
-
-    When ``expected_state`` is set, the UPDATE only applies if current
-    state matches (prevents racing with concurrent elicitation flows).
-
-    When ``ttl_seconds`` is set, the UPDATE only applies if the row was
-    updated within the last ``ttl_seconds`` — expired sessions are
-    rejected at the DB level without a separate SELECT.
 
     All values are passed as bound parameters.
 
@@ -56,29 +47,16 @@ def transition_state(
         values.append(metadata)
 
     set_clauses.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')")
-
-    where_clauses: list[str] = []
-    where_values: list[object] = []
-    if expected_state is not None:
-        where_clauses.append("state = ?")
-        where_values.append(expected_state)
-    if ttl_seconds is not None:
-        where_clauses.append("updated_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ? || ' seconds')")
-        where_values.append(f"-{ttl_seconds}")
-
-    where_clauses.append("oidc_key = ?")
-    where_values.append(oidc_key)
-
-    all_values = values + where_values
+    values.append(oidc_key)
 
     # SAFETY: Column names are hardcoded in SET clauses.
-    # WHERE conditions are bound parameters. Sourcery false positive.
+    # Sourcery false positive on dynamic SQL building.
     sql = (
         f"UPDATE setup_state SET {', '.join(set_clauses)} "
-        f"WHERE {' AND '.join(where_clauses)}"
+        f"WHERE oidc_key = ?"
     )  # noqa: S608
     with get_connection(db_path) as conn:
-        cursor = conn.execute(sql, all_values)
+        cursor = conn.execute(sql, values)
         return cursor.rowcount > 0
 
 
@@ -103,19 +81,6 @@ def get_expired_states(
             """,
             (f"-{older_than_seconds}",),
         ).fetchall()
-
-
-def get_active_states(
-    older_than_seconds: int = 0,
-    db_path: Optional[str] = None,
-) -> list[sqlite3.Row]:
-    """DEPRECATED: use :func:`get_all_active_states` or :func:`get_expired_states` instead.
-
-    Kept for backward compatibility. Delegates to the appropriate split function.
-    """
-    if older_than_seconds > 0:
-        return get_expired_states(older_than_seconds, db_path)
-    return get_all_active_states(db_path)
 
 
 def delete_expired(
