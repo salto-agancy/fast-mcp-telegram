@@ -99,12 +99,12 @@ def _save_session_file(oidc_key: str, session_string: str) -> str:
 
 def _handle_auth_error(
     oidc_key: str,
-    error: RuntimeError,
+    error: Exception,
     log_message: str,
     failure_state: ElicitState,
     db_path: str | None = None,
 ) -> dict:
-    """Handle a RuntimeError raised by the Telegram auth service.
+    """Handle an error raised by the Telegram auth service.
 
     Concurrency conflicts ("Concurrent sign-in") are surfaced verbatim to
     the user. All other failures count as user errors and record a retry.
@@ -225,7 +225,7 @@ async def oidc_setup_phone(
             )
         return _result_to_dict(result)
 
-    except RuntimeError as e:
+    except Exception as e:
         return _handle_auth_error(
             oidc_key, e, "Failed to send code", ElicitState.WAITING_PHONE, db_path
         )
@@ -270,15 +270,16 @@ async def oidc_setup_code(
 
         if sign_in_result.success:
             if sign_in_result.next_state == "COMPLETED":
-                _save_identity_and_session(
-                    oidc_key,
-                    oidc_sub,
-                    oidc_issuer,
-                    sign_in_result,
-                    phone_number,
-                    db_path,
-                )
                 transition = submit_code(oidc_key, needs_2fa=False, db_path=db_path)
+                if transition.success:
+                    _save_identity_and_session(
+                        oidc_key,
+                        oidc_sub,
+                        oidc_issuer,
+                        sign_in_result,
+                        phone_number,
+                        db_path,
+                    )
                 return _result_to_dict(transition)
             if sign_in_result.next_state == "WAITING_PASS":
                 transition = submit_code(oidc_key, needs_2fa=True, db_path=db_path)
@@ -288,7 +289,7 @@ async def oidc_setup_code(
         retry_result = record_retry(oidc_key, db_path=db_path)
         return _result_to_dict(retry_result)
 
-    except RuntimeError as e:
+    except Exception as e:
         return _handle_auth_error(
             oidc_key, e, "Code verification failed", ElicitState.WAITING_CODE, db_path
         )
@@ -314,31 +315,31 @@ async def oidc_setup_password(
         sign_in_result = await service.verify_password(oidc_key, password)
 
         if sign_in_result.success and sign_in_result.next_state == "COMPLETED":
-            # Fetch phone from state for identity record
-            phone_number = None
-            with db.get_connection(db_path) as conn:
-                if row := conn.execute(
-                    "SELECT phone_number FROM setup_state WHERE oidc_key = ?",
-                    (oidc_key,),
-                ).fetchone():
-                    phone_number = row["phone_number"]
-
-            _save_identity_and_session(
-                oidc_key,
-                oidc_sub,
-                oidc_issuer,
-                sign_in_result,
-                phone_number or "",
-                db_path,
-            )
             transition = submit_password(oidc_key, db_path=db_path)
+            if transition.success:
+                phone_number = None
+                with db.get_connection(db_path) as conn:
+                    if row := conn.execute(
+                        "SELECT phone_number FROM setup_state WHERE oidc_key = ?",
+                        (oidc_key,),
+                    ).fetchone():
+                        phone_number = row["phone_number"]
+
+                _save_identity_and_session(
+                    oidc_key,
+                    oidc_sub,
+                    oidc_issuer,
+                    sign_in_result,
+                    phone_number or "",
+                    db_path,
+                )
             return _result_to_dict(transition)
 
         # Password was invalid
         retry_result = record_retry(oidc_key, db_path=db_path)
         return _result_to_dict(retry_result)
 
-    except RuntimeError as e:
+    except Exception as e:
         return _handle_auth_error(
             oidc_key,
             e,

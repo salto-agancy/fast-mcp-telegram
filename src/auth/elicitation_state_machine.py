@@ -67,6 +67,38 @@ def _ttl_cutoff() -> str:
     )
 
 
+
+def _update_state_with_ttl(
+    oidc_key: str,
+    target_state: str,
+    expected_state: ElicitState,
+    db_path: str | None = None,
+    **extra_columns: object,
+) -> bool:
+    """Atomic state UPDATE with TTL enforcement.
+
+    Returns True if a row was updated (successful transition),
+    False otherwise (row missing, wrong state, or expired).
+    """
+    cutoff = _ttl_cutoff()
+    set_clauses = [
+        "state = ?",
+        "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+    ]
+    values: list[object] = [target_state]
+    for col_name, col_value in extra_columns.items():
+        set_clauses.append(f"{col_name} = ?")
+        values.append(col_value)
+    values += [oidc_key, expected_state.value, cutoff]
+    with db.get_connection(db_path) as conn:
+        cur = conn.execute(
+            f"UPDATE setup_state SET {', '.join(set_clauses)} "
+            f"WHERE oidc_key = ? AND state = ? AND updated_at >= ?",
+            values,
+        )
+        return cur.rowcount > 0
+
+
 def _handle_failed_update(
     oidc_key: str,
     expected_state: ElicitState,
@@ -145,28 +177,12 @@ def start_elicitation(oidc_key: str, db_path: str | None = None) -> ElicitResult
 def submit_phone(
     oidc_key: str, phone: str, db_path: str | None = None
 ) -> ElicitResult:
-    """Submit phone number. Transitions WAITING_PHONE -> WAITING_CODE.
-
-    Uses atomic UPDATE with TTL check to avoid race with sweep task.
-    """
-    cutoff = _ttl_cutoff()
-    with db.get_connection(db_path) as conn:
-        cur = conn.execute(
-            "UPDATE setup_state SET state = ?, phone_number = ?, "
-            "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
-            "WHERE oidc_key = ? AND state = ? AND updated_at >= ?",
-            (
-                ElicitState.WAITING_CODE.value,
-                phone,
-                oidc_key,
-                ElicitState.WAITING_PHONE.value,
-                cutoff,
-            ),
-        )
-        if cur.rowcount == 0:
-            return _handle_failed_update(
-                oidc_key, ElicitState.WAITING_PHONE, db_path=db_path
-            )
+    """Submit phone number. Transitions WAITING_PHONE -> WAITING_CODE."""
+    if not _update_state_with_ttl(
+        oidc_key, ElicitState.WAITING_CODE.value, ElicitState.WAITING_PHONE, db_path,
+        phone_number=phone,
+    ):
+        return _handle_failed_update(oidc_key, ElicitState.WAITING_PHONE, db_path=db_path)
     return ElicitResult(
         success=True,
         new_state=ElicitState.WAITING_CODE,
@@ -179,7 +195,6 @@ def submit_code(
 ) -> ElicitResult:
     """Transition after code verification. WAITING_CODE -> WAITING_PASS or COMPLETED.
 
-    Uses atomic UPDATE with TTL check to avoid race with sweep task.
     The tools layer performs actual Telethon verification; this function
     only handles the state transition after verification succeeds.
 
@@ -189,20 +204,8 @@ def submit_code(
         db_path: Optional DB path override.
     """
     target_state = ElicitState.WAITING_PASS if needs_2fa else ElicitState.COMPLETED
-    cutoff = _ttl_cutoff()
-
-    with db.get_connection(db_path) as conn:
-        cur = conn.execute(
-            "UPDATE setup_state SET state = ?, "
-            "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
-            "WHERE oidc_key = ? AND state = ? AND updated_at >= ?",
-            (target_state.value, oidc_key, ElicitState.WAITING_CODE.value, cutoff),
-        )
-        if cur.rowcount == 0:
-            return _handle_failed_update(
-                oidc_key, ElicitState.WAITING_CODE, db_path=db_path
-            )
-
+    if not _update_state_with_ttl(oidc_key, target_state.value, ElicitState.WAITING_CODE, db_path):
+        return _handle_failed_update(oidc_key, ElicitState.WAITING_CODE, db_path=db_path)
     if needs_2fa:
         return ElicitResult(
             True,
@@ -216,27 +219,9 @@ def submit_code(
 
 
 def submit_password(oidc_key: str, db_path: str | None = None) -> ElicitResult:
-    """Transition after password verification. WAITING_PASS -> COMPLETED.
-
-    Uses atomic UPDATE with TTL check to avoid race with sweep task.
-    """
-    cutoff = _ttl_cutoff()
-    with db.get_connection(db_path) as conn:
-        cur = conn.execute(
-            "UPDATE setup_state SET state = ?, "
-            "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
-            "WHERE oidc_key = ? AND state = ? AND updated_at >= ?",
-            (
-                ElicitState.COMPLETED.value,
-                oidc_key,
-                ElicitState.WAITING_PASS.value,
-                cutoff,
-            ),
-        )
-        if cur.rowcount == 0:
-            return _handle_failed_update(
-                oidc_key, ElicitState.WAITING_PASS, db_path=db_path
-            )
+    """Transition after password verification. WAITING_PASS -> COMPLETED."""
+    if not _update_state_with_ttl(oidc_key, ElicitState.COMPLETED.value, ElicitState.WAITING_PASS, db_path):
+        return _handle_failed_update(oidc_key, ElicitState.WAITING_PASS, db_path=db_path)
     return ElicitResult(
         True, ElicitState.COMPLETED, "Telegram account linked successfully."
     )

@@ -28,7 +28,6 @@ from src.server_components.oidc_integration import (
     create_oidc_verifier,
     oidc_enabled,
     register_elicitation_tools,
-    ttl_sweep_task,
 )
 from src.server_components.server_card import register_server_card_route
 from src.server_components.tools_register import register_tools
@@ -41,7 +40,6 @@ config = cfg()
 
 # Background cleanup tasks
 _cleanup_task = None
-_ttl_sweep_task = None
 
 
 async def cleanup_loop():
@@ -98,12 +96,8 @@ async def lifespan(app: FastMCP):
         raise
 
     # Startup: background cleanup
-    global _cleanup_task, _ttl_sweep_task
+    global _cleanup_task
     _cleanup_task = asyncio.create_task(cleanup_loop())
-
-    # Start TTL sweep for OIDC elicitation states
-    if oidc_enabled():
-        _ttl_sweep_task = asyncio.create_task(ttl_sweep_task())
 
     yield
 
@@ -112,10 +106,6 @@ async def lifespan(app: FastMCP):
         _cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await _cleanup_task
-    if _ttl_sweep_task:
-        _ttl_sweep_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await _ttl_sweep_task
 
     await cleanup_session_cache()
 

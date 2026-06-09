@@ -103,16 +103,19 @@ Any state ──5min TTL expired──▶ FAILED (sweep task cleans up)
 
 ### Concurrency Control
 
--   Lockfile: `{data_dir}/{oidc_key}.setup.lock` prevents parallel elicitation for same OIDC sub.
+-   DB atomic UPDATE with rowcount check prevents parallel elicitation for the same OIDC sub.
+-   TTL enforcement via `updated_at >= cutoff` clause in every state transition — no separate sweep task.
 -   In-process single-flight: dict keyed by `oidc_key` ensures only one coroutine handles elicitation per user.
--   Stale lock detection: if lockfile mtime > 10 min, delete and retry.
+-   Telethon MTProto auto-serializes requests per session file — no lockfile needed.
 
-### TTL Sweep
+### TTL Enforcement
 
-Background task runs every 60 seconds:
--   Delete `setup_state` rows where `updated_at < now() - 5 minutes`.
--   Remove corresponding lockfiles.
--   Log count of expired sessions cleaned.
+TTL is enforced atomically at the query level — no background task:
+
+-   Every state transition includes `AND updated_at >= datetime('now', '-5 minutes')` in the WHERE clause.
+-   If the row has expired, the UPDATE affects zero rows → the caller receives a failure response.
+-   Expired states are effectively "fail-closed": the user must restart elicitation.
+-   No periodic sweep, no cron, no background task running on the process.
 
 ## Storage Layer
 
@@ -266,7 +269,7 @@ Per-user `.session` files retain all 5 Telethon tables:
 -   `update_state` — PTS/QTS/seq for gap handling.
 -   `version` — Telethon internal schema version.
 
-These are NOT migrated to the shared DB. They remain as-is in `{data_dir}/sessions/`.
+These are NOT migrated to the shared DB. They remain as-is in `~/.config/fast-mcp-telegram/sessions/` (configurable via `TG_SESSION_DIR`).
 
 ## Environment Variables
 
@@ -275,6 +278,7 @@ These are NOT migrated to the shared DB. They remain as-is in `{data_dir}/sessio
 | `TG_OIDC_ISSUER`      | Yes*     | —                  | OIDC issuer URL (e.g., `https://dev-xxx.auth0.com/`) |
 | `TG_OIDC_AUDIENCE`    | Yes*     | —                  | Expected audience claim value        |
 | `TG_DATABASE_URL`     | No       | `./data/auth.db`   | SQLite database path                 |
+| `TG_SESSION_DIR`      | No       | `~/.config/fast-mcp-telegram/sessions/` | Telethon session file directory |
 | `ACL_DENY_UNLISTED_PRINCIPALS` | No | `false`      | Deny access if principal not in ACL  |
 
 \* Required only when OIDC auth is enabled. Stdio/bot-token modes don't need these.
@@ -342,7 +346,7 @@ Phase 1 is split into four sub-phases. Each follows the coding process (TDD, no 
 
 **Goal:** Create tables and migration runner.
 
-1.  Write failing test: `test_migrations_create_tables` — verifies all 4 tables exist after `run_migrations()`.
+1.  Write failing test: `test_migrations_create_tables` — verifies all 3 tables exist after `run_migrations()`.
 2.  Write failing test: `test_schema_version_tracking` — verifies `schema_version` row inserted per migration.
 3.  Implement `src/auth/migrations/001_initial_schema.sql` with CREATE TABLE statements from Storage Layer section.
 4.  Implement `src/auth/db.py`: `run_migrations()`, `get_connection()` context manager.

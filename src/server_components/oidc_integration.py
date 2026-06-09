@@ -51,28 +51,4 @@ def register_elicitation_tools(mcp) -> None:
     logger.info("Registered 4 OIDC elicitation tools")
 
 
-async def ttl_sweep_task(
-    interval_seconds: int = 60, max_age_seconds: int = 300
-) -> None:
-    """Background task: clean up expired elicitation states every interval."""
-    import asyncio
 
-    from src.auth.queries.setup_state import delete_expired
-
-    logger.info(
-        "Starting OIDC elicitation TTL sweep (interval=%ds, max_age=%ds)",
-        interval_seconds,
-        max_age_seconds,
-    )
-    while True:
-        try:
-            await asyncio.sleep(interval_seconds)
-            if deleted := delete_expired(max_age_seconds):
-                logger.info(
-                    "TTL sweep: cleaned %d expired elicitation session(s)", deleted
-                )
-        except asyncio.CancelledError:
-            logger.info("TTL sweep task cancelled")
-            break
-        except Exception as e:
-            logger.error("TTL sweep error: %s", e)

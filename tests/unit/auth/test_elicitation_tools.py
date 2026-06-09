@@ -48,7 +48,10 @@ def mock_auth_service():
 def _session_path(oidc_key: str) -> Path:
     """Compute the on-disk session file path for an oidc_key."""
     safe_name = hashlib.sha256(oidc_key.encode()).hexdigest()[:16]
-    session_dir = os.environ.get("TG_SESSION_DIR", ".sessions")
+    session_dir = os.environ.get(
+        "TG_SESSION_DIR",
+        str(Path.home() / ".config" / "fast-mcp-telegram" / "sessions"),
+    )
     return Path(session_dir) / f"oidc_{safe_name}.session"
 
 
