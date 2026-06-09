@@ -17,3 +17,6 @@ Concise records of significant technical decisions for fast-mcp-telegram.
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0001](0001-agent-scoped-session-acl.md) | Agent-scoped session ACL (guardrails, not account lockdown) | accepted (2026-05-27) |
+| [0002](0002-oidc-self-service-auth.md) | OIDC Self-Service Authentication | superseded (2026-06-08) |
+| [0003](0003-oidc-phase4-scope-based-auth.md) | OIDC Phase 4 — In-Tool Auth & Elicitation | superseded (2026-06-09) |
+| [0004](0004-qr-login-auth.md) | QR Login Auth — Simplified Self-Service Onboarding | proposed (2026-06-09) |
