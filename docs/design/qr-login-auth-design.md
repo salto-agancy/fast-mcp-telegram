@@ -17,7 +17,7 @@ Replace the postponed OIDC + elicitation auth flow with a simpler Telethon QR lo
 
 ### 2.1 `@require_auth` Decorator (NEW)
 
-Central middleware applied to every (or most) MCP tools.
+Central middleware applied to **all** MCP tools (confirmed — see §5).
 
 **Behavior:**
 
@@ -111,7 +111,7 @@ Single page with two auth methods:
 
 **QR code:** server-rendered using `python-qrcode` library. Output: base64 PNG data URI → `<img>` tag. Auto-refreshes every 60s if not scanned (Telethon `qr_login()` timeout).
 
-**Phone form:** existing phone/code/2FA flow — no changes needed.
+**Phone form:** existing phone/code/2FA flow — no changes to the form itself, but it integrates into both **create** (first-time auth) and **re-auth** (existing session died) branches. Same form, two entry points (confirmed).
 
 **Success state:**
 
@@ -165,7 +165,7 @@ POST /auth/qr_renew      → generates new QR code (old one expired)
 6. On scan: Telethon login completes → server saves session → creates bearer token → returns `done` + token
 7. Page shows success view
 
-**Single process** assumption: QR state lives in-memory dict. No shared state across workers.
+**Single process:** QR state lives in-memory dict. No shared state across workers (confirmed).
 
 **Telethon client management:**
 - `/auth/qr_start` creates a temporary Telethon client for QR login
@@ -191,6 +191,9 @@ What changes:
 - FastMCP Discord/search confirms: tokens are server-managed, no refresh mechanism exists
 - Our tokens are permanent SQLite records — no expiry
 - The only failure mode: Telethon session death (server restart, user reset)
+
+**Backward compatibility:** Existing bearer tokens continue to work. No migration needed
+(confirmed).
 - Telethon death is handled by `require_auth` → structured error → auth guidance
 - Adding token expiry + refresh later is orthogonal and doesn't change the design
 
@@ -242,14 +245,16 @@ User opens MCP client (unauthenticated)
 
 ---
 
-## 5. Open Questions (for user)
+## 5. Design Confirmation
 
-| # | Question |
-|---|----------|
-| 1 | Which tools get `@require_auth`? All tools? Only "sensitive" ones? Or configurable per-tool? |
-| 2 | Existing users already have bearer tokens. Backward compatible or need migration? |
-| 3 | QR timeout: 60s (Telethon default). On timeout, page auto-refreshes QR. Acceptable? |
-| 4 | Phone auth fallback: keep existing form exactly as-is, or simplify it too? |
+Answers confirmed by Alexey (2026-06-09):
+
+| # | Question | Decision |
+|---|----------|----------|
+| 1 | Which tools get `@require_auth`? | **All** tools. No per-tool configuration. |
+| 2 | Existing bearer tokens? | **Keep working** — backward compatible, no migration. |
+| 3 | QR 60s timeout with auto-refresh? | **OK** — auto-refresh QR on timeout. |
+| 4 | Phone auth form changes? | **As is** — same form, but integrates into both create and re-auth branches. |
 
 ---
 
