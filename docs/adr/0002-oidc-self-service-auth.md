@@ -105,6 +105,10 @@ Rejected: Admins would need to extract opaque OIDC identifiers from logs or DB. 
 
 Rejected: No clear use case for multi-tenant restriction in v1. Single-tenant SaaS assumption simplifies implementation. Can add later if demand emerges.
 
+### `telegram_session` DB Table
+
+Rejected: Originally planned as a DB mirror of Telethon session metadata (`dc_id`, `server_address`, `port`, `auth_key`) for multi-process recovery. In practice, the sole caller hardcoded zeros/empty — never wired to real Telethon data. Per-user `.session` files already persist the session cache natively. The table was removed as dead data path in commit `124322f`. If multi-process session sharing is ever needed, a proper auth-key extraction path should be implemented at that point.
+
 ## Implementation Phases
 
 ### Phase 1: Storage Layer (`feature/oidc-storage`)
