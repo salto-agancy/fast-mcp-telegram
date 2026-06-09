@@ -13,7 +13,7 @@ from src.auth.elicitation_state_machine import (
     TTL_SECONDS,
 )
 from src.auth import db
-from src.auth.queries.setup_state import delete_expired, get_setup_state, update_setup_state
+from src.auth.queries.setup_state import delete_expired, get_state_row, transition_state
 
 
 @pytest.fixture
@@ -43,14 +43,14 @@ class TestStartElicitation:
 
     def test_returns_completed(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
-        update_setup_state(oidc_key, ElicitState.COMPLETED, db_path=clean_db)
+        transition_state(oidc_key, ElicitState.COMPLETED.value, db_path=clean_db)
         result = start_elicitation(oidc_key, db_path=clean_db)
         assert result.success is True
         assert result.new_state == ElicitState.COMPLETED
 
     def test_returns_failed(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
-        update_setup_state(oidc_key, ElicitState.FAILED, db_path=clean_db)
+        transition_state(oidc_key, ElicitState.FAILED.value, db_path=clean_db)
         result = start_elicitation(oidc_key, db_path=clean_db)
         assert result.success is False
         assert result.new_state == ElicitState.FAILED
@@ -85,14 +85,14 @@ class TestSubmitPhone:
 
     def test_fails_wrong_state(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
-        update_setup_state(oidc_key, ElicitState.WAITING_CODE, db_path=clean_db)
+        transition_state(oidc_key, ElicitState.WAITING_CODE.value, db_path=clean_db)
         result = submit_phone(oidc_key, "+1234567890", db_path=clean_db)
         assert result.success is False
 
     def test_stores_phone_number(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
         submit_phone(oidc_key, "+1234567890", db_path=clean_db)
-        row = get_setup_state(oidc_key, db_path=clean_db)
+        row = get_state_row(oidc_key, db_path=clean_db)
         assert row is not None
         assert row["phone_number"] == "+1234567890"
 
@@ -118,7 +118,7 @@ class TestSubmitPassword:
     def test_completes_after_password(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
         submit_phone(oidc_key, "+1234567890", db_path=clean_db)
-        update_setup_state(oidc_key, ElicitState.WAITING_PASS, db_path=clean_db)
+        transition_state(oidc_key, ElicitState.WAITING_PASS.value, db_path=clean_db)
         result = submit_password(oidc_key, db_path=clean_db)
         assert result.success is True
         assert result.new_state == ElicitState.COMPLETED
@@ -158,12 +158,12 @@ class TestDeleteExpired:
 
         count = delete_expired(TTL_SECONDS, db_path=clean_db)
         assert count >= 1
-        row = get_setup_state(oidc_key, db_path=clean_db)
+        row = get_state_row(oidc_key, db_path=clean_db)
         assert row is None  # physically deleted
 
     def test_keeps_active_sessions(self, clean_db, oidc_key):
         start_elicitation(oidc_key, db_path=clean_db)
         count = delete_expired(TTL_SECONDS, db_path=clean_db)
         assert count == 0
-        row = get_setup_state(oidc_key, db_path=clean_db)
+        row = get_state_row(oidc_key, db_path=clean_db)
         assert row["state"] == ElicitState.WAITING_PHONE.value

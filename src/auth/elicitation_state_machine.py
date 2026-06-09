@@ -57,17 +57,6 @@ def _ttl_cutoff() -> str:
     return (datetime.now(timezone.utc) - timedelta(seconds=TTL_SECONDS)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _get_state_row(oidc_key: str, db_path: Optional[str] = None) -> Optional[dict]:
-    """Fetch current state row as dict via get_active_states or direct query."""
-    with db.get_connection(db_path) as conn:
-        row = conn.execute(
-            "SELECT oidc_key, state, phone_number, tg_code_hash, retry_count, metadata, created_at, updated_at "
-            "FROM setup_state WHERE oidc_key = ?",
-            (oidc_key,),
-        ).fetchone()
-        return dict(row) if row else None
-
-
 def _handle_failed_update(
     oidc_key: str,
     expected_state: ElicitState,
@@ -79,7 +68,7 @@ def _handle_failed_update(
     exist, may be expired, or may be in the wrong state. Returns a
     user-facing ElicitResult for whichever reason applies.
     """
-    row = _get_state_row(oidc_key, db_path=db_path)
+    row = ss_queries.get_state_row(oidc_key, db_path=db_path)
     if row is None:
         return ElicitResult(False, ElicitState.FAILED, "No active session.")
     if _is_expired(row["updated_at"]):
@@ -94,7 +83,7 @@ def _handle_failed_update(
 
 def start_elicitation(oidc_key: str, db_path: Optional[str] = None) -> ElicitResult:
     """Initialize or resume an elicitation session."""
-    existing = _get_state_row(oidc_key, db_path=db_path)
+    existing = ss_queries.get_state_row(oidc_key, db_path=db_path)
 
     if existing is None:
         ss_queries.create_state(oidc_key, db_path=db_path)
@@ -209,7 +198,7 @@ def submit_password(oidc_key: str, db_path: Optional[str] = None) -> ElicitResul
 
 def record_retry(oidc_key: str, db_path: Optional[str] = None) -> ElicitResult:
     """Record a failed attempt. After MAX_RETRIES, transitions to FAILED."""
-    existing = _get_state_row(oidc_key, db_path=db_path)
+    existing = ss_queries.get_state_row(oidc_key, db_path=db_path)
     if existing is None:
         return ElicitResult(False, ElicitState.FAILED, "No active session.")
 

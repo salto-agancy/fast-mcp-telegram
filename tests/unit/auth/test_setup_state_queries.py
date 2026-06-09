@@ -28,7 +28,7 @@ def db(tmp_path: Path) -> str:
 class TestSetupStatePersistence:
     """Setup state machine table operations."""
 
-    def test_create_setup_state(self, db: str) -> None:
+    def test_create_state_creates_row(self, db: str) -> None:
         """Initial state is WAITING_PHONE."""
         create_state(oidc_key="k1", phone_number="+1234567890", db_path=db)
 
