@@ -105,7 +105,6 @@ Any state ──5min TTL expired──▶ EXPIRED (inline TTL check on transitio
 
 -   DB atomic UPDATE with rowcount check prevents parallel elicitation for the same OIDC sub.
 -   TTL enforcement via `updated_at >= cutoff` clause in every state transition — no separate sweep task.
--   In-process single-flight: dict keyed by `oidc_key` ensures only one coroutine handles elicitation per user.
 -   Telethon MTProto auto-serializes requests per session file — no lockfile needed.
 
 ### TTL Enforcement
