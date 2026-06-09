@@ -14,18 +14,6 @@ CREATE TABLE IF NOT EXISTS oidc_identity (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
--- Links OIDC identity to Telethon session file
-CREATE TABLE IF NOT EXISTS telegram_session (
-    oidc_key TEXT PRIMARY KEY REFERENCES oidc_identity(oidc_key),
-    session_filename TEXT NOT NULL,
-    dc_id INTEGER NOT NULL,
-    server_address TEXT NOT NULL,
-    port INTEGER NOT NULL,
-    auth_key BLOB NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    last_used_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
-
 -- Elicitation state machine
 CREATE TABLE IF NOT EXISTS setup_state (
     oidc_key TEXT PRIMARY KEY,

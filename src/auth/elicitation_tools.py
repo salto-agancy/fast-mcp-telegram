@@ -114,25 +114,6 @@ def _handle_auth_error(
     return _result_to_dict(retry_result)
 
 
-def _record_session_metadata(
-    oidc_key: str, session_filename: str, db_path: Optional[str] = None
-) -> None:
-    """Insert telegram_session metadata row. Non-critical — logs on failure."""
-    try:
-        from .queries.telegram_session import insert_session
-        insert_session(
-            oidc_key=oidc_key,
-            session_filename=session_filename,
-            dc_id=0,
-            server_address="",
-            port=0,
-            auth_key=b"",
-            db_path=db_path,
-        )
-    except Exception:
-        logger.warning("Session metadata insert failed for %s (non-critical)", oidc_key[:8])
-
-
 def _save_identity_and_session(
     oidc_key: str,
     oidc_sub: str,
@@ -161,8 +142,7 @@ def _save_identity_and_session(
         db_path=db_path,
     )
     if sign_in_result.session_string:
-        session_file = _save_session_file(oidc_key, sign_in_result.session_string)
-        _record_session_metadata(oidc_key, session_file, db_path=db_path)
+        _save_session_file(oidc_key, sign_in_result.session_string)
 
 
 async def oidc_setup_start(

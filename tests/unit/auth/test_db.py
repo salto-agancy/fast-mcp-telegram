@@ -31,7 +31,6 @@ class TestMigrations:
         conn.close()
 
         assert "oidc_identity" in tables
-        assert "telegram_session" in tables
         assert "setup_state" in tables
         assert "schema_version" in tables
 

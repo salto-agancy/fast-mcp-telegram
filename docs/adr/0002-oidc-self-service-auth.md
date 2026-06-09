@@ -109,7 +109,7 @@ Rejected: No clear use case for multi-tenant restriction in v1. Single-tenant Sa
 
 ### Phase 1: Storage Layer (`feature/oidc-storage`)
 
--   Database schema: `oidc_identity`, `telegram_session`, `setup_state`.
+-   Database schema: `oidc_identity`, `setup_state`.
 -   Migration runner with version tracking.
 -   Connection pool configuration.
 -   `migrate_legacy.py` script for bearer-to-OIDC linking.

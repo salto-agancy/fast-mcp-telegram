@@ -59,7 +59,7 @@ Storage is separate from all three layers — shared SQLite DB for OIDC/state, p
     c.  Prompt for code.
     d.  Verify code via Telethon.
     e.  (Optional) Prompt for password if 2FA enabled.
-    f.  On success: write `oidc_identity` + `telegram_session` rows, create `.session` file.
+    f.  On success: write `oidc_identity` row, create `.session` file.
 6.  Resolve Telegram identity (`@username`, `+phone`, or `user_id`) from DB.
 7.  Match against ACL rules.
 8.  Grant or deny access.
@@ -131,17 +131,6 @@ CREATE TABLE IF NOT EXISTS oidc_identity (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
--- Links OIDC identity to Telethon session file
-CREATE TABLE IF NOT EXISTS telegram_session (
-    oidc_key TEXT PRIMARY KEY REFERENCES oidc_identity(oidc_key),
-    session_filename TEXT NOT NULL,     -- e.g., "a1b2c3d4.session"
-    dc_id INTEGER NOT NULL,
-    server_address TEXT NOT NULL,
-    port INTEGER NOT NULL,
-    auth_key BLOB NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    last_used_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
 
 -- Elicitation state machine
 CREATE TABLE IF NOT EXISTS setup_state (
@@ -394,19 +383,14 @@ Phase 1 is split into four sub-phases. Each follows the coding process (TDD, no 
 
 ### 1.4 Telegram Session Metadata & Legacy Migration Script
 
-**Goal:** Store session file metadata; provide bearer→OIDC linking script.
+**Goal:** Provide bearer→OIDC linking script.
 
-1.  Write failing test: `test_insert_telegram_session` — links to oidc_identity via FK.
-2.  Write failing test: `test_get_session_by_oidc_key` — returns filename, dc_id, auth_key.
-3.  Write failing test: `test_update_last_used` — timestamp updates on access.
-4.  Implement `src/auth/queries/telegram_session.py`: `insert_session()`, `get_session()`, `touch_session()`.
-5.  Pass tests.
-6.  Write failing test: `test_migrate_legacy_script` — reads YAML, inserts placeholder rows.
-7.  Implement `scripts/migrate_legacy.py`.
-8.  Pass tests.
-9.  Manual QA: run script against sample legacy_tokens.yaml, verify DB contents.
+1.  Write failing test: `test_migrate_legacy_script` — reads YAML, inserts placeholder rows.
+2.  Implement `scripts/migrate_legacy.py`.
+3.  Pass tests.
+4.  Manual QA: run script against sample legacy_tokens.yaml, verify DB contents.
 
-**Artifacts:** `src/auth/queries/telegram_session.py`, `scripts/migrate_legacy.py`, `tests/test_telegram_session_queries.py`, `tests/test_migrate_legacy.py`.
+**Artifacts:** `scripts/migrate_legacy.py`, `tests/test_migrate_legacy.py`.
 
 ### Phase 1 Completion Gate
 
