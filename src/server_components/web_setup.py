@@ -863,7 +863,7 @@ def register_web_setup_routes(mcp_app):
 
         qr_mgr = _get_qr_manager()
         try:
-            qr_session_id, qr_url = qr_mgr.create_session(client)
+            qr_session_id, qr_url = await qr_mgr.create_session(client)
         except QrLoginError as e:
             await client.disconnect()
             temp_session_path.unlink(missing_ok=True)

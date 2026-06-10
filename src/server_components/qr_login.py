@@ -83,7 +83,7 @@ class QrLoginManager:
         self._on_complete = on_complete
         self._sessions: dict[str, SessionState] = {}
 
-    def create_session(self, telethon_client: Any) -> tuple[str, str]:
+    async def create_session(self, telethon_client: Any) -> tuple[str, str]:
         """Create a new QR login session.
 
         Args:
@@ -96,9 +96,9 @@ class QrLoginManager:
         Raises:
             QrLoginError: If Telethon fails to create a QR login or returns no URL.
         """
-        # Telethon's qr_login() returns a QRLogin object
+        # Telethon's qr_login() is a coroutine — must await
         try:
-            qr_login = telethon_client.qr_login()
+            qr_login = await telethon_client.qr_login()
         except Exception as exc:
             raise QrLoginError(
                 "Failed to create Telegram QR login session"
@@ -228,7 +228,7 @@ class QrLoginManager:
 
         # Create new QR login
         try:
-            qr_login = telethon_client.qr_login()
+            qr_login = await telethon_client.qr_login()
         except Exception as exc:
             logger.warning("QR session %s regenerate failed: %s", session_id, exc)
             return None
