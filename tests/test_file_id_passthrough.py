@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import socket
+
 import pytest
 
 from src.config.server_config import ServerConfig, ServerMode, set_config
@@ -124,21 +126,23 @@ class TestSendMessageFileIdPassthrough:
 
         from src.tools.messages.sending import _send_message_or_files
 
-        with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
-            mint.return_value = None  # ticket not found
-            with patch("src.tools.messages.sending._send_files_to_entity") as send_files:
-                send_files.return_value = MagicMock()
-                await _send_message_or_files(
-                    client=mock_client,
-                    entity="me",
-                    message="test",
-                    files=["https://files.example.test/v1/attachments/bad-ticket/doc.pdf"],
-                    reply_to_msg_id=None,
-                    parse_mode=None,
-                    operation="send_message",
-                    params={},
-                )
-                send_files.assert_called_once()
+        with patch("src.tools.messages.security.socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("1.1.1.1", 0))]
+            with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
+                mint.return_value = None  # ticket not found
+                with patch("src.tools.messages.sending._send_files_to_entity") as send_files:
+                    send_files.return_value = MagicMock()
+                    await _send_message_or_files(
+                        client=mock_client,
+                        entity="me",
+                        message="test",
+                        files=["https://files.example.test/v1/attachments/bad-ticket/doc.pdf"],
+                        reply_to_msg_id=None,
+                        parse_mode=None,
+                        operation="send_message",
+                        params={},
+                    )
+                    send_files.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_external_url_skips_passthrough(self, http_no_auth_config, mock_client):
@@ -148,22 +152,24 @@ class TestSendMessageFileIdPassthrough:
 
         from src.tools.messages.sending import _send_message_or_files
 
-        with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
-            mint.return_value = None
-            with patch("src.tools.messages.sending._send_files_to_entity") as send_files:
-                send_files.return_value = MagicMock()
-                await _send_message_or_files(
-                    client=mock_client,
-                    entity="me",
-                    message="test",
-                    files=["https://external-cdn.com/video.mp4"],
-                    reply_to_msg_id=None,
-                    parse_mode=None,
-                    operation="send_message",
-                    params={},
-                )
-                send_files.assert_called_once()
-                mint.assert_not_called()
+        with patch("src.tools.messages.security.socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("1.1.1.1", 0))]
+            with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
+                mint.return_value = None
+                with patch("src.tools.messages.sending._send_files_to_entity") as send_files:
+                    send_files.return_value = MagicMock()
+                    await _send_message_or_files(
+                        client=mock_client,
+                        entity="me",
+                        message="test",
+                        files=["https://external-cdn.com/video.mp4"],
+                        reply_to_msg_id=None,
+                        parse_mode=None,
+                        operation="send_message",
+                        params={},
+                    )
+                    send_files.assert_called_once()
+                    mint.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_multiple_own_urls_sends_all_media_as_list(
