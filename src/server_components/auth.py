@@ -67,7 +67,7 @@ def _get_bearer_token_from_http() -> str | None:
         # FastMCP exposes HTTP headers via this dependency
         from fastmcp.server.dependencies import get_http_headers
 
-        headers = get_http_headers()
+        headers = get_http_headers(include={"authorization"})
         return _extract_bearer_token_from_headers(headers)
     except Exception:  # pragma: no cover — defensive for stdio / test contexts
         return None
@@ -189,7 +189,7 @@ def extract_bearer_token() -> str | None:
         # Imported lazily to avoid dependency during stdio runs
         from fastmcp.server.dependencies import get_http_headers
 
-        headers = get_http_headers()
+        headers = get_http_headers(include={"authorization"})
         return _extract_bearer_token_from_headers(headers)
     except Exception as e:  # pragma: no cover - defensive
         logger.warning(f"Error extracting bearer token: {e}")
@@ -285,7 +285,7 @@ def extract_bearer_token_from_request(request) -> str | None:
         try:  # pragma: no cover - optional path
             from fastmcp.server.dependencies import get_http_headers
 
-            headers = get_http_headers()
+            headers = get_http_headers(include={"authorization"})
             return _extract_bearer_token_from_headers(headers)
         except Exception:
             return None
