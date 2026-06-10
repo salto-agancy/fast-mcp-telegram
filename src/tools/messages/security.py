@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import ipaddress
+import socket
 from typing import Any
 
 from src.config.server_config import ServerMode, cfg
@@ -75,14 +76,19 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
 
         # Resolve hostname to IPs and validate each one.
         # This catches domains that resolve to loopback/private/link-local addresses.
-        import socket
 
+        # Short timeout on DNS to prevent blocking on slow/unreachable nameservers.
+        _original_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(5.0)
         try:
-            addrinfo = socket.getaddrinfo(
-                hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
-            )
-        except socket.gaierror:
-            return False, f"DNS resolution failed for: {hostname}"
+            try:
+                addrinfo = socket.getaddrinfo(
+                    hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+                )
+            except socket.gaierror:
+                return False, f"DNS resolution failed for: {hostname}"
+        finally:
+            socket.setdefaulttimeout(_original_timeout)
 
         checked_ips: set[str] = set()
         for _family, _type, _proto, _canonname, sockaddr in addrinfo:

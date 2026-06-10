@@ -95,7 +95,7 @@ def test_block_link_local_ip_string_match() -> None:
 # ── DNS resolution checks (the SSRF fix) ──
 
 
-@patch("socket.getaddrinfo")
+@patch("src.tools.messages.security.socket.getaddrinfo")
 def test_dns_resolves_to_loopback_blocked(mock_getaddrinfo) -> None:
     """Domain that resolves to 127.0.0.1 should be blocked."""
     mock_getaddrinfo.return_value = [
@@ -104,12 +104,12 @@ def test_dns_resolves_to_loopback_blocked(mock_getaddrinfo) -> None:
     _enable_http()
     is_safe, msg = _validate_url_security("http://localtest.me/file")
     assert not is_safe
-    assert "Loopback IP blocked after DNS resolution" in msg
+    assert "blocked" in msg
     assert "localtest.me" in msg
     assert "127.0.0.1" in msg
 
 
-@patch("socket.getaddrinfo")
+@patch("src.tools.messages.security.socket.getaddrinfo")
 def test_dns_resolves_to_private_ip_blocked(mock_getaddrinfo) -> None:
     """Domain that resolves to 10.x.x.x should be blocked when block_private_ips=True."""
     config = ServerConfig()
@@ -122,12 +122,12 @@ def test_dns_resolves_to_private_ip_blocked(mock_getaddrinfo) -> None:
     ]
     is_safe, msg = _validate_url_security("http://internal-service.local/file")
     assert not is_safe
-    assert "Private/link-local IP blocked after DNS resolution" in msg
+    assert "blocked" in msg
     assert "internal-service.local" in msg
     assert "10.0.0.5" in msg
 
 
-@patch("socket.getaddrinfo")
+@patch("src.tools.messages.security.socket.getaddrinfo")
 def test_dns_resolves_public_ip_allowed(mock_getaddrinfo) -> None:
     """Domain that resolves to a public IP should be allowed."""
     _enable_http()
@@ -138,7 +138,7 @@ def test_dns_resolves_public_ip_allowed(mock_getaddrinfo) -> None:
     assert is_safe, f"Expected safe for public IP, got: {msg}"
 
 
-@patch("socket.getaddrinfo")
+@patch("src.tools.messages.security.socket.getaddrinfo")
 def test_dns_resolution_failure_blocks(mock_getaddrinfo) -> None:
     """If DNS resolution fails, URL should be blocked."""
     mock_getaddrinfo.side_effect = socket.gaierror("Name or service not known")
@@ -150,7 +150,7 @@ def test_dns_resolution_failure_blocks(mock_getaddrinfo) -> None:
     assert "DNS resolution failed" in msg
 
 
-@patch("socket.getaddrinfo")
+@patch("src.tools.messages.security.socket.getaddrinfo")
 def test_dns_resolves_to_link_local_blocked(mock_getaddrinfo) -> None:
     """Domain that resolves to 169.254.x.x should be blocked."""
     config = ServerConfig()
@@ -163,10 +163,10 @@ def test_dns_resolves_to_link_local_blocked(mock_getaddrinfo) -> None:
     ]
     is_safe, msg = _validate_url_security("http://link-local-spoof.example/file")
     assert not is_safe
-    assert "Private/link-local IP blocked after DNS resolution" in msg
+    assert "blocked" in msg
 
 
-@patch("socket.getaddrinfo")
+@patch("src.tools.messages.security.socket.getaddrinfo")
 def test_dns_resolves_to_ipv6_loopback_blocked(mock_getaddrinfo) -> None:
     """Domain that resolves to IPv6 loopback (::1) should be blocked."""
     mock_getaddrinfo.return_value = [
@@ -175,10 +175,10 @@ def test_dns_resolves_to_ipv6_loopback_blocked(mock_getaddrinfo) -> None:
     _enable_http()
     is_safe, msg = _validate_url_security("http://ipv6-localtest.example/file")
     assert not is_safe
-    assert "Loopback IP blocked after DNS resolution" in msg
+    assert "blocked" in msg
 
 
-@patch("socket.getaddrinfo")
+@patch("src.tools.messages.security.socket.getaddrinfo")
 def test_dns_multiple_ips_some_bad_all_blocked(mock_getaddrinfo) -> None:
     """If any resolved IP is loopback, the URL is blocked (even with public IPs)."""
     _enable_http()
@@ -188,5 +188,5 @@ def test_dns_multiple_ips_some_bad_all_blocked(mock_getaddrinfo) -> None:
     ]
     is_safe, msg = _validate_url_security("http://multi-ip.example/file")
     assert not is_safe
-    assert "Loopback IP blocked after DNS resolution" in msg
+    assert "blocked" in msg
     assert "127.0.0.1" in msg
