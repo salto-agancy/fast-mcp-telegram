@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import ipaddress
+import socket
 from typing import Any
 
 from src.config.server_config import ServerMode, cfg
@@ -70,6 +71,44 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
                 if ip.is_private or ip.is_loopback or ip.is_link_local:
                     return False, f"Private IP access blocked: {hostname}"
 
+        # Resolve hostname to IPs and validate each one.
+        # This catches domains that resolve to loopback/private/link-local addresses.
+
+        # Short timeout on DNS to prevent blocking on slow/unreachable nameservers.
+        _original_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(5.0)
+        try:
+            try:
+                addrinfo = socket.getaddrinfo(
+                    hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+                )
+            except socket.gaierror:
+                return False, f"DNS resolution failed for: {hostname}"
+        finally:
+            socket.setdefaulttimeout(_original_timeout)
+
+        checked_ips: set[str] = set()
+        for _family, _type, _proto, _canonname, sockaddr in addrinfo:
+            ip_str = sockaddr[0]
+            if ip_str in checked_ips:
+                continue
+            checked_ips.add(ip_str)
+
+            if ipaddress.ip_address(ip_str).is_loopback:
+                return (
+                    False,
+                    f"Loopback IP blocked after DNS resolution: "
+                    f"{hostname} → {ip_str}",
+                )
+
+            if config.block_private_ips:
+                ip_addr = ipaddress.ip_address(ip_str)
+                if ip_addr.is_private or ip_addr.is_link_local:
+                    return (
+                        False,
+                        f"Private/link-local IP blocked after DNS resolution: "
+                        f"{hostname} → {ip_str}",
+                    )
         return True, ""
 
     except Exception as e:
