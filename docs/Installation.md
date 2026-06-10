@@ -188,9 +188,11 @@ The web setup interface manages Telegram sessions directly from your browser. Ac
 
 ### Create or Manage Sessions
 
-**Create New Session:** Click **"Create New Session"**, enter your phone number (with country code, e.g., `+1234567890`), then enter the verification code Telegram sends. If 2FA is enabled, enter your password. Download the generated `mcp.json` and use it in your MCP client.
+**Create New Session:** The setup page shows a **QR code by default**. Open Telegram mobile → Settings → Devices → Scan QR code. Once scanned, your bearer token appears immediately — no phone typing, no verification code, no 2FA input needed.
 
-**Reauthorize Existing Session:** Click **"Reauthorize Existing Session"**, enter your bearer token, confirm your phone number, then enter the verification code. If 2FA is enabled, enter your password. Your session refreshes with the same token.
+**Alternative — Phone (no mobile app):** Click **"Create New Session"**, enter your phone number (with country code, e.g., `+1234567890`), then enter the verification code Telegram sends. If 2FA is enabled, enter your password.
+
+**Reauthorize Existing Session:** Enter your bearer token, then scan the QR or confirm your phone number. Your session refreshes with the same token.
 
 **Delete Session:** Click **"Delete Session"**, enter your bearer token, then confirm deletion (cannot be undone).
 

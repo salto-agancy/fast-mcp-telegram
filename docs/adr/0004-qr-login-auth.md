@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted — Implemented and deployed (v0.30.0, live at tg-mcp.l1979.ru)
 
 ## Date
 

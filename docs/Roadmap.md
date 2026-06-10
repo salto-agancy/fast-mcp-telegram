@@ -95,10 +95,11 @@ flowchart LR
 | 10. Database session storage | Planned | Infrastructure | — | Replace file-based .session with PostgreSQL/Redis storage |
 | 11. Smithery Hosted migration | Planned | Infrastructure | — | Move from URL-based to Smithery-hosted containers |
 | 12. OIDC self-service Phase 1 | **Postponed** | OIDC | `feature/oidc-phase1-storage` | Storage layer for OIDC + elicitation. Superseded by QR login. See [ADR 0004](adr/0004-qr-login-auth.md) |
-| 13. QR login auth | **Designing** | Auth | `feature/qr-login-auth` | Replace OIDC/elicitation with Telethon QR login. See [ADR 0004](adr/0004-qr-login-auth.md) |
+| 13. QR login auth | ✅ **Shipped (v0.30.0)** | Auth | `master` | Telethon QR login — scan QR from mobile, no phone/code/2FA. Deployed at tg-mcp.l1979.ru. See [ADR 0004](adr/0004-qr-login-auth.md) |
 
 ## Shipped on `master`
 
+- QR Login Auth (v0.30.0) — Telethon QR login, unified `/setup` page, `@require_auth` decorator. Backward compatible with existing bearer tokens. See [ADR 0004](adr/0004-qr-login-auth.md)
 - [Strategic-Market-Positioning.md](Strategic-Market-Positioning.md) capability index
 - Gemini research under [research/](research/) (third-party reference)
 - Roadmap lane model (this document)
@@ -155,7 +156,7 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 | Prompt-injection scanner | Trust | After ACL + QA coverage |
 | OAuth2 / IdP | Enterprise | Federation path |
 | **External session storage** (PostgreSQL / Redis) | Infrastructure | **Phase 2 of Smithery plan.** Persistent Telethon sessions for ephemeral deployments (Smithery Hosted). Options: PostgreSQL-backed session store or Redis-based StringSession cache. Unblocks userbot scenarios in hosted Docker environments. See [research/session-storage-design.md](research/session-storage-design.md) |
-| **QR login auth** | Auth | Replace OIDC/elicitation with Telethon's `client.qr_login()` for session creation. Single unauthenticated tool behavior: all tools guide to QR/web setup. See [ADR 0004](adr/0004-qr-login-auth.md) |
+| **QR login auth** | ✅ **SHIPPED** | Auth | Telethon QR login — scan QR from Telegram mobile, no phone/OTP/2FA. Deployed at tg-mcp.l1979.ru. See [ADR 0004](adr/0004-qr-login-auth.md) |
 | **Setup via agent dialog** | Infrastructure | ⛔ **SUPERSEDED** by QR login approach (see [ADR 0004](adr/0004-qr-login-auth.md)) — OIDC + MCP elicitation replaced by Telethon QR login |
 | **Remote file upload (base64)** ✅ PR #103, #104, #105 | Features | `data:...;base64` inline payloads in `files` param (all modes). `;filename=name.ext` preserves original names. Images sent as inline photos, docs as documents. `tg-mcp-call` auto-inlines local paths as data: URIs. |
 | Stdio path sandbox | Trust | Local stdio users |

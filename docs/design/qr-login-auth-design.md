@@ -1,9 +1,8 @@
 # QR Login Auth — Implementation Design
 
-**Status:** Draft for review
+**Status:** Implemented — v0.30.0 (deployed at tg-mcp.l1979.ru)
 **ADR:** [0004-qr-login-auth.md](../adr/0004-qr-login-auth.md)
-**Branch:** `feature/qr-login-auth`
-**Target:** v0.30.0 (pre-release via `pre` distribution channel)
+**Branch:** `master`
 
 ---
 
