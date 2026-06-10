@@ -1,12 +1,6 @@
 <img alt="Hero image" src="https://github.com/user-attachments/assets/635236f6-b776-41c7-b6e5-0dd14638ecc1" />
 
-[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://github.com/leshchenko1979/fast-mcp-telegram)
-[![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
-[![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
-
-**Fast MCP Telegram Server** — MCP/HTTP Gateway for Telegram — Multi-tenant, MTProto User API, 8 context-efficient tools
+**Telegram MCP Server** — 8 context-efficient tools, multi-tenant, MTProto bridge
 
 ## Try the Demo
 
@@ -17,7 +11,7 @@
 Then choose your path:
 
 **MCP Client (AI assistants)**
-- Download the `mcp.json` file
+- From the [setup page](/setup), download the `mcp.json` file
 - Add the server to your AI client and ask: "send hello to my saved messages in telegram"
 
 **Direct API (curl)**
@@ -28,6 +22,12 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
   -H "Content-Type: application/json" \
   -d '{"params": {"peer": "me", "message": "Hello!"}}'
 ```
+
+[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://github.com/leshchenko1979/fast-mcp-telegram)
+[![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
+[![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
 
 ## Features
 
@@ -93,7 +93,22 @@ Set `BOT_API_TOKEN` instead of `--phone-number`. See [Installation Guide](docs/I
 }
 ```
 
-**http-auth mode (remote):** See [Installation Guide](docs/Installation.md) for deploying your own server and authenticating via web interface.
+**http-auth mode (remote):**
+
+```json
+{
+  "mcpServers": {
+    "telegram": {
+      "url": "https://tg-mcp.l1979.ru/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Get your token by scanning the QR code on the [setup page](/setup) or see [Installation Guide](docs/Installation.md) for deploying your own server.
 
 ### 3. Start Using
 ```json
@@ -121,27 +136,6 @@ Deploy your own MCP server on a VDS — see [Installation Guide](docs/Installati
 
 See [Tools Reference](docs/Tools-Reference.md) for detailed documentation with examples.
 
-## HTTP-MTProto Bridge
-
-**Direct curl access to any Telegram API method** — available for programmatic integration.
-
-```bash
-curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"params": {"peer": "me", "message": "Hello from curl!"}}'
-```
-
-Supports any Telegram method, automatic entity resolution, and TL object construction.
-
-**Integration examples:**
-- CI/CD: send deploy notifications to Telegram channels
-- Monitoring: push alerts and system metrics to admin groups
-- Webhooks: receive external events and forward to Telegram
-- Backup: export chat history to external storage systems
-- Custom bots: extend functionality with external services
-
-See [MTProto Bridge](docs/MTProto-Bridge.md) for full documentation.
 
 ## Documentation
 
@@ -155,4 +149,4 @@ See [MTProto Bridge](docs/MTProto-Bridge.md) for full documentation.
 
 MIT License - see [LICENSE](LICENSE)
 
-mcp-name: io.github.leshchenko1979/fast-mcp-telegram
+
