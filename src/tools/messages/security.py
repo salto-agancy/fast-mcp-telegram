@@ -85,13 +85,11 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
             return False, f"DNS resolution failed for: {hostname}"
 
         checked_ips: set[str] = set()
-        resolved_ips: list[str] = []
-        for family, _type, _proto, _canonname, sockaddr in addrinfo:
+        for _family, _type, _proto, _canonname, sockaddr in addrinfo:
             ip_str = sockaddr[0]
             if ip_str in checked_ips:
                 continue
             checked_ips.add(ip_str)
-            resolved_ips.append(ip_str)
 
             if ipaddress.ip_address(ip_str).is_loopback:
                 return (
