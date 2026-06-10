@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.server_components.qr_login import QrLoginManager
+from src.server_components.qr_login import QrLoginError, QrLoginManager
 
 
 @pytest.fixture
@@ -52,6 +52,24 @@ def test_create_session_generates_unique_ids(manager, mock_telethon_client):
     id2, _ = manager.create_session(mock_telethon_client)
 
     assert id1 != id2
+
+
+def test_create_session_raises_qr_login_error_on_failure(manager, mock_telethon_client):
+    """create_session raises QrLoginError when Telethon qr_login() fails."""
+    mock_telethon_client.qr_login.side_effect = RuntimeError("Telethon error")
+
+    with pytest.raises(QrLoginError, match="Failed to create Telegram QR login session"):
+        manager.create_session(mock_telethon_client)
+
+
+def test_create_session_raises_qr_login_error_on_empty_url(manager, mock_telethon_client):
+    """create_session raises QrLoginError when Telethon returns empty URL."""
+    mock_qr_login = MagicMock()
+    mock_qr_login.url = ""
+    mock_telethon_client.qr_login.return_value = mock_qr_login
+
+    with pytest.raises(QrLoginError, match="did not return a valid QR URL"):
+        manager.create_session(mock_telethon_client)
 
 
 @pytest.mark.asyncio
@@ -113,6 +131,29 @@ async def test_poll_status_expired(manager, mock_telethon_client):
 
     status = await manager.poll_status(session_id)
     assert status == "expired"
+    mock_telethon_client.disconnect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_poll_status_non_timeout_error(manager, mock_telethon_client):
+    """poll_status returns 'expired' when qr_login.wait() raises a non-timeout error."""
+    mock_qr_login = MagicMock()
+    mock_qr_login.url = "tg://login?token=abc"
+    mock_qr_login.wait = AsyncMock(side_effect=RuntimeError("Unexpected error"))
+    mock_telethon_client.qr_login.return_value = mock_qr_login
+
+    session_id, _ = manager.create_session(mock_telethon_client)
+    status = await manager.poll_status(session_id)
+
+    # First poll kicks off background task, may still be pending
+    assert status in ("pending", "expired")
+
+    # Yield so the background task finishes
+    await asyncio.sleep(0)
+
+    status = await manager.poll_status(session_id)
+    assert status == "expired"
+    mock_telethon_client.disconnect.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -183,6 +224,13 @@ async def test_regenerate_qr(manager, mock_telethon_client):
     assert second_url is not None
     assert second_url != first_url
     mock_telethon_client.qr_login.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_regenerate_qr_unknown_session_returns_none(manager, mock_telethon_client):
+    """regenerate_qr returns None when called with an unknown session id."""
+    result = await manager.regenerate_qr("non-existent-session", mock_telethon_client)
+    assert result is None
 
 
 def test_cleanup_expired(manager, mock_telethon_client):

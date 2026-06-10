@@ -92,10 +92,23 @@ class QrLoginManager:
         Returns:
             Tuple of (session_id, qr_url). The QR URL is a ``tg://login?token=...``
             link that the user scans from Telegram mobile, or shows as a QR code.
+
+        Raises:
+            QrLoginError: If Telethon fails to create a QR login or returns no URL.
         """
         # Telethon's qr_login() returns a QRLogin object
-        qr_login = telethon_client.qr_login()
-        qr_url = str(getattr(qr_login, "url", ""))
+        try:
+            qr_login = telethon_client.qr_login()
+        except Exception as exc:
+            raise QrLoginError(
+                "Failed to create Telegram QR login session"
+            ) from exc
+
+        qr_url = str(getattr(qr_login, "url", "")).strip()
+        if not qr_url:
+            raise QrLoginError(
+                "Telethon QR login did not return a valid QR URL"
+            )
 
         session_id = uuid.uuid4().hex[:16]
         state = SessionState(telethon_client, qr_url)
@@ -214,8 +227,16 @@ class QrLoginManager:
             await state.telethon_client.disconnect()
 
         # Create new QR login
-        qr_login = telethon_client.qr_login()
-        new_url = str(getattr(qr_login, "url", ""))
+        try:
+            qr_login = telethon_client.qr_login()
+        except Exception as exc:
+            logger.warning("QR session %s regenerate failed: %s", session_id, exc)
+            return None
+
+        new_url = str(getattr(qr_login, "url", "")).strip()
+        if not new_url:
+            logger.warning("QR session %s regenerate: invalid URL from Telethon", session_id)
+            return None
         state.qr_url = new_url
         state.telethon_client = telethon_client
         state._qr_login_obj = qr_login
