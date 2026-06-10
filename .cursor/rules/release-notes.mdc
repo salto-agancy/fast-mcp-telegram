@@ -1,0 +1,76 @@
+---
+description: Release notes generation — format, versioning, changelog, and publishing
+globs: RELEASE_NOTES.md
+alwaysApply: false
+---
+
+# Release notes
+
+Do not maintain a static `RELEASE_NOTES.md` file. Generate release notes on demand when preparing a release.
+
+## Version
+
+Read the current version from `pyproject.toml` (`[project] version = "x.y.z"`).
+
+Bump version per semantic versioning:
+- **Major (x.0.0)** — breaking changes, major auth/architectural shifts
+- **Minor (0.y.0)** — new features, non-breaking enhancements
+- **Patch (0.0.z)** — bug fixes, documentation, internal changes
+
+## Format
+
+```
+# Release v<version>
+
+<One-liner summary of the release. Keep it to one sentence.>
+
+## New Features
+
+- **Feature title** — concise description with key detail. (#PR)
+
+## Fixes
+
+- **Bug title** — concise description with root cause / user impact. (#PR)
+
+## Internal
+
+- Changes that don't affect the user-facing API. (#PR)
+
+---
+
+**Full Changelog**: https://github.com/leshchenko1979/fast-mcp-telegram/compare/<prev-tag>...v<version>
+```
+
+## How to generate
+
+1. **Version** — read from `pyproject.toml`, bump as needed
+2. **PRs** — collect merged PRs since last tag:
+   ```bash
+   gh pr list --state merged --base master --json number,title,mergedAt,body --limit 30
+   ```
+   Or use `git log <prev-tag>..HEAD --oneline --no-decorate`
+3. **Categorise** — split into New Features / Fixes / Internal:
+   - `feat:` or feature PRs → New Features
+   - `fix:` → Fixes
+   - `chore:`, `docs:`, `refactor:`, `style:`, `test:` → Internal
+   - `security:` → Fixes (label as security)
+4. **Summarise** — one line per item with `(#PR_NUMBER)` reference. Focus on user-visible impact, not implementation details
+5. **Tag** — create and push the tag:
+   ```bash
+   git tag -a v<version> -m "Release v<version>"
+   git push origin v<version>
+   ```
+6. **GitHub Release** — create via `gh release create v<version> --title "Release v<version>" --notes-file <notes.md>`
+7. **Announce** — post to Telegram (project group `fast-mcp-telegram`) with a summary
+
+## Example
+
+See the archived `git log` of `RELEASE_NOTES.md` for past examples, or check GitHub releases history.
+
+## Published resource updates
+
+After release, update listings on:
+- Glama (`published-resources.md`)
+- Smithery (`published-resources.md`)
+- MCP.so (`published-resources.md`)
+- OpenTools (`published-resources.md`)
