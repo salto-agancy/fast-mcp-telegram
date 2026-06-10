@@ -1,6 +1,6 @@
 <img alt="Hero image" src="https://github.com/user-attachments/assets/635236f6-b776-41c7-b6e5-0dd14638ecc1" />
 
-**Telegram MCP Server** — 8 context-efficient tools, multi-tenant, MTProto bridge
+**Telegram MCP Server** — Model Context Protocol (MCP) gateway for Telegram. 8 context-efficient tools, multi-tenant, MTProto bridge.
 
 ## Try the Demo
 
@@ -29,6 +29,16 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 [![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
 [![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
 
+## How It Works
+
+This server sits between your AI agent and Telegram's API:
+
+```
+Your agent → MCP/HTTP → this server → MTProto → Telegram
+```
+
+**What it does:** Authenticates you with Telegram (QR or phone/bot token), exposes 8 AI-friendly tools instead of 80+ micro-APIs, and bridges raw MTProto for power users. Multi-tenant — one server, many users, isolated sessions.
+
 ## Features
 
 
@@ -56,15 +66,15 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 | :shield: **Production Reliability**                                                                 | Auto-reconnect, configurable logging, comprehensive error handling                                               |
 
 
+> **Prerequisite:** Install `uv` — see [docs](https://docs.astral.sh/uv/#installation) if you don't have it. Or use Docker (see [Installation Guide](docs/Installation.md)).
+
 ## Quick Start
 
 ### 1. Install and authenticate
 
-**Quickest path — scan QR from Telegram mobile (remote server):**
-Open your server's `/setup` page → scan the QR code → copy your bearer token → done.
-No phone number, no verification code, no 2FA.
+**Quickest path (remote server):** Open `/setup` → scan QR → copy token (see [Try the Demo](#try-the-demo)).
 
-**CLI path (local stdio, full Telegram user):**
+**CLI path (local stdio):** Run `fast-mcp-telegram-setup` once to create a Telegram session — then `fast-mcp-telegram` serves it:
 ```bash
 uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
   --api-id="your_api_id" \
@@ -77,7 +87,7 @@ Set `BOT_API_TOKEN` instead of `--phone-number`. See [Installation Guide](docs/I
 
 ### 2. Configure MCP Client
 
-**stdio mode (local):**
+**stdio mode (local):** Add to your MCP client config (e.g. `claude_desktop_config.json`) — stdio (standard input/output) is the default transport for local MCP clients:
 ```json
 {
   "mcpServers": {
@@ -93,7 +103,7 @@ Set `BOT_API_TOKEN` instead of `--phone-number`. See [Installation Guide](docs/I
 }
 ```
 
-**http-auth mode (remote):**
+**http-auth mode (remote):** Add to your MCP client config (e.g. `claude_desktop_config.json`):
 
 ```json
 {
@@ -132,7 +142,7 @@ Deploy your own MCP server on a VDS — see [Installation Guide](docs/Installati
 | `find_chats` | Find users/groups/channels | Multi-term search, contact discovery, folder filtering, username/phone lookup |
 | `get_chat_info` | Get detailed profile info | Member counts, bio/about, online status, forum topics, enriched data |
 | `send_message_to_phone` | Message phone numbers | Auto-contact management, optional cleanup, file support (URLs/data URIs) |
-| `invoke_mtproto` | Direct Telegram API access | Raw MTProto methods, entity resolution, safety guardrails |
+| `invoke_mtproto` | Direct Telegram API (power user) | Raw MTProto methods, entity resolution, safety guardrails — see [MTProto Bridge](docs/MTProto-Bridge.md) |
 
 See [Tools Reference](docs/Tools-Reference.md) for detailed documentation with examples.
 
