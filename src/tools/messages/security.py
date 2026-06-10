@@ -14,6 +14,9 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
     """
     Validate URL for security risks to prevent SSRF attacks.
 
+    Performs hostname string checks first, then resolves DNS to validate
+    the resolved IP addresses against loopback, private, and link-local ranges.
+
     Returns:
         (is_safe, error_message): True if safe, False with error message if unsafe
     """
@@ -69,6 +72,42 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
                 ip = ipaddress.ip_address(hostname)
                 if ip.is_private or ip.is_loopback or ip.is_link_local:
                     return False, f"Private IP access blocked: {hostname}"
+
+        # Resolve hostname to IPs and validate each one.
+        # This catches domains that resolve to loopback/private/link-local addresses.
+        import socket
+
+        try:
+            addrinfo = socket.getaddrinfo(
+                hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+            )
+        except socket.gaierror:
+            return False, f"DNS resolution failed for: {hostname}"
+
+        checked_ips: set[str] = set()
+        resolved_ips: list[str] = []
+        for family, _type, _proto, _canonname, sockaddr in addrinfo:
+            ip_str = sockaddr[0]
+            if ip_str in checked_ips:
+                continue
+            checked_ips.add(ip_str)
+            resolved_ips.append(ip_str)
+
+            if ipaddress.ip_address(ip_str).is_loopback:
+                return (
+                    False,
+                    f"Loopback IP blocked after DNS resolution: "
+                    f"{hostname} → {ip_str}",
+                )
+
+            if config.block_private_ips:
+                ip_addr = ipaddress.ip_address(ip_str)
+                if ip_addr.is_private or ip_addr.is_link_local:
+                    return (
+                        False,
+                        f"Private/link-local IP blocked after DNS resolution: "
+                        f"{hostname} → {ip_str}",
+                    )
 
         return True, ""
 
