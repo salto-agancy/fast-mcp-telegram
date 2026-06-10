@@ -56,7 +56,7 @@ Treat commit messages as hints; validate against actual behavior. Describe what 
 
 - **Primary**: new features, fixes, behavior changes
 - **Omit**: refactoring and internal cleanup unless they are the only changes (still complete docs per section 3)
-- **Fixes vs new work**: Do not list under **Fixes** polish for features introduced in the same release; use **New Features** once. **Fixes** = regressions or unrelated bugs.
+- **Fixes vs new work**: Fixes that pertain to features introduced in **this** release go under **New Features** only — never under **Fixes**. **Fixes** = regressions in previously existing features or unrelated bugs. If a new feature has bugs, it's not a "fix" for users, it's just the feature being completed.
 - **Dependencies**: User-visible stack milestones (e.g. FastMCP 3.x) go under **New Features**.
 
 ## 3. User-facing documentation
@@ -108,7 +108,7 @@ This release <primary user-facing value>.
 
 - Replace tag placeholders (e.g. `0.12.0`, `0.11.0`). Tags have **no** `v` prefix.
 - Do **not** repeat the GitHub release title as the first body line.
-- Omit **Fixes** if everything is under **New Features**.
+- Omit **Fixes** section entirely if all changes are new features (including their post-release polish).
 - Omit internal improvements when user-facing items exist.
 - No emojis in GitHub notes. No file stats or implementation detail.
 - Verify notes match code and section 3 docs before shipping.
