@@ -116,6 +116,46 @@ def clear_acl_cache() -> None:
     _blocked_peers_cache = None
 
 
+def principal_count() -> int:
+    """Number of principals in the ACL config.
+
+    Returns 0 when ACL is disabled, the config file is missing, or no
+    principals are defined — never raises.
+    """
+    config = cfg()
+    if not config.acl_enabled:
+        return 0
+    try:
+        doc = _load_acl_document()
+    except AclConfigError:
+        return 0
+    principals = doc.get("principals") or {}
+    if not isinstance(principals, dict):
+        return 0
+    return len(principals)
+
+
+def read_only_count() -> int:
+    """Number of ACL principals with ``read_only: true``.
+
+    Returns 0 when ACL is disabled, the config file is missing, or no
+    principals have the read_only flag — never raises.
+    """
+    config = cfg()
+    if not config.acl_enabled:
+        return 0
+    try:
+        doc = _load_acl_document()
+    except AclConfigError:
+        return 0
+    principals = doc.get("principals") or {}
+    if not isinstance(principals, dict):
+        return 0
+    return sum(
+        1 for p in principals.values() if isinstance(p, dict) and p.get("read_only")
+    )
+
+
 def _configured_acl_path() -> Path | None:
     config = cfg()
     if not config.acl_enabled:

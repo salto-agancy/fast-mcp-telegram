@@ -27,6 +27,7 @@ from src.server_components.mtproto_api import register_mtproto_api_routes
 from src.server_components.server_card import register_server_card_route
 from src.server_components.tools_register import register_tools
 from src.server_components.web_setup import register_web_setup_routes
+from src.telemetry import telemetry_task
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ config = cfg()
 
 # Background cleanup task
 _cleanup_task = None
+_telemetry_task = None
 
 
 async def cleanup_loop():
@@ -91,12 +93,20 @@ async def lifespan(app: FastMCP):
         raise
 
     # Startup: background cleanup
-    global _cleanup_task
+    global _cleanup_task, _telemetry_task
     _cleanup_task = asyncio.create_task(cleanup_loop())
+
+    # Startup: anonymous telemetry (fire-and-forget heartbeat loop)
+    _telemetry_task = asyncio.create_task(telemetry_task())
 
     yield
 
     # Shutdown
+    if _telemetry_task:
+        _telemetry_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await _telemetry_task
+
     if _cleanup_task:
         _cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
