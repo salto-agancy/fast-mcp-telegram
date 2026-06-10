@@ -76,7 +76,6 @@ def test_metrics_store_defaults(telemetry_module):
     ms = telemetry_module.MetricsStore()
     assert ms.total_calls == 0
     assert ms.errors == 0
-    assert ms.flood_waits == 0
 
 
 def test_metrics_store_increment(telemetry_module):
@@ -84,10 +83,8 @@ def test_metrics_store_increment(telemetry_module):
     ms = telemetry_module.MetricsStore()
     ms.total_calls += 1
     ms.errors += 2
-    ms.flood_waits += 3
     assert ms.total_calls == 1
     assert ms.errors == 2
-    assert ms.flood_waits == 3
 
 
 def test_metrics_store_snapshot_immutable(telemetry_module):
@@ -161,6 +158,8 @@ def test_gather_payload_features_structure(telemetry_module):
         "inactive_session_days",
         "block_private_ips",
         "allow_http_urls",
+        "acl_principals",
+        "acl_read_only",
     }
     assert expected.issubset(features.keys())
 
@@ -177,12 +176,11 @@ def test_gather_payload_counters_structure(telemetry_module):
     """gather_payload counters block has expected keys."""
     payload = telemetry_module.gather_payload()
     counters = payload["counters"]
-    expected = {"total_calls", "errors", "flood_waits"}
+    expected = {"total_calls", "errors"}
     assert expected.issubset(counters.keys())
     # Initial values at startup should be zero before any tool calls
     assert isinstance(counters["total_calls"], int)
     assert isinstance(counters["errors"], int)
-    assert isinstance(counters["flood_waits"], int)
 
 
 def test_gather_payload_server_mode_reflects_config(telemetry_module):
@@ -214,18 +212,14 @@ def test_send_heartbeat_debug_mode_logs(telemetry_module, capsys):
 
 def test_send_heartbeat_network_error_silent(telemetry_module):
     """Network error does not raise — silently ignored."""
+    import urllib.error
     from unittest.mock import patch
 
     payload = {"v": 1, "test": True}
-    with patch("src.telemetry.send_heartbeat") as mock_send:
-        mock_send.side_effect = ConnectionError("refused")
-        try:
-            mock_send(payload)
-        except ConnectionError:
-            pass
-        else:
-            pass  # should not raise in real code
-        # Real implementation should not raise
-        mock_send.assert_called_once_with(payload)
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = urllib.error.URLError("refused")
+        # Should not raise
+        telemetry_module.send_heartbeat(payload)
+    mock_urlopen.assert_called_once()
 
 

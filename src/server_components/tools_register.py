@@ -127,14 +127,14 @@ def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool 
 
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
-            metrics.total_calls += 1
+            metrics.record_call()
             try:
                 result = await func(*args, **kwargs)
             except Exception:
-                metrics.errors += 1
+                metrics.record_error()
                 raise
             if isinstance(result, dict) and result.get("ok") is False:
-                metrics.errors += 1
+                metrics.record_error()
             return result
 
         decorated_func = _telemetry_wrapper

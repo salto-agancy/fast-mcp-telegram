@@ -16,11 +16,12 @@ import logging
 import os
 import platform
 import sys
+import threading
 import time
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 
+from src._version import __version__
 from src.config.server_config import cfg
 
 logger = logging.getLogger(__name__)
@@ -57,24 +58,39 @@ def should_send() -> bool:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
 class MetricsStore:
-    """Lifetime-of-process counters for tool-call activity."""
+    """Lifetime-of-process counters for tool-call activity.
 
-    total_calls: int = 0
-    errors: int = 0
-    flood_waits: int = 0
+    Thread-safe: all mutations and reads go through a ``threading.Lock``
+    because ``counters.snapshot()`` is called from a thread-pool executor
+    while the event-loop wields ``record_call()`` / ``record_error()``.
+    """
+
+    def __init__(self) -> None:
+        self.total_calls: int = 0
+        self.errors: int = 0
+        self._lock = threading.Lock()
+
+    def record_call(self) -> None:
+        """Increment total_calls by 1 (atomic w.r.t. snapshot)."""
+        with self._lock:
+            self.total_calls += 1
+
+    def record_error(self) -> None:
+        """Increment errors by 1 (atomic w.r.t. snapshot)."""
+        with self._lock:
+            self.errors += 1
 
     def snapshot(self) -> dict:
         """Return a frozen copy of the current counters as a plain dict."""
-        return {
-            "total_calls": self.total_calls,
-            "errors": self.errors,
-            "flood_waits": self.flood_waits,
-        }
+        with self._lock:
+            return {
+                "total_calls": self.total_calls,
+                "errors": self.errors,
+            }
 
 
-# Module-level singleton — wired by server.py during lifespan.
+# Module-level singleton created at import time.
 metrics = MetricsStore()
 
 # ---------------------------------------------------------------------------
@@ -161,7 +177,7 @@ def gather_payload() -> dict:
         "iid": get_instance_id(),
         "ts": int(time.time()),
         "started_at": _started_at,
-        "ver": "0.30.1",
+        "ver": __version__,
         "os": f"{sys.platform} {platform.machine()}",
         "py": f"{sys.version_info.major}.{sys.version_info.minor}",
         "features": _collect_features(),

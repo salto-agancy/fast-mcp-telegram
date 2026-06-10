@@ -1,6 +1,6 @@
 # ADR 0005: Anonymous Feature-Adoption Telemetry
 
-**Status:** accepted
+**Status:** proposed
 **Date:** 2026-06-10
 
 ## Context

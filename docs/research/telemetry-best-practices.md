@@ -82,7 +82,7 @@ SonarQube CLI (enterprise context):
 | **Opt-out (on by default)** | Maximise data quality for adoption decisions; aligns with Vercel/Sonar precedent |
 | **Simple HTTP POST** | 300 bytes per heartbeat; no OTel overhead |
 | **Tiny collector container** | Synchronous write to PostgreSQL; no Traefik plugins or PostgREST needed |
-| **DO_NOT_TRACK + MCP_TELEMETRY_DISABLED** | Industry-standard kill switches |
+| **DO_NOT_TRACK** | Industry-standard kill switch |
 | **Debug mode** | `MCP_TELEMETRY_DEBUG=1` — user can inspect payload |
 | **No interactive prompt** | Disclosure in release notes + README only |
 | **Lifetime-of-process counters** | No delta tracking on client; collector derives from consecutive heartbeats |

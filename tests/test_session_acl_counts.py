@@ -72,14 +72,14 @@ def test_principal_count_zero_when_acl_disabled():
     assert principal_count() == 0
 
 
-def test_principal_count_zero_when_no_config():
+def test_principal_count_zero_when_no_config(tmp_path):
     """principal_count() returns 0 when no ACL config file exists."""
     clear_acl_cache()
     config = ServerConfig(_cli_parse_args=[])
     config.server_mode = ServerMode.HTTP_AUTH
     config.acl_enabled = True
     # Point to non-existent file
-    config.acl_config_path = "/tmp/nonexistent-acl.yaml"
+    config.acl_config_path = str(tmp_path / "nonexistent-acl.yaml")
     set_config(config)
 
     # Should not raise — gracefully returns 0
