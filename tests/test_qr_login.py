@@ -13,10 +13,10 @@ from src.server_components.qr_login import QrLoginError, QrLoginManager
 def mock_telethon_client():
     """Create a mock Telethon client with qr_login support."""
     client = MagicMock()
-    # Telethon's qr_login() is synchronous, returns a QRLogin object
+    # Telethon's qr_login() is a coroutine
     qr_login_mock = MagicMock()
     qr_login_mock.url = "tg://login?token=abc123"
-    client.qr_login = MagicMock(return_value=qr_login_mock)
+    client.qr_login = AsyncMock(return_value=qr_login_mock)
     client.disconnect = AsyncMock()
     return client
 
@@ -27,49 +27,53 @@ def manager():
     return QrLoginManager(timeout_seconds=60)
 
 
-def test_create_session(manager, mock_telethon_client):
+@pytest.mark.asyncio
+async def test_create_session(manager, mock_telethon_client):
     """Creating a QR session returns a session_id and QR URL."""
     mock_qr_login = MagicMock()
     mock_qr_login.url = "tg://login?token=abc123"
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, qr_url = manager.create_session(mock_telethon_client)
+    session_id, qr_url = await manager.create_session(mock_telethon_client)
 
     assert session_id is not None
     assert len(session_id) > 0
     assert qr_url == "tg://login?token=abc123"
     assert session_id in manager._sessions
-    mock_telethon_client.qr_login.assert_called_once()
+    mock_telethon_client.qr_login.assert_awaited_once()
 
 
-def test_create_session_generates_unique_ids(manager, mock_telethon_client):
+@pytest.mark.asyncio
+async def test_create_session_generates_unique_ids(manager, mock_telethon_client):
     """Each call to create_session generates a unique session_id."""
     mock_qr_login = MagicMock()
     mock_qr_login.url = "tg://login?token=abc"
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    id1, _ = manager.create_session(mock_telethon_client)
-    id2, _ = manager.create_session(mock_telethon_client)
+    id1, _ = await manager.create_session(mock_telethon_client)
+    id2, _ = await manager.create_session(mock_telethon_client)
 
     assert id1 != id2
 
 
-def test_create_session_raises_qr_login_error_on_failure(manager, mock_telethon_client):
+@pytest.mark.asyncio
+async def test_create_session_raises_qr_login_error_on_failure(manager, mock_telethon_client):
     """create_session raises QrLoginError when Telethon qr_login() fails."""
     mock_telethon_client.qr_login.side_effect = RuntimeError("Telethon error")
 
     with pytest.raises(QrLoginError, match="Failed to create Telegram QR login session"):
-        manager.create_session(mock_telethon_client)
+        await manager.create_session(mock_telethon_client)
 
 
-def test_create_session_raises_qr_login_error_on_empty_url(manager, mock_telethon_client):
+@pytest.mark.asyncio
+async def test_create_session_raises_qr_login_error_on_empty_url(manager, mock_telethon_client):
     """create_session raises QrLoginError when Telethon returns empty URL."""
     mock_qr_login = MagicMock()
     mock_qr_login.url = ""
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
     with pytest.raises(QrLoginError, match="did not return a valid QR URL"):
-        manager.create_session(mock_telethon_client)
+        await manager.create_session(mock_telethon_client)
 
 
 @pytest.mark.asyncio
@@ -79,7 +83,7 @@ async def test_poll_status_pending(manager, mock_telethon_client):
     mock_qr_login.url = "tg://login?token=abc"
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = manager.create_session(mock_telethon_client)
+    session_id, _ = await manager.create_session(mock_telethon_client)
     status = await manager.poll_status(session_id)
 
     assert status == "pending"
@@ -97,7 +101,7 @@ async def test_poll_status_completed(manager, mock_telethon_client):
     mock_qr_login.wait = AsyncMock(return_value=mock_tg_client)
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = manager.create_session(mock_telethon_client)
+    session_id, _ = await manager.create_session(mock_telethon_client)
 
     # First poll kicks off background wait task
     status = await manager.poll_status(session_id)
@@ -120,7 +124,7 @@ async def test_poll_status_expired(manager, mock_telethon_client):
     mock_qr_login.wait = AsyncMock(side_effect=TimeoutError("QR login timed out"))
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = manager.create_session(mock_telethon_client)
+    session_id, _ = await manager.create_session(mock_telethon_client)
     status = await manager.poll_status(session_id)
 
     # First poll kicks off background task, may still be pending
@@ -142,7 +146,7 @@ async def test_poll_status_non_timeout_error(manager, mock_telethon_client):
     mock_qr_login.wait = AsyncMock(side_effect=RuntimeError("Unexpected error"))
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = manager.create_session(mock_telethon_client)
+    session_id, _ = await manager.create_session(mock_telethon_client)
     status = await manager.poll_status(session_id)
 
     # First poll kicks off background task, may still be pending
@@ -175,7 +179,7 @@ async def test_get_client(manager, mock_telethon_client):
     mock_qr_login.wait = AsyncMock(return_value=mock_tg_client)
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = manager.create_session(mock_telethon_client)
+    session_id, _ = await manager.create_session(mock_telethon_client)
 
     # First poll kicks off background wait task
     await manager.poll_status(session_id)
@@ -193,13 +197,14 @@ def test_get_client_not_found(manager):
     assert client is None
 
 
-def test_get_client_not_completed(manager, mock_telethon_client):
+@pytest.mark.asyncio
+async def test_get_client_not_completed(manager, mock_telethon_client):
     """get_client returns None for sessions that haven't completed."""
     mock_qr_login = MagicMock()
     mock_qr_login.url = "tg://login?token=abc"
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = manager.create_session(mock_telethon_client)
+    session_id, _ = await manager.create_session(mock_telethon_client)
     client = manager.get_client(session_id)
 
     assert client is None
@@ -212,7 +217,7 @@ async def test_regenerate_qr(manager, mock_telethon_client):
     mock_qr_login.url = "tg://login?token=abc"
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, first_url = manager.create_session(mock_telethon_client)
+    session_id, first_url = await manager.create_session(mock_telethon_client)
 
     # New QR login
     mock_qr_login2 = MagicMock()
@@ -223,7 +228,7 @@ async def test_regenerate_qr(manager, mock_telethon_client):
 
     assert second_url is not None
     assert second_url != first_url
-    mock_telethon_client.qr_login.assert_called()
+    mock_telethon_client.qr_login.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -233,14 +238,15 @@ async def test_regenerate_qr_unknown_session_returns_none(manager, mock_telethon
     assert result is None
 
 
-def test_cleanup_expired(manager, mock_telethon_client):
+@pytest.mark.asyncio
+async def test_cleanup_expired(manager, mock_telethon_client):
     """cleanup_expired removes expired sessions."""
     mock_qr_login = MagicMock()
     mock_qr_login.url = "tg://login?token=abc"
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
     # Create a session and put it in the past
-    session_id, _ = manager.create_session(mock_telethon_client)
+    session_id, _ = await manager.create_session(mock_telethon_client)
     manager._sessions[session_id].created_at = time.time() - 120  # 2 min ago
 
     manager.cleanup_expired()
@@ -248,34 +254,36 @@ def test_cleanup_expired(manager, mock_telethon_client):
     assert session_id not in manager._sessions
 
 
-def test_cleanup_expired_keeps_fresh(manager, mock_telethon_client):
+@pytest.mark.asyncio
+async def test_cleanup_expired_keeps_fresh(manager, mock_telethon_client):
     """cleanup_expired does NOT remove sessions within the timeout."""
     mock_qr_login = MagicMock()
     mock_qr_login.url = "tg://login?token=abc"
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = manager.create_session(mock_telethon_client)
+    session_id, _ = await manager.create_session(mock_telethon_client)
 
     manager.cleanup_expired()
 
     assert session_id in manager._sessions
 
 
-def test_create_session_integration_flow():
+@pytest.mark.asyncio
+async def test_create_session_integration_flow():
     """Full integration-style test of QrLoginManager flow."""
     manager = QrLoginManager(timeout_seconds=30)
     mock_client = MagicMock()
     qr_login_mock = MagicMock()
     qr_login_mock.url = "tg://login?token=flowtest"
     qr_login_mock.wait = AsyncMock(return_value=MagicMock())
-    mock_client.qr_login = MagicMock(return_value=qr_login_mock)
+    mock_client.qr_login = AsyncMock(return_value=qr_login_mock)
 
     # Test: create → poll → complete → get_client
-    session_id, qr_url = manager.create_session(mock_client)
+    session_id, qr_url = await manager.create_session(mock_client)
     assert qr_url == "tg://login?token=flowtest"
 
     # Async poll
-    status = asyncio.run(manager.poll_status(session_id))
+    status = await manager.poll_status(session_id)
     assert status in ("pending", "completed")
 
     _ = manager.get_client(session_id)  # Client may/may not be set
