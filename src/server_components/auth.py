@@ -117,7 +117,7 @@ def require_auth(func: Callable) -> Callable:
             except ToolError:
                 raise
             except Exception:
-                pass
+                logger.debug("FastMCP get_access_token fallback unavailable", exc_info=True)
 
         if token is None:
             logger.info("Unauthenticated tool call — returning auth guidance")

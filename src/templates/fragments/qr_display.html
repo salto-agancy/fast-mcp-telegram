@@ -6,7 +6,7 @@
         <img src="data:image/png;base64,{{ qr_image }}" alt="QR Code" class="qr-code" />
     </div>
 
-    <div id="qr-status-wrapper" hx-get="/setup/qr/status?setup_id={{ setup_id }}" hx-trigger="load delay:3s" hx-swap="innerHTML">
+    <div id="qr-status-wrapper">
         {% include "fragments/qr_polling.html" %}
     </div>
 

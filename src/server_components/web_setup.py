@@ -21,7 +21,7 @@ from telethon.tl.functions.account import GetPasswordRequest
 from src.client.connection import _cache_lock, _session_cache, generate_bearer_token
 from src.config.server_config import ServerMode, cfg
 from src.server_components.auth_middleware import generate_url_based_config
-from src.server_components.qr_login import QrLoginManager
+from src.server_components.qr_login import QrLoginError, QrLoginManager
 from src.server_components.session_token_validation import (
     InvalidSessionTokenError,
     session_file_path,
@@ -250,22 +250,25 @@ async def _complete_qr_login(
     authorized_client = qr_mgr.get_client(qr_session_id)
     temp_path = Path(state["session_path"])
 
-    token = generate_bearer_token()
-    session_dir = cfg().session_directory
-    dst = session_file_path(session_dir, token)
-
+    token: str | None = None
+    dst: Path | None = None
     try:
         with contextlib.suppress(Exception):
             if authorized_client:
                 await authorized_client.send_read_acknowledge(None)
                 await authorized_client.disconnect()
 
+        session_dir = cfg().session_directory
+        token = generate_bearer_token()
+        dst = session_file_path(session_dir, token)
+
         if temp_path.exists():
             temp_path.rename(dst)
-    except Exception as e:
+    except Exception:
+        logger.exception("Failed to persist QR session")
         return _fragment(
             request, "fragments/error.html",
-            {"error": f"Failed to persist session: {e}"},
+            {"error": "Failed to persist session. Please try again."},
         )
 
     domain = cfg().domain
@@ -859,7 +862,12 @@ def register_web_setup_routes(mcp_app):
             return _setup_error_fragment(request, f"Failed to connect: {e}")
 
         qr_mgr = _get_qr_manager()
-        qr_session_id, qr_url = qr_mgr.create_session(client)
+        try:
+            qr_session_id, qr_url = qr_mgr.create_session(client)
+        except QrLoginError as e:
+            await client.disconnect()
+            temp_session_path.unlink(missing_ok=True)
+            return _setup_error_fragment(request, str(e))
 
         # Generate QR code image as base64 PNG
         qr = qrcode.QRCode(box_size=10, border=2)
