@@ -15,9 +15,6 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
     """
     Validate URL for security risks to prevent SSRF attacks.
 
-    Performs hostname string checks first, then resolves DNS to validate
-    the resolved IP addresses against loopback, private, and link-local ranges.
-
     Returns:
         (is_safe, error_message): True if safe, False with error message if unsafe
     """
@@ -112,7 +109,6 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
                         f"Private/link-local IP blocked after DNS resolution: "
                         f"{hostname} → {ip_str}",
                     )
-
         return True, ""
 
     except Exception as e:
