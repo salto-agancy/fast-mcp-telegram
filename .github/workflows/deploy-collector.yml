@@ -156,16 +156,10 @@ jobs:
             DSN_USER=$(echo "$TELEMETRY_DSN" | sed -n 's|.*://\([^:]*\):.*|\1|p')
             DSN_PASS=$(echo "$TELEMETRY_DSN" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
             DSN_DB=$(echo "$TELEMETRY_DSN" | sed -n 's|.*/\([^?]*\)$|\1|p')
-            docker exec postgres psql -U postgres -tc \
-              "SELECT 1 FROM pg_roles WHERE rolname='$DSN_USER'" \
-              | grep -q 1 || \
-              docker exec postgres psql -U postgres -c \
-                "CREATE ROLE \"$DSN_USER\" WITH LOGIN PASSWORD '$DSN_PASS';"
-            docker exec postgres psql -U postgres -tc \
-              "SELECT 1 FROM pg_database WHERE datname='$DSN_DB'" \
-              | grep -q 1 || \
-              docker exec postgres psql -U postgres -c \
-                "CREATE DATABASE \"$DSN_DB\" OWNER \"$DSN_USER\";"
+            docker exec postgres psql -U postgres -c \
+              "DO \$\$ BEGIN CREATE ROLE \"$DSN_USER\" WITH LOGIN PASSWORD '$DSN_PASS'; EXCEPTION WHEN duplicate_object THEN NULL; END \$\$;"
+            docker exec postgres psql -U postgres -c \
+              "DO \$\$ BEGIN CREATE DATABASE \"$DSN_DB\" OWNER \"$DSN_USER\"; EXCEPTION WHEN duplicate_database THEN NULL; END \$\$;"
 
             # Login to GHCR if needed
             if [ -n "${GHCR_PULL_TOKEN:-}" ] && [ -n "${GHCR_PULL_USER:-}" ]; then
