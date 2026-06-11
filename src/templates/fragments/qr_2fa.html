@@ -1,14 +1,16 @@
-<div id="qr-2fa-container">
-    <h2>Two-Factor Authentication Required</h2>
-    <p class="muted">Your Telegram account has two-step verification enabled. Enter your password to complete the QR login.</p>
+<div id="qr-status-wrapper">
+    <div id="qr-2fa-container">
+        <h2>Two-Factor Authentication Required</h2>
+        <p class="muted">Your Telegram account has two-step verification enabled. Enter your password to complete the QR login.</p>
 
-    {% include "fragments/inline_error.html" %}
+        {% include "fragments/inline_error.html" %}
 
-    <form hx-post="/setup/qr/2fa" hx-target="#setup-flow" hx-swap="innerHTML">
-        <input type="hidden" name="setup_id" value="{{ setup_id }}" />
-        {% if hint %}<div class="muted">Hint: {{ hint }}</div>{% endif %}
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password" placeholder="••••••••" required autofocus />
-        <button type="submit">Confirm</button>
-    </form>
+        <form hx-post="/setup/qr/2fa" hx-target="#setup-flow" hx-swap="innerHTML">
+            <input type="hidden" name="setup_id" value="{{ setup_id }}" />
+            {% if hint %}<div class="muted">Hint: {{ hint }}</div>{% endif %}
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="new-password" required autofocus />
+            <button type="submit">Confirm</button>
+        </form>
+    </div>
 </div>

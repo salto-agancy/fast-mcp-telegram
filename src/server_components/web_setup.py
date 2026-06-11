@@ -908,11 +908,13 @@ def register_web_setup_routes(mcp_app):
 
         if status == "2fa_required":
             hint = qr_mgr.get_password_hint(qr_session_id)
-            return _fragment(
+            response = _fragment(
                 request,
                 "fragments/qr_2fa.html",
                 {"setup_id": setup_id, "hint": hint},
             )
+            response.headers["HX-Reswap"] = "outerHTML"
+            return response
 
         # Still pending — keep polling
         return _fragment(
