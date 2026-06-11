@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-TELEMETRY_ENDPOINT = "https://mcp-telemetry.l1979.ru/v1/event"
+TELEMETRY_ENDPOINT = "https://fast-mcp-telegram-telemetry.l1979.ru/v1/event"
 """Stable URL baked into each release.  The destination may 301-forward."""
 
 _DEFAULT_CONFIG_DIR = Path.home() / ".config" / "fast-mcp-telegram"

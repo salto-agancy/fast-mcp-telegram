@@ -70,7 +70,7 @@ A **tiny collector container** deployed alongside the existing Traefik on the ap
 
 ```
 fast-mcp-telegram
-  ─POST→ mcp-telemetry.l1979.ru/v1/event
+  ─POST→ fast-mcp-telegram-telemetry.l1979.ru/v1/event
             ─Traefik router (hot-reload, no restart)─→
               collector:8001
                 ─psycopg2 INSERT→
@@ -187,7 +187,7 @@ class MetricsStore:
 | **Health** | GET /health → 200 OK (used by Traefik/Traefik health checks) |
 | **Env** | `TELEMETRY_DB_DSN` — PostgreSQL connection string |
 | **Deploy** | `collector/` directory in the fast-mcp-telegram repo; Docker image built from that directory; service added to the docker-compose on Box 3 with `traefik-public` network + router labels |
-| **Traefik** | New router config (dynamic, hot-reload): `Host(mcp-telemetry.l1979.ru) + Path(/v1/event)` → collector:8001 |
+| **Traefik** | New router config (dynamic, hot-reload): `Host(fast-mcp-telegram-telemetry.l1979.ru) + Path(/v1/event)` → collector:8001 |
 
 ### Architecture in the source tree
 
@@ -219,7 +219,7 @@ src/
 
 ### Collection endpoint URL
 
-`https://mcp-telemetry.l1979.ru/v1/event`
+`https://fast-mcp-telegram-telemetry.l1979.ru/v1/event`
 
 - DNS A-record on a domain the maintainer controls — can be re-pointed without a code release
 - Traefik on Box 3 hot-reloads the router config (no restart)
