@@ -117,6 +117,30 @@ fast-mcp-telegram
 
 Every field is documented in the consumer-facing README under a "Telemetry" section.
 
+### Payload versioning
+
+The top-level `v` field identifies the schema version (`Literal[1]` in v1). The collector rejects unknown `v` values with 422 — so a future library that sends `v: 2` will have its heartbeats silently dropped until the collector is updated.
+
+**Policy:**
+
+| Type of change | Bump needed? | Example |
+|---|---|---|
+| New key in `features`, `runtime`, or `counters` dict | **No** — open dicts accept any keys | Add `gemini_enabled: bool` → stored in JSONB, queryable immediately |
+| Remove a key from `features`/`runtime`/`counters` | **No** — collector doesn't enforce key presence | Drop `mtproto_proxy` flag → old collector stores the new payload just fine |
+| New field inside an already-typed block (non-dict) | **Yes** — `extra="forbid"` would reject it | Adding `debug: bool` to top-level needs `v` bump |
+| Rename/remove an existing top-level field | **Yes** — collector validates exact shape | Renaming `started_at` → `booted_at` |
+| Change type of an existing field | **Yes** — Pydantic coerce or reject | Changing `ts` from `int` to `str` |
+
+**Deployment order for breaking changes (bump `v`):**
+
+1. **Deploy updated collector first** — accepts both old `v: 1` and new `v: N`
+2. **Release library update** — starts sending `v: N`
+3. **Remove `v: 1` support** from collector after a transition window (≥ one heartbeat interval so old clients have time to update)
+
+This guarantees zero data loss during rollouts. The library's fire-and-forget send means early-adopter instances that update before the collector just see a silently dropped heartbeat — no user impact.
+
+The collector should never be deployed without `v: 1` support unless all known library instances in the field have migrated away from it.
+
 ### What is never collected
 
 - `api_id`, `api_hash`, `bot_api_token` value, or any credential
@@ -180,14 +204,14 @@ class MetricsStore:
 
 | Aspect | Detail |
 |--------|--------|
-| **Language** | Python with psycopg2 |
+| **Language** | Python with asyncpg (async stack to match FastAPI) |
 | **Base image** | python:3.12-slim |
-| **Port** | 8001 (internal) |
+| **Port** | 8000 (internal) |
 | **Auth** | None in v1 (endpoint is POST-only, no data worth stealing) |
-| **Health** | GET /health → 200 OK (used by Traefik/Traefik health checks) |
-| **Env** | `TELEMETRY_DB_DSN` — PostgreSQL connection string |
-| **Deploy** | `collector/` directory in the fast-mcp-telegram repo; Docker image built from that directory; service added to the docker-compose on Box 3 with `traefik-public` network + router labels |
-| **Traefik** | New router config (dynamic, hot-reload): `Host(fast-mcp-telegram-telemetry.l1979.ru) + Path(/v1/event)` → collector:8001 |
+| **Health** | GET /health → 200 OK (used by Traefik health checks) |
+| **Env** | `TELEMETRY_DSN` — PostgreSQL connection string (pydantic-settings prefix `TELEMETRY_`) |
+| **Deploy** | `collector/` directory in the fast-mcp-telegram repo; Docker image built from that directory; service added to the docker-compose on Box 3 |
+| **Traefik** | New router config in the vds-servers repo (dynamic, hot-reload): `Host(fast-mcp-telegram-telemetry.l1979.ru) + Path(/v1/event)` → collector:8000 |
 
 ### Architecture in the source tree
 
@@ -227,29 +251,28 @@ src/
 
 ### PostgreSQL schema
 
-The collector connects to PostgreSQL **on the same host as the collector (Box 3)** via Docker internal networking bridge. The database is `telemetry`, the table is `telemetry_events`.
+The collector connects to PostgreSQL **on the same host as the collector (Box 3)** via Docker internal networking bridge. The database is `telemetry`, the table is `telemetry`.
 
 ```sql
-CREATE DATABASE telemetry;
-
-\c telemetry
-
-CREATE TABLE telemetry_events (
-  id          BIGSERIAL PRIMARY KEY,
-  payload     JSONB NOT NULL,
-  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE telemetry (
+  id              BIGSERIAL PRIMARY KEY,
+  received_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  instance_id     TEXT NOT NULL,         -- extracted from payload.iid for indexing
+  payload         JSONB NOT NULL,         -- full nested payload from the client
+  payload_hash    TEXT NOT NULL,          -- SHA-256 of canonicalized payload (dedup)
+  source_ip_hash  TEXT NOT NULL           -- SHA-256 of request source IP
 );
 
--- Index for time-range queries
-CREATE INDEX idx_telemetry_received_at ON telemetry_events (received_at);
-
--- Index for feature flag queries (GIN on JSONB)
-CREATE INDEX idx_telemetry_payload ON telemetry_events USING GIN (payload);
+CREATE INDEX idx_telemetry_instance_id   ON telemetry(instance_id);
+CREATE INDEX idx_telemetry_received_at   ON telemetry(received_at);
+CREATE INDEX idx_telemetry_payload_hash  ON telemetry(payload_hash);
 ```
 
-**Connection:** the collector receives `TELEMETRY_DB_DSN` env var (e.g. `postgres://telemetry:password@postgres:5432/telemetry`). The PostgreSQL container and collector container must share a Docker network (e.g. `traefik-public` or a dedicated internal network).
+**Connection:** the collector receives `TELEMETRY_DSN` env var (e.g. `postgres://telemetry:password@postgres:5432/telemetry`). The PostgreSQL container and collector container must share a Docker network.
 
-**Retention:** data is stored indefinitely. A cleanup job (e.g. `DELETE WHERE received_at < NOW() - INTERVAL '1 year'`) may be added in a future iteration — for now, the dataset is small enough (<100 KB/instance/month) that no automatic pruning is required.
+**Retention:** the collector auto-purges rows older than `RETENTION_DAYS=90` (default) on every successful insert. The hard row cap is `MAX_ROWS=10_000_000` (default). Both are enforced in `collector/app/services.py`. Dedup window: 5 minutes (`DEDUP_WINDOW_SECONDS=300`) — identical payloads in that window are silently dropped.
+
+**No PostgreSQL trigger is used.** Rate limiting, deduplication, row capping, and TTL cleanup all run in the application layer (collector) on each insert. This keeps the schema simple and the abuse-prevention logic in one place that's easy to audit.
 
 No user-identifiable data ever reaches this table.
 

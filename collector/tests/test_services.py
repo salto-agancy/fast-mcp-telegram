@@ -1,0 +1,110 @@
+"""Tests for the telemetry collector service layer."""
+
+
+import pytest
+
+from collector.app.services import (
+    RateLimitError,
+    process_event,
+)
+from collector.app.services import (
+    ValidationError as ServiceValidationError,
+)
+from collector.tests._helpers import make_nested_payload
+
+
+class TestProcessEvent:
+    """Core business logic for processing telemetry events."""
+
+    @pytest.mark.asyncio
+    async def test_valid_event_stored(self, storage, valid_payload_data):
+        """A valid event is stored in the backend."""
+        await process_event(valid_payload_data, "192.168.1.1", storage)
+        assert len(storage.events) == 1
+        stored = storage.events[0]["payload"]
+        assert stored.iid == valid_payload_data["iid"]
+        assert stored.counters["total_calls"] == 0
+
+    @pytest.mark.asyncio
+    async def test_invalid_event_raises(self, storage, valid_payload_data):
+        """An invalid event raises and is not stored."""
+        valid_payload_data["counters"] = {"total_calls": -1, "errors": 0}
+        with pytest.raises(ServiceValidationError):
+            await process_event(valid_payload_data, "192.168.1.1", storage)
+        assert len(storage.events) == 0
+
+    @pytest.mark.asyncio
+    async def test_duplicate_within_window_is_deduped(
+        self, storage, valid_payload_data
+    ):
+        """Same payload within 5 min window is silently deduped."""
+        await process_event(valid_payload_data, "192.168.1.1", storage)
+        await process_event(valid_payload_data, "192.168.1.1", storage)
+        assert len(storage.events) == 1
+
+    @pytest.mark.asyncio
+    async def test_duplicate_from_different_ip_stored(
+        self, storage, valid_payload_data
+    ):
+        """Same payload from different IP is still deduped (hash-based)."""
+        await process_event(valid_payload_data, "192.168.1.1", storage)
+        await process_event(valid_payload_data, "10.0.0.1", storage)
+        assert len(storage.events) == 1
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_exceeded_raises(
+        self, storage, valid_payload_data
+    ):
+        """Too many events from one iid in 24h raises RateLimitError."""
+        from collector.app.services import INSTANCE_RATE_LIMIT
+        await process_event(valid_payload_data, "10.0.0.1", storage)
+        for i in range(1, INSTANCE_RATE_LIMIT):
+            data = make_nested_payload()
+            # vary counters to bypass dedup
+            data["counters"] = {"total_calls": i, "errors": 0}
+            await process_event(data, "10.0.0.1", storage)
+        assert len(storage.events) == INSTANCE_RATE_LIMIT
+        with pytest.raises(RateLimitError):
+            new_data = make_nested_payload()
+            new_data["counters"] = {"total_calls": 9999, "errors": 0}
+            await process_event(new_data, "10.0.0.1", storage)
+        assert len(storage.events) == INSTANCE_RATE_LIMIT
+
+    @pytest.mark.asyncio
+    async def test_different_instance_not_rate_limited(
+        self, storage, valid_payload_data
+    ):
+        """Events from different iids don't interfere."""
+        from collector.app.services import INSTANCE_RATE_LIMIT
+        for i in range(INSTANCE_RATE_LIMIT):
+            data = make_nested_payload()
+            data["iid"] = f"550e8400-e29b-41d4-a716-4466554400{i:02d}"
+            data["counters"] = {"total_calls": i, "errors": 0}
+            await process_event(data, "10.0.0.1", storage)
+        assert len(storage.events) == INSTANCE_RATE_LIMIT
+
+    @pytest.mark.asyncio
+    async def test_row_cap_enforced(self, storage, valid_payload_data):
+        """Storage enforces maximum row count by dropping oldest."""
+        cap = 5
+        for i in range(cap):
+            data = make_nested_payload()
+            data["iid"] = f"550e8400-e29b-41d4-a716-44665544000{i}"
+            data["counters"] = {"total_calls": i, "errors": 0}
+            await process_event(data, "10.0.0.1", storage, max_rows=cap)
+        assert len(storage.events) == cap
+        # One more triggers the cap removal
+        new_data = make_nested_payload()
+        new_data["iid"] = "550e8400-e29b-41d4-a716-446655449999"
+        new_data["counters"] = {"total_calls": 9999, "errors": 0}
+        await process_event(new_data, "10.0.0.1", storage, max_rows=cap)
+        # Still at cap (oldest got removed)
+        assert len(storage.events) == cap
+        # The newest event should still be present
+        assert storage.events[-1]["payload"].iid.endswith("9999")
+
+    @pytest.mark.asyncio
+    async def test_storage_backend_close(self, storage):
+        """close() cleans up."""
+        await storage.close()
+        assert len(storage.events) == 0
