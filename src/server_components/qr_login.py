@@ -12,6 +12,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 from telethon.errors import SessionPasswordNeededError
@@ -24,22 +25,18 @@ class QrLoginError(Exception):
     """Base exception for QR login failures."""
 
 
-class QrLoginTimeoutError(QrLoginError):
-    """QR login timed out before the user scanned the code."""
-
-
+@dataclass
 class SessionState:
     """State of a single pending QR login session."""
 
-    def __init__(self, telethon_client: Any, qr_url: str) -> None:
-        self.telethon_client = telethon_client
-        self.qr_url = qr_url
-        self.created_at: float = time.time()
-        self.resulting_client: Any = None  # Set when QR is scanned successfully
-        self.password_hint: str = ""  # 2FA hint when account has two-step verification
-        self._poll_task: asyncio.Task[Any] | None = None
-        self._qr_login_obj: Any = None  # Telethon QRLogin object, set by manager
-        self._status: str = "pending"
+    telethon_client: Any
+    qr_url: str
+    created_at: float = field(default_factory=time.time)
+    resulting_client: Any = None  # Set when QR is scanned successfully
+    password_hint: str = ""  # 2FA hint when account has two-step verification
+    _poll_task: asyncio.Task[Any] | None = field(default=None, repr=False)
+    _qr_login_obj: Any = field(default=None, repr=False)  # Telethon QRLogin object, set by manager
+    _status: str = field(default="pending", repr=False)
 
     @property
     def age(self) -> float:
