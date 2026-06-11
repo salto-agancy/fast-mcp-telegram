@@ -15,8 +15,20 @@ permissions:
   actions: write
 
 jobs:
-  build-push:
+  test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: telemetry
+          POSTGRES_DB: telemetry
+          POSTGRES_PASSWORD: telemetry
+        options: >-
+          --health-cmd pg_isready -U telemetry -d telemetry
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -30,8 +42,25 @@ jobs:
           pip install --no-cache-dir -r collector/requirements.txt
           pip install pytest httpx
 
-      - name: Run collector tests
-        run: pytest collector/tests/ -v --tb=short -x
+      - name: Run unit tests
+        run: pytest collector/tests/ -v --tb=short -x -m "not e2e"
+
+      - name: Run e2e tests (against PostgreSQL service)
+        run: pytest collector/tests/test_e2e.py -v --tb=short -x
+        env:
+          TELEMETRY_PG_HOST: postgres
+          TELEMETRY_PG_PORT: "5432"
+
+  build-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - id: img
         run: |

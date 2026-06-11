@@ -19,6 +19,12 @@ from app.models import TelemetryPayload  # noqa: E402
 from collector.tests._helpers import make_nested_payload  # noqa: E402
 
 
+def pytest_configure(config):
+    """Register custom markers."""
+    for marker in ("unit", "integration", "e2e"):
+        config.addinivalue_line("markers", f"{marker}: custom marker")
+
+
 class InMemoryStorage:
     """In-memory storage backend for testing."""
 
