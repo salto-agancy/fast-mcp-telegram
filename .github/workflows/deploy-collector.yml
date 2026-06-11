@@ -41,7 +41,7 @@ jobs:
       - name: Install collector test dependencies
         run: |
           pip install --no-cache-dir -r collector/requirements.txt
-          pip install pytest httpx
+          pip install pytest pytest-asyncio httpx
 
       - name: Run unit tests
         run: pytest collector/tests/ -v --tb=short -x -m "not e2e"
