@@ -5,7 +5,7 @@ import time
 import pytest
 from pydantic import ValidationError
 
-from collector.app.models import TelemetryPayload
+from app.models import TelemetryPayload
 
 
 class TestTelemetryPayload:

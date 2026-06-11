@@ -18,7 +18,7 @@ import json
 
 import asyncpg
 
-from collector.app.models import TelemetryPayload
+from app.models import TelemetryPayload
 
 _SQL_CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS telemetry (

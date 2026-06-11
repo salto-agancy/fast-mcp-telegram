@@ -1,11 +1,9 @@
 """Application settings loaded from environment variables."""
 
-from pydantic_settings import BaseSettings
+import os
 
 
-class Settings(BaseSettings):
-    """Configuration for the telemetry collector."""
-
-    dsn: str = "postgres://telemetry:telemetry@localhost:5432/telemetry"
-
-    model_config = {"env_prefix": "TELEMETRY_"}
+DSN: str = os.environ.get(
+    "TELEMETRY_DSN",
+    "postgres://telemetry:telemetry@localhost:5432/telemetry",
+)

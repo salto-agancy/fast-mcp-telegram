@@ -2,7 +2,7 @@
 
 import time
 
-from collector.app.services import INSTANCE_RATE_LIMIT
+from app.services import INSTANCE_RATE_LIMIT
 from collector.tests._helpers import make_nested_payload
 
 

@@ -5,13 +5,18 @@ The fixtures use the nested payload format produced by
 client sends. Tests verify that the collector accepts it.
 """
 
+import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from collector.app.models import TelemetryPayload
-from collector.tests._helpers import make_nested_payload
+# Make ``app.*`` module importable (matches the Docker runtime path).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.models import TelemetryPayload  # noqa: E402
+from collector.tests._helpers import make_nested_payload  # noqa: E402
 
 
 class InMemoryStorage:
@@ -89,7 +94,7 @@ def valid_payload_data():
 @pytest.fixture
 def app_with_storage(storage):
     """Build the FastAPI app wired to an in-memory storage."""
-    from collector.app.main import create_app
+    from app.main import create_app
     return create_app(storage_backend=storage)
 
 

@@ -31,7 +31,7 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 
 ## Telemetry
 
-Starting from v0.7.0, the server sends **anonymous feature-adoption telemetry** to help improve the library. The endpoint is `fast-mcp-telegram-telemetry.l1979.ru`. Set `TELEMETRY_DISABLE=1` to opt out.
+Starting from v0.7.0, the server sends **anonymous feature-adoption telemetry** to help improve the library. The endpoint is `fast-mcp-telegram-telemetry.l1979.ru`. Set `DO_NOT_TRACK=1` to opt out.
 
 **What is collected:**
 

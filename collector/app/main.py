@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from collector.app.services import (
+from app.services import (
     RateLimitError,
     StorageBackend,
     ValidationError,
@@ -110,10 +110,14 @@ class _LazyPostgresStorage(_AsyncPGStorageLike):
     """Defer asyncpg import + DSN read until lifespan startup."""
 
     def __init__(self) -> None:
-        from collector.app.database import AsyncPGStorage
-        from collector.app.settings import Settings
+        from app.database import AsyncPGStorage
+        from app.settings import DSN
 
-        self._impl = AsyncPGStorage(Settings().dsn)
+        self._impl = AsyncPGStorage(DSN)
+
+    def __getattr__(self, name: str):
+        """Forward all other calls (store, count_recent_events, …) to the real backend."""
+        return getattr(self._impl, name)
 
     async def connect(self) -> None:
         await self._impl.connect()

@@ -1,0 +1,134 @@
+name: Deploy telemetry collector
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "collector/**"
+      - ".github/workflows/deploy-collector.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install --no-cache-dir uv
+
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+
+      - name: Run collector tests
+        run: uv run pytest collector/tests/ -v --tb=short -x
+
+      - id: img
+        run: |
+          owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "image_repo=ghcr.io/${owner_lc}/telemetry-collector" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: sha
+        run: echo "short=$(echo '${{ github.sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: collector
+          file: collector/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.img.outputs.image_repo }}:main
+            ${{ steps.img.outputs.image_repo }}:sha-${{ steps.sha.outputs.short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    env:
+      GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+      GHCR_PULL_USER: ${{ secrets.GHCR_PULL_USER }}
+      TELEMETRY_DB_PASSWORD: ${{ secrets.TELEMETRY_DB_PASSWORD }}
+    steps:
+      - uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER || 'root' }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 15m
+          envs: GHCR_PULL_TOKEN,GHCR_PULL_USER,TELEMETRY_DB_PASSWORD
+          script: |
+            set -euo pipefail
+            REMOTE_DIR="/root/services/telemetry-collector"
+            mkdir -p "$REMOTE_DIR"
+
+            # Write docker-compose.yml
+            cat > "$REMOTE_DIR/docker-compose.yml" <<'COMPOSEEOF'
+services:
+  telemetry-collector:
+    image: ghcr.io/leshchenko1979/telemetry-collector:main
+    container_name: telemetry-collector
+    restart: unless-stopped
+    environment:
+      TELEMETRY_DSN: postgres://telemetry:${TELEMETRY_DB_PASSWORD}@postgres:5432/telemetry
+    networks:
+      - traefik-public
+    mem_limit: 128m
+    cpus: 0.25
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
+      start_period: 10s
+      start_interval: 1s
+      interval: 30s
+      timeout: 5s
+      retries: 2
+
+networks:
+  traefik-public:
+    external: true
+COMPOSEEOF
+
+            # Write .env
+            cat > "$REMOTE_DIR/.env" <<ENVEOF
+TELEMETRY_DB_PASSWORD=${TELEMETRY_DB_PASSWORD}
+ENVEOF
+
+            # Ensure telemetry database and user
+            docker exec postgres psql -U postgres -tc \
+              "SELECT 1 FROM pg_roles WHERE rolname='telemetry'" \
+              | grep -q 1 || \
+              docker exec postgres psql -U postgres -c \
+                "CREATE ROLE telemetry WITH LOGIN PASSWORD '${TELEMETRY_DB_PASSWORD}';"
+            docker exec postgres psql -U postgres -tc \
+              "SELECT 1 FROM pg_database WHERE datname='telemetry'" \
+              | grep -q 1 || \
+              docker exec postgres psql -U postgres -c \
+                "CREATE DATABASE telemetry OWNER telemetry;"
+
+            # Login to GHCR if needed
+            if [ -n "${GHCR_PULL_TOKEN:-}" ] && [ -n "${GHCR_PULL_USER:-}" ]; then
+              echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u "$GHCR_PULL_USER" --password-stdin
+            fi
+
+            cd "$REMOTE_DIR"
+            docker compose pull && docker compose up -d --wait

@@ -1,38 +1,23 @@
-version: "3.9"
-
 services:
   telemetry-collector:
-    build: .
-    ports:
-      - "8000:8000"
+    image: ${GHCR_IMAGE:-ghcr.io/leshchenko1979/telemetry-collector}:${IMAGE_TAG:-main}
+    container_name: telemetry-collector
+    restart: unless-stopped
     environment:
-      TELEMETRY_DSN: postgres://telemetry:telemetry@postgres:5432/telemetry
-    depends_on:
-      postgres:
-        condition: service_healthy
+      TELEMETRY_DSN: postgres://telemetry:${TELEMETRY_DB_PASSWORD:?set TELEMETRY_DB_PASSWORD in .env}@postgres:5432/telemetry
     networks:
-      - telemetry-net
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: telemetry
-      POSTGRES_USER: telemetry
-      POSTGRES_PASSWORD: telemetry
-    ports:
-      - "5432:5432"
+      - traefik-public
+    mem_limit: 128m
+    cpus: 0.25
+    mem_reservation: 64m
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U telemetry -d telemetry"]
-      interval: 3s
-      timeout: 2s
-      retries: 5
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    networks:
-      - telemetry-net
-
-volumes:
-  pgdata:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
+      start_period: 10s
+      start_interval: 1s
+      interval: 30s
+      timeout: 5s
+      retries: 2
 
 networks:
-  telemetry-net:
+  traefik-public:
+    external: true

@@ -3,11 +3,11 @@
 
 import pytest
 
-from collector.app.services import (
+from app.services import (
     RateLimitError,
     process_event,
 )
-from collector.app.services import (
+from app.services import (
     ValidationError as ServiceValidationError,
 )
 from collector.tests._helpers import make_nested_payload
@@ -56,7 +56,7 @@ class TestProcessEvent:
         self, storage, valid_payload_data
     ):
         """Too many events from one iid in 24h raises RateLimitError."""
-        from collector.app.services import INSTANCE_RATE_LIMIT
+        from app.services import INSTANCE_RATE_LIMIT
         await process_event(valid_payload_data, "10.0.0.1", storage)
         for i in range(1, INSTANCE_RATE_LIMIT):
             data = make_nested_payload()
@@ -75,7 +75,7 @@ class TestProcessEvent:
         self, storage, valid_payload_data
     ):
         """Events from different iids don't interfere."""
-        from collector.app.services import INSTANCE_RATE_LIMIT
+        from app.services import INSTANCE_RATE_LIMIT
         for i in range(INSTANCE_RATE_LIMIT):
             data = make_nested_payload()
             data["iid"] = f"550e8400-e29b-41d4-a716-4466554400{i:02d}"

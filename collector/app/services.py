@@ -10,7 +10,7 @@ import hashlib
 import json
 from typing import Protocol
 
-from collector.app.models import TelemetryPayload
+from app.models import TelemetryPayload
 
 # --- Configurable limits (can be overridden per-call or via env) ---
 INSTANCE_RATE_LIMIT: int = 100  # Max events per instance_id per 24h
