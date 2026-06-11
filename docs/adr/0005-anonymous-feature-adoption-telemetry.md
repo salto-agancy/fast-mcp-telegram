@@ -221,7 +221,7 @@ class MetricsStore:
             }
 ```
 
-- ``record_call()`` / ``record_error()`` / ``record_flood_wait()`` exist as API but are **not yet wired** into tool-call handlers — they are a v2 integration point. Currently only ``snapshot()`` is used by the telemetry heartbeat loop.
+- ``record_call()`` / ``record_error()`` / ``record_flood_wait()`` exist as API and **are wired** into every MCP tool call via the ``_telemetry_wrapper`` decorator in ``tools_register.py``. The wrapper calls ``record_call()`` on invocation and ``record_error()`` on exceptions or non-ok results.
 - ``snapshot()`` returns a frozen copy for the telemetry loop.
 
 ### Collector container (v1)
