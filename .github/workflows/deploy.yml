@@ -19,7 +19,7 @@ permissions:
   actions: write
 
 jobs:
-  build-push:
+  test-build-and-push-ghcr:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,8 +77,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    needs: build-push
+  deploy-to-vds:
+    needs: test-build-and-push-ghcr
     runs-on: ubuntu-latest
     env:
       GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
