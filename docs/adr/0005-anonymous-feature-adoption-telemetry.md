@@ -292,5 +292,6 @@ v1 covers **feature adoption flags + aggregate error counters**. The full teleme
 - [Roadmap.md](../Roadmap.md) — Telemetry lane (step 6)
 - [research/telemetry-best-practices.md](../research/telemetry-best-practices.md) — notes on Fallow, Vercel CLI, SonarQube patterns
 - [ADR 0001](0001-agent-scoped-session-acl.md) — ACL design (prime consumer of adoption metrics)
+- [ADR 0006](0006-abuse-prevention-for-collection-endpoint.md) — Abuse prevention for the open collection endpoint
 - [`src/config/server_config.py`](../../src/config/server_config.py) — config integration point
 - [`src/server.py`](../../src/server.py) — lifespan hook point
