@@ -11,7 +11,11 @@ services:
     cpus: 0.25
     mem_reservation: 64m
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import http.client; c=http.client.HTTPConnection('localhost', 8000); c.request('GET', '/health'); assert c.getresponse().status == 200"
       start_period: 10s
       start_interval: 1s
       interval: 30s
