@@ -73,16 +73,7 @@ if not _pg_is_available():
 # -- Fixtures -----------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def event_loop():
-    """Module-scoped event loop (required by module-scoped async fixtures)."""
-    import asyncio
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def pg_storage():
     """AsyncPGStorage connected to a real PostgreSQL instance.
 
@@ -106,22 +97,23 @@ async def pg_storage():
     await storage.close()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def e2e_app(pg_storage):
     """FastAPI app wired to the real PostgreSQL storage."""
     from app.main import create_app
     return create_app(storage_backend=pg_storage)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
+@pytest.fixture
 def client(e2e_app):
-    """Sync TestClient for the sync health check (module-scoped)."""
+    """Sync TestClient for the sync health check."""
     from fastapi.testclient import TestClient
     with TestClient(e2e_app) as c:
         yield c
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def async_client(e2e_app):
     """Async HTTP client for async tests using httpx.ASGITransport.
 
