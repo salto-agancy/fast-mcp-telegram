@@ -1,3 +1,4 @@
+import functools
 from typing import Any
 
 from fastmcp import FastMCP
@@ -40,6 +41,7 @@ from src.server_components.mcp_tool_types import (
     TopicsLimit,
 )
 from src.server_components.session_acl import enforce_session_acl
+from src.telemetry import metrics
 from src.tools.chat_discovery.chat_info import get_chat_info_impl
 from src.tools.chat_discovery.find_chats import find_chats_impl
 from src.tools.messages import (
@@ -121,7 +123,22 @@ def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool 
     """
 
     def decorator(func):
-        decorated_func = enforce_session_acl(operation_name)(func)
+        """Wrap tool call with telemetry counters (total_calls, errors)."""
+
+        @functools.wraps(func)
+        async def _telemetry_wrapper(*args, **kwargs):
+            metrics.record_call()
+            try:
+                result = await func(*args, **kwargs)
+            except Exception:
+                metrics.record_error()
+                raise
+            if isinstance(result, dict) and result.get("ok") is False:
+                metrics.record_error()
+            return result
+
+        decorated_func = _telemetry_wrapper
+        decorated_func = enforce_session_acl(operation_name)(decorated_func)
         decorated_func = server_errors.with_error_handling(operation_name)(decorated_func)
         decorated_func = server_auth.require_auth(decorated_func)
         if allow_bot_sessions:

@@ -1,0 +1,175 @@
+name: Deploy telemetry collector
+
+on:
+  push:
+    branches:
+      - master
+      - feat/anon-telemetry
+    paths:
+      - "collector/**"
+      - ".github/workflows/deploy-collector.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: telemetry
+          POSTGRES_DB: telemetry
+          POSTGRES_PASSWORD: telemetry
+        options: >-
+          --health-cmd "pg_isready -U telemetry -d telemetry"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install collector test dependencies
+        run: |
+          pip install --no-cache-dir -r collector/requirements.txt
+          pip install pytest pytest-asyncio httpx
+          pip list 2>/dev/null | grep -iE "asyncpg|pytest" || true
+
+      - name: Run unit tests
+        run: pytest collector/tests/ -v --tb=short -x -m "not e2e"
+
+      - name: Run e2e tests (against PostgreSQL service)
+        run: pytest collector/tests/test_e2e.py -v --tb=short -x
+        env:
+          TELEMETRY_PG_HOST: localhost
+          TELEMETRY_PG_PORT: "5432"
+          TELEMETRY_PG_DB: telemetry
+
+  build-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - id: img
+        run: |
+          owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "image_repo=ghcr.io/${owner_lc}/telemetry-collector" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: sha
+        run: echo "short=$(echo '${{ github.sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: collector
+          file: collector/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.img.outputs.image_repo }}:main
+            ${{ steps.img.outputs.image_repo }}:sha-${{ steps.sha.outputs.short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    env:
+      GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+      GHCR_PULL_USER: ${{ secrets.GHCR_PULL_USER }}
+      TELEMETRY_DSN: ${{ secrets.TELEMETRY_DSN }}
+    steps:
+      - uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER || 'root' }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 15m
+          envs: GHCR_PULL_TOKEN,GHCR_PULL_USER,TELEMETRY_DSN
+          script: |
+            set -euo pipefail
+            REMOTE_DIR="/root/services/telemetry-collector"
+            mkdir -p "$REMOTE_DIR"
+
+            # Write docker-compose.yml (use textwrap.dedent to avoid lines at column 0 in YAML | block)
+            python3 -c "
+            import os, textwrap
+            content = textwrap.dedent('''
+              services:
+                telemetry-collector:
+                  image: ghcr.io/leshchenko1979/telemetry-collector:main
+                  container_name: telemetry-collector
+                  restart: unless-stopped
+                  environment:
+                    TELEMETRY_DSN: \${TELEMETRY_DSN}
+                  networks:
+                    - traefik-public
+                  mem_limit: 128m
+                  cpus: 0.25
+                  healthcheck:
+                    test:
+                      - CMD
+                      - python3
+                      - -c
+                      - \"import http.client; c=http.client.HTTPConnection('localhost', 8000); c.request('GET', '/health'); assert c.getresponse().status == 200\"
+                    start_period: 10s
+                    start_interval: 1s
+                    interval: 30s
+                    timeout: 5s
+                    retries: 2
+              networks:
+                traefik-public:
+                  external: true
+            ''')
+            with open(os.path.join('$REMOTE_DIR', 'docker-compose.yml'), 'w') as f:
+                f.write(content.strip())
+            "
+
+            # Write .env
+            echo "TELEMETRY_DSN=${TELEMETRY_DSN}" > "$REMOTE_DIR/.env"
+
+            # Ensure telemetry database and user (parsed from DSN)
+            DSN_USER=$(echo "$TELEMETRY_DSN" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+            DSN_PASS=$(echo "$TELEMETRY_DSN" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+            DSN_DB=$(echo "$TELEMETRY_DSN" | sed -n 's|.*/\([^?]*\)$|\1|p')
+            # Create role and database idempotently (use if to avoid set -e pipefail issues)
+            if ! docker exec postgres psql -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DSN_USER'" | grep -q 1; then
+              docker exec postgres psql -U postgres -c \
+                "CREATE ROLE \"$DSN_USER\" WITH LOGIN PASSWORD '$DSN_PASS';"
+            fi
+            if ! docker exec postgres psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DSN_DB'" | grep -q 1; then
+              docker exec postgres psql -U postgres -c \
+                "CREATE DATABASE \"$DSN_DB\" OWNER \"$DSN_USER\";"
+            fi
+
+            # Login to GHCR if needed
+            if [ -n "${GHCR_PULL_TOKEN:-}" ] && [ -n "${GHCR_PULL_USER:-}" ]; then
+              echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u "$GHCR_PULL_USER" --password-stdin
+            fi
+
+            cd "$REMOTE_DIR"
+            docker compose pull && docker compose up -d --wait

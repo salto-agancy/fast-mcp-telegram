@@ -20,3 +20,5 @@ Concise records of significant technical decisions for fast-mcp-telegram.
 | [0002](0002-oidc-self-service-auth.md) | OIDC Self-Service Authentication | superseded (2026-06-08) |
 | [0003](0003-oidc-phase4-scope-based-auth.md) | OIDC Phase 4 — In-Tool Auth & Elicitation | superseded (2026-06-09) |
 | [0004](0004-qr-login-auth.md) | QR Login Auth — Simplified Self-Service Onboarding | accepted (2026-06-09, implemented v0.30.0) |
+| [0005](0005-anonymous-feature-adoption-telemetry.md) | Anonymous Feature-Adoption Telemetry | proposed (2026-06-10) |
+| [0006](0006-abuse-prevention-for-collection-endpoint.md) | Abuse Prevention for the Open Collection Endpoint | proposed (2026-06-10) |

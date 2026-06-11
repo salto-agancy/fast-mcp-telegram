@@ -29,6 +29,27 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 [![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
 [![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
 
+## Telemetry
+
+Starting from v0.7.0, the server sends **anonymous feature-adoption telemetry** to help improve the library. The endpoint is `fast-mcp-telegram-telemetry.l1979.ru`. Set `DO_NOT_TRACK=1` to opt out.
+
+**What is collected:**
+
+| Field | Example | Note |
+|-------|---------|------|
+| `v` | `1` | Schema version (currently always 1) |
+| `iid` | `550e8400-…` | Random UUID, generated once per installation |
+| `ver` | `0.7.0` | Server version |
+| `os` | `Linux x86_64` | OS platform |
+| `py` | `3.12` | Python version |
+| `features` | `{"raw_edit": true}` | Which optional features are enabled |
+| `runtime` | `{"sessions": 1}` | Session / setup counters at startup |
+| `counters` | `{"total_calls": 0}` | Aggregate MCP call and error counts |
+
+**What is never collected:** API credentials (`api_id`, `api_hash`, `bot_token`), message content, chat IDs, peer identifiers, phone numbers, IP addresses (source IP is SHA-256 hashed and never stored raw), file paths, or environment variable values.
+
+The heartbeat fires every 5 minutes. The collector is rate-limited (100 events/instance/day) and deduplicated — the same payload within a 5-minute window is silently dropped. See [ADR 0005](docs/adr/0005-anonymous-feature-adoption-telemetry.md) for the full design and [ADR 0006](docs/adr/0006-abuse-prevention-for-collection-endpoint.md) for abuse prevention.
+
 ## How It Works
 
 This server sits between your AI agent and Telegram's API:

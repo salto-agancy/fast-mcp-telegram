@@ -116,6 +116,45 @@ def clear_acl_cache() -> None:
     _blocked_peers_cache = None
 
 
+def _get_principals_dict() -> dict:
+    """Return the principals mapping from ACL config, or empty dict on failure.
+
+    Handles disabled ACL, missing/invalid config, and malformed structure
+    so callers can assume a safe dict return.  Never raises.
+    """
+    config = cfg()
+    if not config.acl_enabled:
+        return {}
+    try:
+        doc = _load_acl_document()
+    except AclConfigError:
+        return {}
+    principals = doc.get("principals") or {}
+    return principals if isinstance(principals, dict) else {}
+
+
+def principal_count() -> int:
+    """Number of principals in the ACL config.
+
+    Returns 0 when ACL is disabled, the config file is missing, or no
+    principals are defined — never raises.
+    """
+    return len(_get_principals_dict())
+
+
+def read_only_count() -> int:
+    """Number of ACL principals with ``read_only: true``.
+
+    Returns 0 when ACL is disabled, the config file is missing, or no
+    principals have the read_only flag — never raises.
+    """
+    return sum(
+        1
+        for p in _get_principals_dict().values()
+        if isinstance(p, dict) and p.get("read_only", False) is True
+    )
+
+
 def _configured_acl_path() -> Path | None:
     config = cfg()
     if not config.acl_enabled:

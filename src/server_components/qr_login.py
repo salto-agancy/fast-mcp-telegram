@@ -237,7 +237,7 @@ class QrLoginManager:
         state = self._sessions.get(session_id)
         if state is None:
             return ""
-        return state.password_hint
+        return getattr(state, "password_hint", "")
 
     async def regenerate_qr(self, session_id: str, telethon_client: Any) -> str | None:
         """Generate a new QR code for an existing session (e.g., after timeout).

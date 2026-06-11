@@ -1,0 +1,27 @@
+services:
+  telemetry-collector:
+    image: ${GHCR_IMAGE:-ghcr.io/leshchenko1979/telemetry-collector}:${IMAGE_TAG:-main}
+    container_name: telemetry-collector
+    restart: unless-stopped
+    environment:
+      TELEMETRY_DSN: ${TELEMETRY_DSN:?set TELEMETRY_DSN in .env}
+    networks:
+      - traefik-public
+    mem_limit: 128m
+    cpus: 0.25
+    mem_reservation: 64m
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import http.client; c=http.client.HTTPConnection('localhost', 8000); c.request('GET', '/health'); assert c.getresponse().status == 200"
+      start_period: 10s
+      start_interval: 1s
+      interval: 30s
+      timeout: 5s
+      retries: 2
+
+networks:
+  traefik-public:
+    external: true
