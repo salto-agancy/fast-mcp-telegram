@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - feat/anon-telemetry
     paths:
       - "collector/**"
       - ".github/workflows/deploy-collector.yml"
@@ -16,7 +15,7 @@ permissions:
   actions: write
 
 jobs:
-  test:
+  collector-test:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -56,8 +55,8 @@ jobs:
           TELEMETRY_PG_PORT: "5432"
           TELEMETRY_PG_DB: telemetry
 
-  build-push:
-    needs: test
+  collector-build-push-ghcr:
+    needs: collector-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,8 +93,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    needs: build-push
+  collector-deploy-vds:
+    needs: collector-build-push-ghcr
     runs-on: ubuntu-latest
     env:
       GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
