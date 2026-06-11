@@ -21,6 +21,8 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
+        ports:
+          - 5432:5432
         env:
           POSTGRES_USER: telemetry
           POSTGRES_DB: telemetry
@@ -47,52 +49,11 @@ jobs:
       - name: Run unit tests
         run: pytest collector/tests/ -v --tb=short -x -m "not e2e"
 
-      - name: Debug PostgreSQL connectivity
-        run: |
-          python3 -c "
-          import os, socket, asyncio
-          pg_host = os.environ.get('TELEMETRY_PG_HOST', 'postgres')
-          pg_port = os.environ.get('TELEMETRY_PG_PORT', '5432')
-          pg_user = os.environ.get('TELEMETRY_PG_USER', 'telemetry')
-          pg_pass = os.environ.get('TELEMETRY_PG_PASSWORD', 'telemetry')
-          pg_db = os.environ.get('TELEMETRY_PG_DB', 'telemetry')
-          print(f'Trying {pg_host}:{pg_port}...')
-          s = socket.socket(); s.settimeout(5)
-          try:
-              s.connect((pg_host, int(pg_port))); s.close()
-              print('TCP OK')
-          except Exception as e:
-              print(f'TCP FAIL: {e}')
-          try:
-              import asyncpg; print(f'asyncpg version: {asyncpg.__version__}')
-              dsn = f'postgres://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}'
-              print(f'DSN: {dsn}')
-              async def probe():
-                  try:
-                      conn = await asyncpg.connect(dsn, timeout=5)
-                      v = await conn.fetchval('SELECT version()')
-                      print(f'Connect OK: {v}')
-                      await conn.close()
-                  except Exception as e:
-                      print(f'asyncpg FAIL: {type(e).__name__}: {e}')
-              asyncio.run(probe())
-          except Exception as e:
-              print(f'asyncpg import FAIL: {e}')
-          "
-        env:
-          TELEMETRY_PG_HOST: postgres
-          TELEMETRY_PG_PORT: "5432"
-          TELEMETRY_PG_USER: telemetry
-          TELEMETRY_PG_PASSWORD: telemetry
-          TELEMETRY_PG_DB: telemetry
-
       - name: Run e2e tests (against PostgreSQL service)
-        run: pytest collector/tests/test_e2e.py -v --tb=long -x
+        run: pytest collector/tests/test_e2e.py -v --tb=short -x
         env:
-          TELEMETRY_PG_HOST: postgres
+          TELEMETRY_PG_HOST: localhost
           TELEMETRY_PG_PORT: "5432"
-          TELEMETRY_PG_USER: telemetry
-          TELEMETRY_PG_PASSWORD: telemetry
           TELEMETRY_PG_DB: telemetry
 
   build-push:
