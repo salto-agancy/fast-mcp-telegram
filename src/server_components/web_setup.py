@@ -18,7 +18,7 @@ from telethon.errors import PasswordHashInvalidError, SessionPasswordNeededError
 from telethon.errors.rpcerrorlist import PhoneNumberFloodError
 from telethon.tl.functions.account import GetPasswordRequest
 
-from src.client.connection import _cache_lock, _session_cache, generate_bearer_token
+from src.client.connection import disconnect_and_evict_session, generate_bearer_token
 from src.config.server_config import ServerMode, cfg
 from src.server_components.auth_middleware import generate_url_based_config
 from src.server_components.qr_login import QrLoginError, QrLoginManager
@@ -28,6 +28,7 @@ from src.server_components.session_token_validation import (
     validate_session_token,
 )
 from src.utils.mcp_config import generate_mcp_config_json
+from src.utils.logging_utils import mask_phone_number
 from src.utils.proxy import build_mtproto_client_args
 
 # Constants
@@ -63,7 +64,6 @@ PHONE_INVALID_MESSAGE = (
 )
 PHONE_FLOOD_MESSAGE = "Too many attempts. Please wait before retrying."
 BEARER_TOKEN_REQUIRED_MESSAGE = "Bearer token is required."
-INVALID_TOKEN_MESSAGE = "Invalid token."
 INVALID_BEARER_TOKEN_FORMAT_MESSAGE = (
     "Invalid bearer token. Use the token from setup or a URL-safe token from the CLI."
 )
@@ -89,15 +89,6 @@ logger = logging.getLogger(__name__)
 
 
 # Helper functions
-def mask_phone_number(phone: str) -> str:
-    """Mask phone number for display, showing only first 3 and last 2 digits."""
-    if not phone or len(phone) < 4:
-        return phone
-    first = phone[:3]
-    last = phone[-2:]
-    return f"{first}{'*' * max(0, len(phone) - 5)}{last}"
-
-
 def _normalize_phone_number(phone: str) -> str:
     """Normalize phone input to Telegram-compatible E.164-like form."""
     raw = (phone or "").strip()
@@ -227,6 +218,83 @@ async def _cleanup_session_state(state: dict[str, Any]):
                 p.unlink(missing_ok=True)
 
 
+async def _safe_finish_client(client: Any) -> None:
+    """Send read acknowledge and safely disconnect a Telegram client."""
+    with contextlib.suppress(Exception):
+        await client.send_read_acknowledge(None)
+    with contextlib.suppress(Exception):
+        await client.disconnect()
+
+
+async def _persist_session_and_generate_config(
+    request: Request,
+    client: Any,
+    temp_session_path: str | Path,
+    setup_id: str,
+    *,
+    desired_token: str | None = None,
+    state: dict[str, Any] | None = None,
+) -> Any:
+    """Persist a temporary session file, generate bearer token, and return a config fragment.
+
+    Steps: finish client → resolve token → rename session file → generate configs.
+
+    When *state* is provided (a mutable dict), it is updated with the generated
+    token, header config, and URL config for HTMX re-entry protection.
+
+    Returns:
+        A Starlette response with ``fragments/config.html`` (success) or an error fragment.
+    """
+    src = Path(temp_session_path)
+    await _safe_finish_client(client)
+
+    session_dir = cfg().session_directory
+    try:
+        if desired_token:
+            token, dst = _bearer_token_and_session_path(session_dir, desired_token)
+        else:
+            token = generate_bearer_token()
+            dst = session_file_path(session_dir, token)
+    except (InvalidSessionTokenError, OSError) as e:
+        return _setup_token_path_error_fragment(request, "fragments/error.html", e)
+
+    if desired_token and dst.exists():
+        return _setup_error_fragment(
+            request, f"Session with token '{token}' already exists"
+        )
+
+    try:
+        if src.exists():
+            src.rename(dst)
+    except Exception as e:
+        return _setup_error_fragment(request, f"Failed to persist session: {e}")
+
+    domain = cfg().domain
+    header_config_json = generate_mcp_config_json(
+        ServerMode.HTTP_AUTH, session_name="", bearer_token=token, domain=domain,
+    )
+    url_config = generate_url_based_config(domain or "your-server.com", token)
+    url_config_json = json.dumps(url_config, indent=2)
+
+    # Update state for HTMX re-entry guard (used by QR login flow)
+    if state is not None:
+        state.update(
+            token=token,
+            _header_config_json=header_config_json,
+            _url_config_json=url_config_json,
+        )
+
+    return _fragment(
+        request, "fragments/config.html",
+        {
+            "setup_id": setup_id,
+            "token": token,
+            "header_config_json": header_config_json,
+            "url_config_json": url_config_json,
+        },
+    )
+
+
 # Global QR login manager for in-memory QR sessions.
 _qr_manager: QrLoginManager | None = None
 
@@ -255,60 +323,15 @@ async def _complete_qr_login(
     qr_mgr = _get_qr_manager()
     if authorized_client is None:
         authorized_client = qr_mgr.get_client(qr_session_id)
-    temp_path = Path(state["session_path"])
 
-    token: str | None = None
-    dst: Path | None = None
-    try:
-        with contextlib.suppress(Exception):
-            if authorized_client:
-                await authorized_client.send_read_acknowledge(None)
-                await authorized_client.disconnect()
-
-        session_dir = cfg().session_directory
-        token = generate_bearer_token()
-        dst = session_file_path(session_dir, token)
-
-        if temp_path.exists():
-            temp_path.rename(dst)
-    except Exception:
-        logger.exception("Failed to persist QR session")
-        return _fragment(
-            request, "fragments/error.html",
-            {"error": "Failed to persist session. Please try again."},
-        )
-
-    domain = cfg().domain
-    header_config_json = generate_mcp_config_json(
-        ServerMode.HTTP_AUTH,
-        session_name="",
-        bearer_token=token,
-        domain=domain,
+    response = await _persist_session_and_generate_config(
+        request, authorized_client, state["session_path"], setup_id, state=state,
     )
-    url_config = generate_url_based_config(domain or "your-server.com", token)
-    url_config_json = json.dumps(url_config, indent=2)
 
-    # Mark finalized so duplicate HTMX polls don't re-enter
-    state.clear()
-    state |= {
-        "token": token,
-        "final_session_path": str(dst),
-        "created_at": time.time(),
-        "_finalized": True,
-        "_header_config_json": header_config_json,
-        "_url_config_json": url_config_json,
-    }
-
-    return _fragment(
-        request,
-        "fragments/config.html",
-        {
-            "setup_id": setup_id,
-            "token": token,
-            "header_config_json": header_config_json,
-            "url_config_json": url_config_json,
-        },
-    )
+    # HTMX re-entry guard: store completed state so duplicate polls
+    # don't re-execute the (now-persisted) session
+    state.update(created_at=time.time(), _finalized=True)
+    return response
 
 
 async def setup_complete_reauth(request: Request):
@@ -335,11 +358,7 @@ async def setup_complete_reauth(request: Request):
     temp_path = Path(temp_path_val)
 
     try:
-        with contextlib.suppress(Exception):
-            await client.send_read_acknowledge(None)  # touch session
-
-        with contextlib.suppress(Exception):
-            await client.disconnect()
+        await _safe_finish_client(client)
 
         # Replace original session with reauthorized one
         temp_path.replace(original_path)
@@ -380,72 +399,13 @@ async def setup_generate(request: Request):
         return _setup_error_fragment(request, INVALID_SETUP_STATE_MESSAGE)
 
     desired_token = state.get("desired_token")
-    session_dir = cfg().session_directory
-    src = Path(temp_session_path)
-
-    try:
-        if desired_token:
-            token, dst = _bearer_token_and_session_path(session_dir, str(desired_token))
-        else:
-            token = generate_bearer_token()
-            dst = session_file_path(session_dir, token)
-    except (InvalidSessionTokenError, OSError) as e:
-        return _setup_token_path_error_fragment(
-            request, "fragments/error.html", e
-        )
-
-    # Check if session already exists (only when using desired token)
-    if desired_token and dst.exists():
-        return _setup_error_fragment(
-            request, f"Session with token '{token}' already exists"
-        )
-
-    try:
-        with contextlib.suppress(Exception):
-            await client.send_read_acknowledge(None)  # touch session
-
-        with contextlib.suppress(Exception):
-            await client.disconnect()
-
-        if src.exists():
-            src.rename(dst)
-    except Exception as e:
-        return _setup_error_fragment(request, f"Failed to persist session: {e}")
-
-    domain = cfg().domain
-
-    # Generate both header-based and URL-based configs
-    # Header-based (recommended)
-    header_config_json = generate_mcp_config_json(
-        ServerMode.HTTP_AUTH,
-        session_name="",  # Not used for HTTP_AUTH
-        bearer_token=token,
-        domain=domain,
+    response = await _persist_session_and_generate_config(
+        request, client, temp_session_path, setup_id,
+        desired_token=desired_token,
     )
 
-    # URL-based (for clients without header support)
-    url_config = generate_url_based_config(domain or "your-server.com", token)
-    url_config_json = json.dumps(url_config, indent=2)
-
-    state.clear()
-    state.update(
-        {
-            "token": token,
-            "final_session_path": str(dst),
-            "created_at": time.time(),
-        }
-    )
-
-    return _fragment(
-        request,
-        "fragments/config.html",
-        {
-            "setup_id": setup_id,
-            "token": token,
-            "header_config_json": header_config_json,
-            "url_config_json": url_config_json,
-        },
-    )
+    state.update(created_at=time.time())
+    return response
 
 
 async def _complete_authentication(request: Request, state: dict[str, Any]):
@@ -794,18 +754,7 @@ def register_web_setup_routes(mcp_app):
 
         try:
             # Disconnect client from cache if it's active
-            async with _cache_lock:
-                if token in _session_cache:
-                    client, _ = _session_cache[token]
-                    try:
-                        await client.disconnect()
-                    except Exception as e:
-                        # Log but don't fail the deletion
-                        logger.warning(
-                            f"Error disconnecting client for token {token[:8]}...: {e}"
-                        )
-                    # Remove from cache
-                    del _session_cache[token]
+            await disconnect_and_evict_session(token)
 
             # Delete the session file
             session_path.unlink()
@@ -959,11 +908,13 @@ def register_web_setup_routes(mcp_app):
 
         if status == "2fa_required":
             hint = qr_mgr.get_password_hint(qr_session_id)
-            return _fragment(
+            response = _fragment(
                 request,
                 "fragments/qr_2fa.html",
                 {"setup_id": setup_id, "hint": hint},
             )
+            response.headers["HX-Reswap"] = "outerHTML"
+            return response
 
         # Still pending — keep polling
         return _fragment(

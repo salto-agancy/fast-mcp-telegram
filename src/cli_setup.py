@@ -3,9 +3,7 @@ Simplified Telegram MCP server setup using unified ServerConfig.
 """
 
 import asyncio
-import base64
 import getpass
-import secrets
 from pathlib import Path
 
 from pydantic import Field
@@ -13,6 +11,9 @@ from pydantic_settings import CliImplicitFlag, SettingsConfigDict
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 from telethon.tl.functions.account import GetPasswordRequest
+
+from src.client.connection import generate_bearer_token
+from src.utils.logging_utils import mask_phone_number
 
 from .config.server_config import ServerConfig, ServerMode
 from .utils.mcp_config import generate_mcp_config_json
@@ -78,21 +79,6 @@ class SetupConfig(ServerConfig):
                 "Session name cannot contain '/' character. "
                 "This would break URL-based authentication and file path handling."
             )
-
-
-def generate_bearer_token() -> str:
-    """Generate a cryptographically secure bearer token for session management."""
-    # Generate 32 bytes (256-bit) of random data
-    token_bytes = secrets.token_bytes(32)
-    # Encode as URL-safe base64 and strip padding
-    return base64.urlsafe_b64encode(token_bytes).decode().rstrip("=")
-
-
-def mask_phone_number(phone: str) -> str:
-    """Redact all but the last 4 digits of a phone number."""
-    if not phone or len(phone) < 4:
-        return "****"
-    return "*" * (len(phone) - 4) + phone[-4:]
 
 
 async def _print_2fa_password_hint(client: TelegramClient) -> None:
@@ -183,10 +169,7 @@ async def setup_telegram_session(
         if setup_config.bot_api_token:
             # Bot authentication
             print("Authenticating as bot...")
-            # Telethon's start() may return coroutine when event loop is running
-            result = client.start(bot_token=setup_config.bot_api_token)
-            if asyncio.iscoroutine(result):
-                await result
+            await client.start(bot_token=setup_config.bot_api_token)
             print("Successfully authenticated as bot!")
 
             # Test the connection by getting bot info

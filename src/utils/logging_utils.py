@@ -14,6 +14,18 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def mask_phone_number(phone: str) -> str:
+    """Mask a phone number for display, showing only the last 4 digits.
+
+    If the phone starts with ``+`` the prefix is preserved.
+    Example: ``+1234567890`` → ``+******7890``.
+    """
+    if not phone or len(phone) < 4:
+        return "****"
+    prefix = "+" if phone.startswith("+") else ""
+    return f"{prefix}****{phone[-4:]}"
+
+
 def mask_phone_number_for_log(phone: str) -> str:
     """
     Mask a phone number for safe logging.

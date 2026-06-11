@@ -613,6 +613,26 @@ async def cleanup_session_cache():
     logger.info("Cleaned up all session cache entries")
 
 
+async def disconnect_and_evict_session(token: str) -> None:
+    """Disconnect and remove a single session from the cache by token.
+
+    Used by session deletion flows (e.g. web setup delete) where the
+    caller needs the cached client disconnected before removing the
+    on-disk session file.
+    """
+    async with _cache_lock:
+        if token not in _session_cache:
+            return
+        client, _ = _session_cache.pop(token)
+        try:
+            await client.disconnect()
+            logger.info("Disconnected and evicted session for token %s...", token[:8])
+        except Exception as e:
+            logger.warning(
+                "Error disconnecting session %s... during eviction: %s", token[:8], e
+            )
+
+
 async def get_session_health_stats() -> dict:
     """Get health statistics for all sessions."""
     async with _failure_lock:

@@ -6,6 +6,6 @@
     <input type="hidden" name="setup_id" value="{{ setup_id }}" />
     {% if hint %}<div class="muted">Hint: {{ hint }}</div>{% endif %}
     <label for="password">Password</label>
-    <input id="password" name="password" type="password" placeholder="••••••••" required />
+    <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="new-password" required autofocus />
     <button type="submit">Confirm</button>
 </form>
