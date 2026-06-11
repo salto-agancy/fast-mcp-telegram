@@ -193,7 +193,7 @@ class QrLoginManager:
                 except Exception as exc:
                     logger.warning("on_complete callback failed: %s", exc)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.info("QR session %s expired (timeout=%ss)", session_id, self._timeout)
             state.mark_expired()
             with contextlib.suppress(Exception):
@@ -301,6 +301,9 @@ class QrLoginManager:
                 expired_ids.append(sid)
             elif state.is_completed and now - state.created_at > self._timeout * 2:
                 # Completed sessions older than 2x timeout
+                expired_ids.append(sid)
+            elif state.status == "2fa_required" and now - state.created_at > self._timeout * 2:
+                # 2FA-required sessions older than 2x timeout
                 expired_ids.append(sid)
             elif state.age > self._timeout * 2 and state.status == "pending":
                 # Safety net: sessions stuck in "pending" beyond 2x timeout
