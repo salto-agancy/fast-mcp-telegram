@@ -121,7 +121,7 @@ def client(e2e_app):
         yield c
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 async def async_client(e2e_app):
     """Async HTTP client for async tests using httpx.ASGITransport.
 
