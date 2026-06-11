@@ -9,7 +9,7 @@ Tiny ingestion HTTP server for anonymous feature-adoption telemetry
 One HTTP handler, one PostgreSQL INSERT per event.  That's it.
 
 ```
-POST /v1/event  →  validate with Pydantic  →  rate-limit / dedup  →  psycopg2 INSERT
+POST /v1/event  →  validate with dataclasses  →  rate-limit / dedup  →  psycopg2 INSERT
 ```
 
 **Stack:**
@@ -17,7 +17,7 @@ POST /v1/event  →  validate with Pydantic  →  rate-limit / dedup  →  psyco
 | Layer | Choice | Why |
 |-------|--------|-----|
 | HTTP server | `http.server.ThreadingHTTPServer` (stdlib) | Single endpoint, no routing needed. Saves ~15–20 MB RSS vs FastAPI + uvicorn. |
-| Validation | `pydantic` | Payload has nested fields, versioning, `Literal` constraints — too complex for `dataclass` + hand-rolled validation. |
+| Validation | `dataclasses` + manual `__post_init__` | Stdlib, zero dependencies. Saved ~15-20 MB RSS by dropping pydantic-core (Rust .so). Constraints are explicit — no magic type coercion. |
 | Database | `psycopg2-binary` | Sync, battle-tested, ships prebuilt manylinux wheels. Direct connection, no pool needed (single-threaded writer). |
 
 ### What was removed (overkill)
@@ -26,6 +26,7 @@ POST /v1/event  →  validate with Pydantic  →  rate-limit / dedup  →  psyco
 - **uvicorn** — ASGI server with event loop overhead; we sync-handle requests in worker threads
 - **asyncpg** — async-only; same connector overhead as psycopg2 but requires async plumbing
 - **asyncio** — the collector is I/O-bound on one table; green threading is enough
+- **pydantic v2** — pydantic-core Rust .so added ~15-20 MB RSS; replaced with stdlib ``dataclasses``
 
 ### Why `python:3.12-slim` (not alpine, not latest)
 

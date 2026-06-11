@@ -10,7 +10,7 @@ import hashlib
 import json
 from typing import Protocol
 
-from app.models import TelemetryPayload
+from app.models import TelemetryPayload, ValidationError
 
 # --- Configurable limits (can be overridden per-call or via env) ---
 INSTANCE_RATE_LIMIT: int = 100  # Max events per instance_id per 24h
@@ -44,13 +44,6 @@ class StorageBackend(Protocol):
     ) -> int: ...
 
 
-# --- Domain errors ---
-
-
-class ValidationError(Exception):
-    """The payload failed schema or business-rule validation."""
-
-
 class RateLimitError(Exception):
     """The sender has exceeded their rate limit."""
 
@@ -70,7 +63,7 @@ def compute_payload_hash(payload: TelemetryPayload) -> str:
     storage backend does not need to recompute it.
     """
     canonical = json.dumps(
-        payload.model_dump(mode="json"),
+        payload.to_dict(),
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -105,10 +98,7 @@ def process_event(
         RateLimitError: Sender exceeded rate limit.
     """
     # 1. Parse and validate payload
-    try:
-        payload = TelemetryPayload(**data)
-    except Exception as exc:
-        raise ValidationError(str(exc)) from exc
+    payload = TelemetryPayload.from_dict(data)
 
     # 2. Check per-instance_id rate limit
     recent = storage.count_recent_events(

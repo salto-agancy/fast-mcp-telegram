@@ -204,7 +204,7 @@ class MetricsStore:
 
 | Aspect | Detail |
 |--------|--------|
-| **Language** | Python with `http.server.ThreadingHTTPServer` + `psycopg2` — synchronous, no ASGI framework. FastAPI/uvicorn/asyncpg were eliminated in favour of stdlib after benchmarking showed ~15–20 MB RSS reduction (see [`collector/README.md`](../collector/README.md#architecture) for rationale). |
+| **Language** | Python with `http.server.ThreadingHTTPServer` + `psycopg2` — synchronous, no ASGI framework. FastAPI/uvicorn/asyncpg/pydantic were all eliminated in favour of stdlib after benchmarking showed pydantic-core alone added ~15–20 MB RSS (see [`collector/README.md`](../collector/README.md#architecture) for rationale). |
 | **Base image** | `python:3.12-slim` — not alpine (psycopg2-binary ships only manylinux/glibc wheels; building on Alpine adds complexity with no RSS benefit), not full `python:3.12` (unused build toolchain adds 800+ MB to the image). |
 | **Port** | 8000 (internal) |
 | **Auth** | None in v1 (endpoint is POST-only, no data worth stealing) |

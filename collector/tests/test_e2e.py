@@ -336,7 +336,7 @@ class TestE2ECollect:
             from app.services import compute_payload_hash, hash_source_ip
             from app.models import TelemetryPayload
 
-            payload = TelemetryPayload(**data)
+            payload = TelemetryPayload.from_dict(data)
             pg_storage.store(
                 payload, hash_source_ip("10.0.0.1"), compute_payload_hash(payload)
             )
