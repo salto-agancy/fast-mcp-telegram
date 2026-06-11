@@ -195,7 +195,7 @@ class TestE2ECollect:
         # Check extracted instance_id column
         assert row["instance_id"] == valid_payload["iid"]
         # Check JSONB payload
-        stored = json_module.loads(row["payload"])
+        stored = row["payload"]  # psycopg2 returns JSONB as dict natively
         assert stored["iid"] == valid_payload["iid"]
         assert stored["v"] == 1
         # Verify indexes exist and hash columns are populated
