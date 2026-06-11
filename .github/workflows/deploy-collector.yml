@@ -66,7 +66,7 @@ jobs:
     env:
       GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
       GHCR_PULL_USER: ${{ secrets.GHCR_PULL_USER }}
-      TELEMETRY_DB_PASSWORD: ${{ secrets.TELEMETRY_DB_PASSWORD }}
+      TELEMETRY_DSN: ${{ secrets.TELEMETRY_DSN }}
     steps:
       - uses: appleboy/ssh-action@v1.2.0
         with:
@@ -75,7 +75,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           command_timeout: 15m
-          envs: GHCR_PULL_TOKEN,GHCR_PULL_USER,TELEMETRY_DB_PASSWORD
+          envs: GHCR_PULL_TOKEN,GHCR_PULL_USER,TELEMETRY_DSN
           script: |
             set -euo pipefail
             REMOTE_DIR="/root/services/telemetry-collector"
@@ -89,7 +89,7 @@ services:
     container_name: telemetry-collector
     restart: unless-stopped
     environment:
-      TELEMETRY_DSN: postgres://telemetry:${TELEMETRY_DB_PASSWORD}@postgres:5432/telemetry
+      TELEMETRY_DSN: ${TELEMETRY_DSN}
     networks:
       - traefik-public
     mem_limit: 128m
@@ -113,20 +113,23 @@ COMPOSEEOF
 
             # Write .env
             cat > "$REMOTE_DIR/.env" <<ENVEOF
-TELEMETRY_DB_PASSWORD=${TELEMETRY_DB_PASSWORD}
+TELEMETRY_DSN=${TELEMETRY_DSN}
 ENVEOF
 
-            # Ensure telemetry database and user
+            # Ensure telemetry database and user (parsed from DSN)
+            DSN_USER=$(echo "$TELEMETRY_DSN" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+            DSN_PASS=$(echo "$TELEMETRY_DSN" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+            DSN_DB=$(echo "$TELEMETRY_DSN" | sed -n 's|.*/\([^?]*\)$|\1|p')
             docker exec postgres psql -U postgres -tc \
-              "SELECT 1 FROM pg_roles WHERE rolname='telemetry'" \
+              "SELECT 1 FROM pg_roles WHERE rolname='$DSN_USER'" \
               | grep -q 1 || \
               docker exec postgres psql -U postgres -c \
-                "CREATE ROLE telemetry WITH LOGIN PASSWORD '${TELEMETRY_DB_PASSWORD}';"
+                "CREATE ROLE \"$DSN_USER\" WITH LOGIN PASSWORD '$DSN_PASS';"
             docker exec postgres psql -U postgres -tc \
-              "SELECT 1 FROM pg_database WHERE datname='telemetry'" \
+              "SELECT 1 FROM pg_database WHERE datname='$DSN_DB'" \
               | grep -q 1 || \
               docker exec postgres psql -U postgres -c \
-                "CREATE DATABASE telemetry OWNER telemetry;"
+                "CREATE DATABASE \"$DSN_DB\" OWNER \"$DSN_USER\";"
 
             # Login to GHCR if needed
             if [ -n "${GHCR_PULL_TOKEN:-}" ] && [ -n "${GHCR_PULL_USER:-}" ]; then

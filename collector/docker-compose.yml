@@ -4,7 +4,7 @@ services:
     container_name: telemetry-collector
     restart: unless-stopped
     environment:
-      TELEMETRY_DSN: postgres://telemetry:${TELEMETRY_DB_PASSWORD:?set TELEMETRY_DB_PASSWORD in .env}@postgres:5432/telemetry
+      TELEMETRY_DSN: ${TELEMETRY_DSN:?set TELEMETRY_DSN in .env}
     networks:
       - traefik-public
     mem_limit: 128m
