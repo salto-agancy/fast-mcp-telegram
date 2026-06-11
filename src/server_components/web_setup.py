@@ -244,10 +244,17 @@ async def _complete_qr_login(
     state: dict[str, Any],
     qr_session_id: str,
     setup_id: str,
+    authorized_client: Any = None,
 ) -> Any:
-    """Finalise a QR login: persist session file and generate bearer token."""
+    """Finalise a QR login: persist session file and generate bearer token.
+
+    Args:
+        authorized_client: Optional pre-authorized Telethon client (for 2FA flow).
+            If None, the client is fetched from the QR manager (direct scan flow).
+    """
     qr_mgr = _get_qr_manager()
-    authorized_client = qr_mgr.get_client(qr_session_id)
+    if authorized_client is None:
+        authorized_client = qr_mgr.get_client(qr_session_id)
     temp_path = Path(state["session_path"])
 
     token: str | None = None
@@ -902,6 +909,7 @@ def register_web_setup_routes(mcp_app):
 
         Returns an HTML fragment:
         - ``qr_polling.html`` while waiting (keeps HTMX polling alive)
+        - ``qr_2fa.html`` when the scanned account requires a 2FA password
         - ``config.html`` when the QR is scanned (token + MCP config)
         - ``qr_expired.html`` when the QR expires
         """
@@ -949,9 +957,83 @@ def register_web_setup_routes(mcp_app):
                 {"setup_id": setup_id},
             )
 
+        if status == "2fa_required":
+            hint = qr_mgr.get_password_hint(qr_session_id)
+            return _fragment(
+                request,
+                "fragments/qr_2fa.html",
+                {"setup_id": setup_id, "hint": hint},
+            )
+
         # Still pending — keep polling
         return _fragment(
             request,
             "fragments/qr_polling.html",
             {"setup_id": setup_id},
+        )
+
+    @mcp_app.custom_route("/setup/qr/2fa", methods=["POST"])
+    async def setup_qr_2fa(request: Request):
+        """Complete QR login by providing the 2FA password.
+
+        Called when the scanned Telegram account requires two-step verification.
+        """
+        form = await request.form()
+        setup_id = str(form.get("setup_id", "")).strip()
+        password = str(form.get("password", "")).strip()
+
+        state = _setup_sessions.get(setup_id)
+        if not state:
+            return _fragment(
+                request, "fragments/error.html", {"error": "Session not found."}
+            )
+
+        client = state.get("client")
+        if not client:
+            return _fragment(
+                request,
+                "fragments/error.html",
+                {"error": "Login session expired. Please try again."},
+            )
+
+        qr_session_id = state.get("qr_session_id")
+        if not qr_session_id:
+            return _fragment(
+                request,
+                "fragments/error.html",
+                {"error": "No QR session in progress."},
+            )
+
+        qr_mgr = _get_qr_manager()
+        hint = qr_mgr.get_password_hint(qr_session_id)
+
+        try:
+            await client.sign_in(password=password)
+            state["authorized"] = True
+            logger.info("QR login 2FA completed for session %s", setup_id)
+        except PasswordHashInvalidError:
+            return _fragment(
+                request,
+                "fragments/qr_2fa.html",
+                {
+                    "setup_id": setup_id,
+                    "hint": hint,
+                    "error": "Invalid password. Please try again.",
+                },
+            )
+        except Exception as e:
+            logger.warning("QR 2FA failed for session %s: %s", setup_id, e)
+            return _fragment(
+                request,
+                "fragments/qr_2fa.html",
+                {
+                    "setup_id": setup_id,
+                    "hint": hint,
+                    "error": f"Authentication failed: {e}",
+                },
+            )
+
+        # Password accepted — persist session and generate token
+        return await _complete_qr_login(
+            request, state, qr_session_id, setup_id, authorized_client=client
         )

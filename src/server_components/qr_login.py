@@ -14,6 +14,9 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+from telethon.errors import SessionPasswordNeededError
+from telethon.tl.functions.account import GetPasswordRequest
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +36,7 @@ class SessionState:
         self.qr_url = qr_url
         self.created_at: float = time.time()
         self.resulting_client: Any = None  # Set when QR is scanned successfully
+        self.password_hint: str = ""  # 2FA hint when account has two-step verification
         self._poll_task: asyncio.Task[Any] | None = None
         self._qr_login_obj: Any = None  # Telethon QRLogin object, set by manager
         self._status: str = "pending"
@@ -55,6 +59,11 @@ class SessionState:
     def mark_completed(self, client: Any) -> None:
         self.resulting_client = client
         self._status = "completed"
+
+    def mark_2fa_required(self, hint: str = "") -> None:
+        """Mark the session as requiring a 2FA password after QR scan."""
+        self._status = "2fa_required"
+        self.password_hint = hint
 
 
 class QrLoginManager:
@@ -131,7 +140,8 @@ class QrLoginManager:
         Subsequent polls return the cached status.
 
         Returns:
-            One of: ``"pending"``, ``"completed"``, ``"expired"``, ``"not_found"``.
+            One of: ``"pending"``, ``"completed"``, ``"expired"``, ``"2fa_required"``,
+            ``"not_found"``.
         """
         state = self._sessions.get(session_id)
         if state is None:
@@ -183,11 +193,28 @@ class QrLoginManager:
                 except Exception as exc:
                     logger.warning("on_complete callback failed: %s", exc)
 
+        except TimeoutError:
+            logger.info("QR session %s expired (timeout=%ss)", session_id, self._timeout)
+            state.mark_expired()
+            with contextlib.suppress(Exception):
+                await state.telethon_client.disconnect()
+
+        except SessionPasswordNeededError:
+            # Account has two-step verification enabled — get the password hint
+            hint = ""
+            with contextlib.suppress(Exception):
+                pw = await state.telethon_client(GetPasswordRequest())
+                hint = (pw.hint or "").strip()
+            state.mark_2fa_required(hint=hint)
+            logger.info(
+                "QR session %s requires 2FA password%s",
+                session_id,
+                f" (hint: {hint})" if hint else "",
+            )
+            # Don't disconnect telethon_client — it's needed for sign_in(password=)
+
         except Exception as exc:
-            if isinstance(exc, TimeoutError):
-                logger.info("QR session %s expired (timeout=%ss)", session_id, self._timeout)
-            else:
-                logger.warning("QR session %s failed: %s", session_id, exc)
+            logger.warning("QR session %s failed: %s", session_id, exc)
             state.mark_expired()
             with contextlib.suppress(Exception):
                 await state.telethon_client.disconnect()
@@ -201,6 +228,16 @@ class QrLoginManager:
         if state is None or not state.is_completed:
             return None
         return state.resulting_client
+
+    def get_password_hint(self, session_id: str) -> str:
+        """Get the 2FA password hint for a QR session (if any).
+
+        Returns an empty string if the session doesn't exist or has no hint.
+        """
+        state = self._sessions.get(session_id)
+        if state is None:
+            return ""
+        return state.password_hint
 
     async def regenerate_qr(self, session_id: str, telethon_client: Any) -> str | None:
         """Generate a new QR code for an existing session (e.g., after timeout).
@@ -262,17 +299,16 @@ class QrLoginManager:
             elif state.is_completed and now - state.created_at > self._timeout * 2:
                 # Completed sessions older than 2x timeout
                 expired_ids.append(sid)
+            elif state.status == "2fa_required" and now - state.created_at > self._timeout * 2:
+                # 2FA-required sessions older than 2x timeout
+                expired_ids.append(sid)
             elif state.age > self._timeout * 2 and state.status == "pending":
                 # Safety net: sessions stuck in "pending" beyond 2x timeout
                 state.mark_expired()
                 expired_ids.append(sid)
 
         for sid in expired_ids:
-            if state := self._sessions.pop(sid, None):
-                # Ensure disconnected
-                with contextlib.suppress(Exception):
-                    # Can't await in cleanup, but disconnect is best-effort
-                    pass
+            self._sessions.pop(sid, None)
 
         if expired_ids:
             logger.debug("Cleanup removed %d expired/completed QR session(s)", len(expired_ids))
