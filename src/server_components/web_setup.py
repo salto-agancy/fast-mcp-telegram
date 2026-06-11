@@ -909,6 +909,7 @@ def register_web_setup_routes(mcp_app):
 
         Returns an HTML fragment:
         - ``qr_polling.html`` while waiting (keeps HTMX polling alive)
+        - ``qr_2fa.html`` when the scanned account requires a 2FA password
         - ``config.html`` when the QR is scanned (token + MCP config)
         - ``qr_expired.html`` when the QR expires
         """

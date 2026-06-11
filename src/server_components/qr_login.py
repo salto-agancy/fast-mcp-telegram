@@ -237,7 +237,7 @@ class QrLoginManager:
         state = self._sessions.get(session_id)
         if state is None:
             return ""
-        return getattr(state, "password_hint", "")
+        return state.password_hint
 
     async def regenerate_qr(self, session_id: str, telethon_client: Any) -> str | None:
         """Generate a new QR code for an existing session (e.g., after timeout).
@@ -308,11 +308,7 @@ class QrLoginManager:
                 expired_ids.append(sid)
 
         for sid in expired_ids:
-            if state := self._sessions.pop(sid, None):
-                # Ensure disconnected
-                with contextlib.suppress(Exception):
-                    # Can't await in cleanup, but disconnect is best-effort
-                    pass
+            self._sessions.pop(sid, None)
 
         if expired_ids:
             logger.debug("Cleanup removed %d expired/completed QR session(s)", len(expired_ids))
