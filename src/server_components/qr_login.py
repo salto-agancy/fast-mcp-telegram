@@ -203,11 +203,8 @@ class QrLoginManager:
             # Account has two-step verification enabled — get the password hint
             hint = ""
             with contextlib.suppress(Exception):
-                try:
-                    pw = await state.telethon_client(GetPasswordRequest())
-                    hint = (pw.hint or "").strip()
-                except Exception:
-                    pass
+                pw = await state.telethon_client(GetPasswordRequest())
+                hint = (pw.hint or "").strip()
             state.mark_2fa_required(hint=hint)
             logger.info(
                 "QR session %s requires 2FA password%s",
