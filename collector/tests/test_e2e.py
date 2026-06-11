@@ -113,11 +113,29 @@ async def e2e_app(pg_storage):
     return create_app(storage_backend=pg_storage)
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def client(e2e_app):
-    """FastAPI TestClient (function-scoped — each test gets a fresh client)."""
+    """Sync TestClient for the sync health check (module-scoped)."""
     from fastapi.testclient import TestClient
     with TestClient(e2e_app) as c:
+        yield c
+
+
+@pytest.fixture
+async def async_client(e2e_app):
+    """Async HTTP client for async tests using httpx.ASGITransport.
+
+    ``TestClient`` wraps the ASGI app with a sync interface that runs
+    the app on a *different* event loop than the async test function.
+    This causes ``RuntimeError: attached to a different loop`` when a
+    test makes a sync HTTP call then awaits an async fixture method.
+
+    ``httpx.AsyncClient`` + ``ASGITransport`` keeps everything on the
+    same event loop, avoiding the conflict.
+    """
+    from httpx import ASGITransport, AsyncClient
+    transport = ASGITransport(app=e2e_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
 
@@ -157,9 +175,9 @@ class TestE2EHealth:
 class TestE2ECollect:
     """Collecting events against real PostgreSQL."""
 
-    async def test_store_and_retrieve(self, client, pg_storage, valid_payload):
+    async def test_store_and_retrieve(self, async_client, pg_storage, valid_payload):
         """A valid payload is stored and queryable via PostgreSQL."""
-        resp = client.post("/v1/event", json=valid_payload)
+        resp = await async_client.post("/v1/event", json=valid_payload)
         assert resp.status_code == 204
 
         count = await _count_rows(pg_storage)
@@ -177,7 +195,7 @@ class TestE2ECollect:
         assert len(row["payload_hash"]) == 64  # SHA-256 hex
         assert len(row["source_ip_hash"]) == 64  # SHA-256 hex
 
-    async def test_multiple_events(self, client, pg_storage):
+    async def test_multiple_events(self, async_client, pg_storage):
         """Multiple valid events are all stored."""
         from collector.tests._helpers import make_nested_payload
 
@@ -187,33 +205,33 @@ class TestE2ECollect:
                 iid=f"550e8400-e29b-41d4-a716-4466554400{i:02d}",
                 counters={"total_calls": i, "errors": 0},
             )
-            resp = client.post("/v1/event", json=data)
+            resp = await async_client.post("/v1/event", json=data)
             assert resp.status_code == 204
 
         count = await _count_rows(pg_storage)
         assert count == n
 
-    async def test_invalid_payload_rejected(self, client, pg_storage, valid_payload):
+    async def test_invalid_payload_rejected(self, async_client, pg_storage, valid_payload):
         """Invalid payload returns 422 and nothing is stored."""
         del valid_payload["iid"]
-        resp = client.post("/v1/event", json=valid_payload)
+        resp = await async_client.post("/v1/event", json=valid_payload)
         assert resp.status_code == 422
 
         count = await _count_rows(pg_storage)
         assert count == 0
 
-    async def test_duplicate_dedup_postgres(self, client, pg_storage, valid_payload):
+    async def test_duplicate_dedup_postgres(self, async_client, pg_storage, valid_payload):
         """Same payload sent twice within dedup window is deduped (single row)."""
-        resp1 = client.post("/v1/event", json=valid_payload)
+        resp1 = await async_client.post("/v1/event", json=valid_payload)
         assert resp1.status_code == 204
 
-        resp2 = client.post("/v1/event", json=valid_payload)
+        resp2 = await async_client.post("/v1/event", json=valid_payload)
         assert resp2.status_code == 204  # Silent dedup
 
         count = await _count_rows(pg_storage)
         assert count == 1, f"Expected 1 row after dedup, got {count}"
 
-    async def test_rate_limit_postgres(self, client, pg_storage):
+    async def test_rate_limit_postgres(self, async_client, pg_storage):
         """Exceeding per-instance rate limit returns 429."""
         from app.services import INSTANCE_RATE_LIMIT
         from collector.tests._helpers import make_nested_payload
@@ -224,7 +242,7 @@ class TestE2ECollect:
                 iid="rate-limited-test-uuid",
                 counters={"total_calls": i, "errors": 0},
             )
-            resp = client.post("/v1/event", json=data)
+            resp = await async_client.post("/v1/event", json=data)
             assert resp.status_code == 204
 
         # One more should be rate-limited
@@ -232,14 +250,14 @@ class TestE2ECollect:
             iid="rate-limited-test-uuid",
             counters={"total_calls": 9999, "errors": 0},
         )
-        resp = client.post("/v1/event", json=data)
+        resp = await async_client.post("/v1/event", json=data)
         assert resp.status_code == 429
 
         # Verify only the limit number of rows exists
         count = await _count_rows(pg_storage)
         assert count == INSTANCE_RATE_LIMIT
 
-    async def test_different_instance_not_rate_limited(self, client, pg_storage):
+    async def test_different_instance_not_rate_limited(self, async_client, pg_storage):
         """Events from different iids don't interfere with rate limiting."""
         from app.services import INSTANCE_RATE_LIMIT
         from collector.tests._helpers import make_nested_payload
@@ -250,7 +268,7 @@ class TestE2ECollect:
                 iid="saturated-instance",
                 counters={"total_calls": i, "errors": 0},
             )
-            resp = client.post("/v1/event", json=data)
+            resp = await async_client.post("/v1/event", json=data)
             assert resp.status_code == 204
 
         # A different iid should still be allowed
@@ -258,7 +276,7 @@ class TestE2ECollect:
             iid="fresh-instance",
             counters={"total_calls": 0, "errors": 0},
         )
-        resp = client.post("/v1/event", json=fresh)
+        resp = await async_client.post("/v1/event", json=fresh)
         assert resp.status_code == 204
 
     async def test_column_types_and_indexes(self, pg_storage):
