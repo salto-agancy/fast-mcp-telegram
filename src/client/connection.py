@@ -652,3 +652,12 @@ async def get_session_health_stats() -> dict:
             }
 
         return stats
+
+
+def get_active_session_count() -> int:
+    """Return approximate count of currently cached active Telegram sessions.
+
+    Thread-safe: ``len()`` on a dict is atomic under the GIL; the caller does
+    NOT need ``_cache_lock`` for a best-effort read (telemetry purposes).
+    """
+    return len(_session_cache)

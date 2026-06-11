@@ -47,7 +47,7 @@ async def cleanup_loop():
     try:
         await _run_inactivity_cleanup()
     except Exception as e:
-        logger.error(f"Error in startup inactivity cleanup: {e}")
+        logger.error("Error in startup inactivity cleanup: %s", e)
 
     cleanup_cycle = 0
     inactivity_check_interval = 1440  # every 24 hours (1440 iterations * 60s)
@@ -63,7 +63,7 @@ async def cleanup_loop():
                 try:
                     await _run_inactivity_cleanup()
                 except Exception as e:
-                    logger.error(f"Error in periodic inactivity cleanup: {e}")
+                    logger.error("Error in periodic inactivity cleanup: %s", e)
 
             # Disconnect idle cached sessions
             await cleanup_idle_sessions()
@@ -71,7 +71,7 @@ async def cleanup_loop():
             logger.info("Background cleanup task cancelled")
             break
         except Exception as e:
-            logger.error(f"Error in cleanup task: {e}")
+            logger.error("Error in cleanup task: %s", e)
             await asyncio.sleep(60)  # Wait before retrying
 
 
@@ -79,7 +79,7 @@ async def _run_inactivity_cleanup():
     """Run inactivity-based session file cleanup and log results."""
     deleted = await _cleanup_inactive_sessions()
     if deleted:
-        logger.info(f"Inactivity cleanup: removed {deleted} session(s)")
+        logger.info("Inactivity cleanup: removed %s session(s)", deleted)
 
 
 @asynccontextmanager
@@ -89,7 +89,7 @@ async def lifespan(app: FastMCP):
     try:
         validate_api_credentials()
     except ValueError as e:
-        logger.error(f"❌ Configuration error: {e}")
+        logger.error("❌ Configuration error: %s", e)
         raise
 
     # Startup: background cleanup

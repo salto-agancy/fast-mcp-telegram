@@ -1,4 +1,4 @@
-"""Tests for the telemetry payload Pydantic models."""
+"""Tests for the telemetry payload dataclass models."""
 
 import time
 

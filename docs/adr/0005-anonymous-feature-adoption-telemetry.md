@@ -189,23 +189,46 @@ No interactive prompt on first run. Disclosure is delivered through:
 A lightweight `MetricsStore` class lives in `src/telemetry.py`:
 
 ```python
-@dataclass
 class MetricsStore:
-    total_calls: int = 0
-    errors: int = 0
-    flood_waits: int = 0
+    """Lifetime-of-process counters for tool-call activity.
+
+    Thread-safe: all mutations and reads go through a ``threading.Lock``
+    because ``snapshot()`` is called from a thread-pool executor while
+    the event-loop wields ``record_call()`` / ``record_error()``.
+    """
+
+    def __init__(self) -> None:
+        self.total_calls: int = 0
+        self.errors: int = 0
+        self.flood_waits: int = 0
+        self._lock = threading.Lock()
+
+    def record_call(self) -> None:
+        with self._lock:
+            self.total_calls += 1
+
+    def record_error(self) -> None:
+        with self._lock:
+            self.errors += 1
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "total_calls": self.total_calls,
+                "errors": self.errors,
+                "flood_waits": self.flood_waits,
+            }
 ```
 
-- Wired into `mcp_tool_with_restrictions` in `tools_register.py` via a context manager or decorator — every tool call increments `total_calls`, every caught exception increments `errors`, every `FloodWait` increments `flood_waits`
-- No locking required (GIL-protected, single server task)
-- `snapshot()` returns a frozen copy for the telemetry loop
+- ``record_call()`` / ``record_error()`` / ``record_flood_wait()`` exist as API but are **not yet wired** into tool-call handlers — they are a v2 integration point. Currently only ``snapshot()`` is used by the telemetry heartbeat loop.
+- ``snapshot()`` returns a frozen copy for the telemetry loop.
 
 ### Collector container (v1)
 
 | Aspect | Detail |
 |--------|--------|
 | **Language** | Python with `http.server.ThreadingHTTPServer` + `psycopg2` — synchronous, no ASGI framework. FastAPI/uvicorn/asyncpg/pydantic were all eliminated in favour of stdlib after benchmarking showed pydantic-core alone added ~15–20 MB RSS (see [`collector/README.md`](../collector/README.md#architecture) for rationale). |
-| **Base image** | `python:3.12-slim` — not alpine (psycopg2-binary ships only manylinux/glibc wheels; building on Alpine adds complexity with no RSS benefit), not full `python:3.12` (unused build toolchain adds 800+ MB to the image). |
+| **Base image** | `python:3-slim` — not alpine (psycopg2-binary ships only manylinux/glibc wheels; building on Alpine adds complexity with no RSS benefit), not full `python:3` (unused build toolchain adds 800+ MB to the image). |
 | **Port** | 8000 (internal) |
 | **Auth** | None in v1 (endpoint is POST-only, no data worth stealing) |
 | **Health** | GET /health → 200 OK (used by Docker healthcheck and Traefik) |

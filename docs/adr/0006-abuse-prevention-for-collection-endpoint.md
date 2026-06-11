@@ -81,65 +81,117 @@ Box 3 uses Traefik, not nginx. All traffic goes through Traefik. Adding nginx ju
 
 The collector runs as a lightweight Python container on Box 3 using the existing `traefik-public` network. It validates every payload before touching PostgreSQL.
 
-**2a. Schema validation with Pydantic**
+**2a. Schema validation**
 
-Every request body is validated against a strict Pydantic model **before** any database operation. Unknown fields cause an immediate 422 with no DB write.
+Every request body is validated against a strict dataclass model **before** any database operation. Unknown fields cause an immediate 422 with no DB write.
 
 ```python
-from pydantic import BaseModel, Field, field_validator
-from typing import Literal
+from __future__ import annotations
 
-KNOWN_FEATURES = {
-    "server_mode", "acl_enabled", "acl_deny_unlisted_principals",
-    "acl_principals", "acl_read_only", "bot_api_token", "mtproto_proxy",
-    "prefix_mcp_tools_with_account", "max_active_sessions",
-    "inactive_session_days", "block_private_ips", "allow_http_urls",
-}
+import time
+from dataclasses import dataclass, field, asdict
+from typing import Any, Literal
 
-KNOWN_COUNTER_KEYS = {"total_calls", "errors"}
 
-class RuntimeBlock(BaseModel, extra="forbid"):
-    sessions: int = Field(ge=0)
-    session_files: int = Field(ge=0)
-    setup_sessions: int = Field(ge=0)
+_FUTURE_DRIFT_SECONDS = 300        # 5 min clock-skew tolerance
+_OLD_WINDOW_SECONDS = 7 * 24 * 3600  # 7 days
 
-class CountersBlock(BaseModel, extra="forbid"):
-    total_calls: int = Field(ge=0)
-    errors: int = Field(ge=0)
 
-class TelemetryPayload(BaseModel, extra="forbid"):
+class ValidationError(Exception):
+    """The payload failed schema or business-rule validation."""
+
+
+@dataclass
+class TelemetryPayload:
+    """Schema for incoming anonymous telemetry events."""
+
     v: Literal[1]
-    iid: str = Field(min_length=32, max_length=64)  # UUID v4-ish
-    ts: int = Field(ge=1_700_000_000)                # reasonable Unix ts
-    started_at: int = Field(ge=1_700_000_000)
-    ver: str = Field(min_length=3, max_length=32)
-    os: str = Field(max_length=64)
-    py: str = Field(max_length=16)
-    features: dict = Field(...)
-    runtime: RuntimeBlock
-    counters: CountersBlock
+    iid: str
+    ts: int
+    started_at: int
+    ver: str
+    os: str
+    py: str
+    features: dict[str, Any] = field(default_factory=dict)
+    runtime: dict[str, int] = field(default_factory=dict)
+    counters: dict[str, int] = field(default_factory=dict)
 
-    @field_validator("ts")
-    @classmethod
-    def ts_not_in_future(cls, v: int) -> int:
-        if v > int(time.time()) + 300:  # 5 min clock skew
-            raise ValueError("timestamp in future")
-        return v
+    def __post_init__(self) -> None:
+        errors: list[str] = []
 
-    @field_validator("ts")
+        # --- v (Literal[1]) ---
+        if self.v != 1:
+            errors.append(f"v must be 1, got {self.v!r}")
+
+        # --- iid ---
+        if not isinstance(self.iid, str) or not self.iid:
+            errors.append("iid must be a non-empty string")
+        elif len(self.iid) > 128:
+            errors.append(f"iid exceeds 128 chars ({len(self.iid)})")
+
+        # --- ts ---
+        if not isinstance(self.ts, int) or isinstance(self.ts, bool):
+            errors.append("ts must be an integer")
+        else:
+            now = int(time.time())
+            if self.ts > now + _FUTURE_DRIFT_SECONDS:
+                errors.append(f"ts {self.ts} is {self.ts - now}s in the future")
+            if self.ts < now - _OLD_WINDOW_SECONDS:
+                errors.append(f"ts {self.ts} is {now - self.ts}s old")
+
+        # --- started_at ---
+        if not isinstance(self.started_at, int) or isinstance(self.started_at, bool):
+            errors.append("started_at must be an integer")
+
+        # --- ver / os / py string-length checks ---
+        if not isinstance(self.ver, str) or not self.ver or len(self.ver) > 64:
+            errors.append("ver must be a non-empty string ≤64 chars")
+        if not isinstance(self.os, str) or len(self.os) > 128:
+            errors.append("os must be a string ≤128 chars")
+        if not isinstance(self.py, str) or len(self.py) > 32:
+            errors.append("py must be a string ≤32 chars")
+
+        # --- features ---
+        if not isinstance(self.features, dict):
+            errors.append("features must be a dict")
+
+        # --- runtime / counters (dict[str, int] with non-negative values) ---
+        for field_name, d in (("runtime", self.runtime), ("counters", self.counters)):
+            if not isinstance(d, dict):
+                errors.append(f"{field_name} must be a dict")
+                continue
+            for k, val in d.items():
+                if not isinstance(val, int) or isinstance(val, bool):
+                    errors.append(f"{field_name}.{k!r} must be int")
+                    break
+                if val < 0:
+                    errors.append(f"{field_name}.{k!r} must be >= 0, got {val}")
+                    break
+
+        if errors:
+            raise ValidationError("; ".join(errors))
+
     @classmethod
-    def ts_not_too_old(cls, v: int) -> int:
-        if v < int(time.time()) - 604_800:  # 7 days
-            raise ValueError("timestamp too old")
-        return v
+    def from_dict(cls, data: dict[str, Any]) -> TelemetryPayload:
+        """Construct and validate from a raw dict. Rejects extra keys."""
+        known = set(cls.__dataclass_fields__)
+        extra = set(data) - known
+        if extra:
+            raise ValidationError(
+                f"Unexpected fields: {', '.join(sorted(extra))}"
+            )
+        return cls(**data)
 ```
 
 Rationale:
-- `extra="forbid"` — attacker cannot inject unexpected fields into the JSONB row
-- `Field(ge=...)` on all numerics — no negative counters, no impossible session counts
-- `iid` length filter — UUID v4 is 36 chars; rejects obviously fake IDs that are too short or too long
-- Timestamp range check — kills replay attacks: a captured payload from last week is rejected
-- `Literal[1]` — only version 1 payloads accepted; future versions require a code update, preventing the endpoint from accepting unknown payload shapes
+- **No Pydantic dependency** — saves ~15–20 MB RSS from pydantic-core's Rust `.so`
+- **`__post_init__`** replaces Pydantic validators — same strictness, no extra deps
+- **`from_dict()`** with extra-keys check replaces `extra="forbid"` — attacker cannot inject unexpected fields
+- **Manual type checks** replace `Field(ge=...)` on numerics — no negative counters, no impossible session counts
+- **`iid` length filter** — max 128 chars; rejects obviously fake IDs
+- **Timestamp range check** (±5 min clock skew, max 7 days old) — kills replay attacks
+- **`Literal[1]`** enforced manually — only version 1 payloads accepted
+- All validation errors are collected and reported at once rather than short-circuiting on the first failure
 
 **2b. Per-instance_id rate limiting**
 

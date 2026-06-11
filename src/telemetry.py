@@ -69,6 +69,7 @@ class MetricsStore:
     def __init__(self) -> None:
         self.total_calls: int = 0
         self.errors: int = 0
+        self.flood_waits: int = 0
         self._lock = threading.Lock()
 
     def record_call(self) -> None:
@@ -81,12 +82,18 @@ class MetricsStore:
         with self._lock:
             self.errors += 1
 
+    def record_flood_wait(self) -> None:
+        """Increment flood_waits by 1 (atomic w.r.t. snapshot)."""
+        with self._lock:
+            self.flood_waits += 1
+
     def snapshot(self) -> dict:
         """Return a frozen copy of the current counters as a plain dict."""
         with self._lock:
             return {
                 "total_calls": self.total_calls,
                 "errors": self.errors,
+                "flood_waits": self.flood_waits,
             }
 
 
@@ -161,10 +168,13 @@ def _collect_runtime() -> dict:
             1 for f in session_dir.iterdir() if f.suffix == ".session"
         )
 
+    # Runtime import avoids circular dependencies at module load time.
+    from src.client.connection import get_active_session_count
+
     return {
-        "sessions": 0,  # placeholder — wired in server.py when client is active
+        "sessions": get_active_session_count(),
         "session_files": session_files,
-        "setup_sessions": 0,  # placeholder
+        "setup_sessions": 0,  # not yet tracked
     }
 
 

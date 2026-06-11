@@ -48,7 +48,7 @@ Starting from v0.7.0, the server sends **anonymous feature-adoption telemetry** 
 
 **What is never collected:** API credentials (`api_id`, `api_hash`, `bot_token`), message content, chat IDs, peer identifiers, phone numbers, IP addresses (source IP is SHA-256 hashed and never stored raw), file paths, or environment variable values.
 
-The heartbeat fires every 5 minutes. The collector is rate-limited (100 events/instance/day) and deduplicated — the same payload within a 5-minute window is silently dropped. See [ADR 0005](docs/adr/0005-anonymous-feature-adoption-telemetry.md) for the full design and [ADR 0006](docs/adr/0006-abuse-prevention-for-collection-endpoint.md) for abuse prevention.
+The heartbeat fires every 6 hours by default (configurable via `MCP_TELEMETRY_INTERVAL`). The collector deduplicates identical payloads within a 5-minute window. See [ADR 0005](docs/adr/0005-anonymous-feature-adoption-telemetry.md) for the full design and [ADR 0006](docs/adr/0006-abuse-prevention-for-collection-endpoint.md) for abuse prevention.
 
 ## How It Works
 
