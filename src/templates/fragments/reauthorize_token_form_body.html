@@ -4,6 +4,6 @@
 
 <form hx-post="/setup/reauthorize" hx-target="#setup-flow" hx-swap="innerHTML">
     <label for="token">Bearer Token</label>
-    <input id="token" name="token" type="text" placeholder="Your bearer token" required />
+    <input id="token" name="token" type="text" placeholder="Your bearer token" autocomplete="off" required />
     <button type="submit">Check & Reauthorize</button>
 </form>
