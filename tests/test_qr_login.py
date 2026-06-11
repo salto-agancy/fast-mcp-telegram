@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.server_components.qr_login import QrLoginError, QrLoginManager
+from src.server_components.qr_login import QrLoginError, QrLoginManager, SessionState
 
 
 @pytest.fixture
@@ -287,3 +287,121 @@ async def test_create_session_integration_flow():
     assert status in ("pending", "completed")
 
     _ = manager.get_client(session_id)  # Client may/may not be set
+
+
+# ── 2FA (Two-Factor Authentication) Tests ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_poll_status_2fa_required(manager, mock_telethon_client):
+    """poll_status returns '2fa_required' when SessionPasswordNeededError is raised
+    during QR scan, and the telethon_client is NOT disconnected."""
+    from telethon.errors import SessionPasswordNeededError
+
+    mock_qr_login = MagicMock()
+    mock_qr_login.url = "tg://login?token=abc"
+    mock_qr_login.wait = AsyncMock(
+        side_effect=SessionPasswordNeededError(request=None)
+    )
+    mock_telethon_client.qr_login.return_value = mock_qr_login
+    mock_telethon_client.disconnect = AsyncMock()
+
+    session_id, _ = await manager.create_session(mock_telethon_client)
+
+    # First poll kicks off background wait task
+    status = await manager.poll_status(session_id)
+    assert status in ("pending", "2fa_required")
+
+    # Yield so the background task finishes
+    await asyncio.sleep(0)
+
+    status = await manager.poll_status(session_id)
+    assert status == "2fa_required"
+    # Client must NOT be disconnected — it's needed for sign_in(password=)
+    mock_telethon_client.disconnect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_poll_status_2fa_required_preserves_status_across_calls(manager, mock_telethon_client):
+    """Once '2fa_required', poll_status continues returning it."""
+    from telethon.errors import SessionPasswordNeededError
+
+    mock_qr_login = MagicMock()
+    mock_qr_login.url = "tg://login?token=abc"
+    mock_qr_login.wait = AsyncMock(
+        side_effect=SessionPasswordNeededError(request=None)
+    )
+    mock_telethon_client.qr_login.return_value = mock_qr_login
+
+    session_id, _ = await manager.create_session(mock_telethon_client)
+    await manager.poll_status(session_id)
+    await asyncio.sleep(0)
+
+    for _ in range(5):
+        assert await manager.poll_status(session_id) == "2fa_required"
+
+
+def test_get_password_hint_unknown_session(manager):
+    """get_password_hint returns empty string for sessions that don't exist."""
+    assert manager.get_password_hint("nonexistent-session-id") == ""
+
+
+@pytest.mark.asyncio
+async def test_get_password_hint_before_2fa(manager, mock_telethon_client):
+    """get_password_hint returns empty string before 2FA is required."""
+    mock_qr_login = MagicMock()
+    mock_qr_login.url = "tg://login?token=abc"
+    mock_telethon_client.qr_login.return_value = mock_qr_login
+
+    session_id, _ = await manager.create_session(mock_telethon_client)
+    assert manager.get_password_hint(session_id) == ""
+
+
+def test_is_completed_false_for_2fa_required():
+    """SessionState.is_completed returns False when status is '2fa_required'."""
+    state = SessionState(telethon_client=MagicMock(), qr_url="tg://login?token=x")
+    state.mark_2fa_required()
+    assert state.status == "2fa_required"
+    assert not state.is_completed
+
+
+def test_mark_2fa_required_sets_hint():
+    """mark_2fa_required stores the password hint."""
+    state = SessionState(telethon_client=MagicMock(), qr_url="tg://login?token=x")
+    state.mark_2fa_required(hint="test hint")
+    assert state.password_hint == "test hint"
+    assert state.status == "2fa_required"
+
+
+def test_mark_2fa_required_empty_hint():
+    """mark_2fa_required with no hint stores empty string."""
+    state = SessionState(telethon_client=MagicMock(), qr_url="tg://login?token=x")
+    state.mark_2fa_required()
+    assert state.password_hint == ""
+
+
+@pytest.mark.asyncio
+async def test_cleanup_expired_removes_2fa_sessions(manager, mock_telethon_client):
+    """cleanup_expired removes sessions stuck in '2fa_required' beyond timeout."""
+    from telethon.errors import SessionPasswordNeededError
+
+    mock_qr_login = MagicMock()
+    mock_qr_login.url = "tg://login?token=abc"
+    mock_qr_login.wait = AsyncMock(
+        side_effect=SessionPasswordNeededError(request=None)
+    )
+    mock_telethon_client.qr_login.return_value = mock_qr_login
+    mock_telethon_client.disconnect = AsyncMock()
+
+    session_id, _ = await manager.create_session(mock_telethon_client)
+    await manager.poll_status(session_id)
+    await asyncio.sleep(0)
+
+    assert await manager.poll_status(session_id) == "2fa_required"
+
+    # Age the session past 2x timeout so cleanup removes it
+    manager._sessions[session_id].created_at = time.time() - 180
+
+    removed = manager.cleanup_expired()
+    assert removed >= 1
+    assert session_id not in manager._sessions
