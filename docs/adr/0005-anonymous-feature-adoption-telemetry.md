@@ -204,14 +204,14 @@ class MetricsStore:
 
 | Aspect | Detail |
 |--------|--------|
-| **Language** | Python with asyncpg (async stack to match FastAPI) |
-| **Base image** | python:3.12-slim |
+| **Language** | Python with `http.server.ThreadingHTTPServer` + `psycopg2` — synchronous, no ASGI framework. FastAPI/uvicorn/asyncpg were eliminated in favour of stdlib after benchmarking showed ~15–20 MB RSS reduction (see [`collector/README.md`](../collector/README.md#architecture) for rationale). |
+| **Base image** | `python:3.12-slim` — not alpine (psycopg2-binary ships only manylinux/glibc wheels; building on Alpine adds complexity with no RSS benefit), not full `python:3.12` (unused build toolchain adds 800+ MB to the image). |
 | **Port** | 8000 (internal) |
 | **Auth** | None in v1 (endpoint is POST-only, no data worth stealing) |
-| **Health** | GET /health → 200 OK (used by Traefik health checks) |
-| **Env** | `TELEMETRY_DSN` — PostgreSQL connection string (pydantic-settings prefix `TELEMETRY_`) |
-| **Deploy** | `collector/` directory in the fast-mcp-telegram repo; Docker image built from that directory; service added to the docker-compose on Box 3 |
-| **Traefik** | New router config in the vds-servers repo (dynamic, hot-reload): `Host(fast-mcp-telegram-telemetry.l1979.ru) + Path(/v1/event)` → collector:8000 |
+| **Health** | GET /health → 200 OK (used by Docker healthcheck and Traefik) |
+| **Env** | `TELEMETRY_DSN` — PostgreSQL connection string |
+| **Deploy** | GitHub Actions (`deploy-collector.yml`) builds the image, pushes to `ghcr.io/leshchenko1979/telemetry-collector:main`, then appleboy/ssh-action writes `docker-compose.yml` + `.env` to `/root/services/telemetry-collector` on Box 3 and runs `docker compose up -d --wait`. |
+| **Traefik** | Router config in the `vds-servers` repo (dynamic, hot-reload): `Host(fast-mcp-telegram-telemetry.l1979.ru) + Path(/v1/event)` → collector:8000 |
 
 ### Architecture in the source tree
 
