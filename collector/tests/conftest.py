@@ -20,7 +20,8 @@ from collector.tests._helpers import make_nested_payload  # noqa: E402
 
 
 def pytest_configure(config):
-    """Register custom markers."""
+    """Register custom markers and enable auto asyncio mode for async fixtures."""
+    config.option.asyncio_mode = "auto"
     for marker in ("unit", "integration", "e2e"):
         config.addinivalue_line("markers", f"{marker}: custom marker")
 
