@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.server_components.qr_login import QrLoginError, QrLoginManager, SessionState
+from src.server_components.qr_login import QrLoginManager, SessionState
 
 
 @pytest.fixture
@@ -306,7 +306,7 @@ async def test_poll_status_2fa_required(manager, mock_telethon_client):
     mock_telethon_client.qr_login.return_value = mock_qr_login
     mock_telethon_client.disconnect = AsyncMock()
 
-    session_id, _ = await manager.create_session(mock_telethon_client)
+    session_id, _ = manager.create_session(mock_telethon_client)
 
     # First poll kicks off background wait task
     status = await manager.poll_status(session_id)
@@ -333,7 +333,7 @@ async def test_poll_status_2fa_required_preserves_status_across_calls(manager, m
     )
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = await manager.create_session(mock_telethon_client)
+    session_id, _ = manager.create_session(mock_telethon_client)
     await manager.poll_status(session_id)
     await asyncio.sleep(0)
 
@@ -353,7 +353,7 @@ async def test_get_password_hint_before_2fa(manager, mock_telethon_client):
     mock_qr_login.url = "tg://login?token=abc"
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
-    session_id, _ = await manager.create_session(mock_telethon_client)
+    session_id, _ = manager.create_session(mock_telethon_client)
     assert manager.get_password_hint(session_id) == ""
 
 
@@ -393,7 +393,7 @@ async def test_cleanup_expired_removes_2fa_sessions(manager, mock_telethon_clien
     mock_telethon_client.qr_login.return_value = mock_qr_login
     mock_telethon_client.disconnect = AsyncMock()
 
-    session_id, _ = await manager.create_session(mock_telethon_client)
+    session_id, _ = manager.create_session(mock_telethon_client)
     await manager.poll_status(session_id)
     await asyncio.sleep(0)
 
