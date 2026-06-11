@@ -11,7 +11,7 @@ when PostgreSQL is not available.
 
 from __future__ import annotations
 
-import json
+import json as json_module
 import os
 import threading
 from http.client import HTTPConnection
@@ -125,7 +125,7 @@ class _E2EClient:
             resp = conn.getresponse()
             data = resp.read()
             resp.status_code = resp.status
-            resp.json = lambda _data=data: json.loads(_data)
+            resp.json = lambda _data=data: json_module.loads(_data)
             return resp
         finally:
             conn.close()
@@ -134,7 +134,7 @@ class _E2EClient:
         return self._request("GET", path)
 
     def post(self, path: str, json: dict):
-        body = json.dumps(json).encode()
+        body = json_module.dumps(json).encode()
         return self._request("POST", path, body)
 
 
@@ -195,7 +195,7 @@ class TestE2ECollect:
         # Check extracted instance_id column
         assert row["instance_id"] == valid_payload["iid"]
         # Check JSONB payload
-        stored = json.loads(row["payload"])
+        stored = json_module.loads(row["payload"])
         assert stored["iid"] == valid_payload["iid"]
         assert stored["v"] == 1
         # Verify indexes exist and hash columns are populated
