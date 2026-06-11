@@ -105,7 +105,6 @@ async def e2e_app(pg_storage):
 
 
 @pytest.fixture
-@pytest.fixture
 def client(e2e_app):
     """Sync TestClient for the sync health check."""
     from fastapi.testclient import TestClient
