@@ -100,7 +100,8 @@ fast-mcp-telegram
     "max_active_sessions": 10,
     "inactive_session_days": 30,
     "block_private_ips": true,
-    "allow_http_urls": false
+    "allow_http_urls": false,
+    "shutdown": false                                          // true on the final heartbeat before process exit
   },
   "runtime": {
     "sessions": 4,
@@ -171,7 +172,7 @@ No interactive prompt on first run. Disclosure is delivered through:
 - All counters are **lifetime-of-process** (not delta) — the collector derives deltas from consecutive heartbeats with the same `instance_id` and `started_at`
 - `started_at` captured at `time.time()` during server bootstrap, before the MCP server starts. Every heartbeat from the same process carries the same `started_at`.
 - Fire-and-forget `asyncio.create_task` — never awaits the response
-- On graceful shutdown (SIGTERM) — optional final heartbeat (best-effort, not blocking)
+- **Shutdown heartbeat:** on graceful shutdown (SIGTERM), a final heartbeat is sent with `features.shutdown: true` (best-effort, sync, up to 10 s network timeout — does not block fast exits like SIGKILL). The `features.shutdown` flag distinguishes shutdown heartbeats from startup/periodic ones in the collector.
 - Network errors are silently logged at DEBUG level only
 - No retry logic in v1 (acceptable loss for aggregate trends)
 

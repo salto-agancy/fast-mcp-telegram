@@ -277,6 +277,17 @@ async def telemetry_task() -> None:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, send_heartbeat)
         except asyncio.CancelledError:
+            # Best-effort shutdown heartbeat — fires on graceful SIGTERM
+            # (e.g. docker stop, systemctl stop, MCP client disconnect).
+            # Tagged with features.shutdown=True so the collector can
+            # distinguish it from a startup or periodic heartbeat.
+            try:
+                shutdown_payload = gather_payload()
+                shutdown_payload["features"]["shutdown"] = True
+                _loop = asyncio.get_running_loop()
+                await _loop.run_in_executor(None, send_heartbeat, shutdown_payload)
+            except Exception:
+                logger.debug("Telemetry: shutdown heartbeat failed", exc_info=True)
             break
         except Exception:
             logger.debug("Telemetry: periodic heartbeat failed", exc_info=True)
