@@ -83,7 +83,7 @@ class PgStorage:
         ``payload_hash`` is computed once by the service layer and
         passed in — the storage backend does not recompute it.
         """
-        payload_json = json.dumps(payload.model_dump(mode="json"))
+        payload_json = json.dumps(payload.to_dict())
         with self._conn.cursor() as cur:
             cur.execute(
                 """
