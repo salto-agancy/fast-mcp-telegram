@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - feat/anon-telemetry
     paths:
       - "collector/**"
       - ".github/workflows/deploy-collector.yml"
@@ -25,7 +26,7 @@ jobs:
           POSTGRES_DB: telemetry
           POSTGRES_PASSWORD: telemetry
         options: >-
-          --health-cmd pg_isready -U telemetry -d telemetry
+          --health-cmd "pg_isready -U telemetry -d telemetry"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
@@ -50,6 +51,9 @@ jobs:
         env:
           TELEMETRY_PG_HOST: postgres
           TELEMETRY_PG_PORT: "5432"
+          TELEMETRY_PG_USER: telemetry
+          TELEMETRY_PG_PASSWORD: telemetry
+          TELEMETRY_PG_DB: telemetry
 
   build-push:
     needs: test
@@ -110,40 +114,42 @@ jobs:
             REMOTE_DIR="/root/services/telemetry-collector"
             mkdir -p "$REMOTE_DIR"
 
-            # Write docker-compose.yml
-            cat > "$REMOTE_DIR/docker-compose.yml" <<'COMPOSEEOF'
-services:
-  telemetry-collector:
-    image: ghcr.io/leshchenko1979/telemetry-collector:main
-    container_name: telemetry-collector
-    restart: unless-stopped
-    environment:
-      TELEMETRY_DSN: ${TELEMETRY_DSN}
-    networks:
-      - traefik-public
-    mem_limit: 128m
-    cpus: 0.25
-    healthcheck:
-      test:
-        - CMD
-        - python3
-        - -c
-        - "import http.client; c=http.client.HTTPConnection('localhost', 8000); c.request('GET', '/health'); assert c.getresponse().status == 200"
-      start_period: 10s
-      start_interval: 1s
-      interval: 30s
-      timeout: 5s
-      retries: 2
-
-networks:
-  traefik-public:
-    external: true
-COMPOSEEOF
+            # Write docker-compose.yml (use textwrap.dedent to avoid lines at column 0 in YAML | block)
+            python3 -c "
+            import os, textwrap
+            content = textwrap.dedent('''
+              services:
+                telemetry-collector:
+                  image: ghcr.io/leshchenko1979/telemetry-collector:main
+                  container_name: telemetry-collector
+                  restart: unless-stopped
+                  environment:
+                    TELEMETRY_DSN: \${TELEMETRY_DSN}
+                  networks:
+                    - traefik-public
+                  mem_limit: 128m
+                  cpus: 0.25
+                  healthcheck:
+                    test:
+                      - CMD
+                      - python3
+                      - -c
+                      - \"import http.client; c=http.client.HTTPConnection('localhost', 8000); c.request('GET', '/health'); assert c.getresponse().status == 200\"
+                    start_period: 10s
+                    start_interval: 1s
+                    interval: 30s
+                    timeout: 5s
+                    retries: 2
+              networks:
+                traefik-public:
+                  external: true
+            ''')
+            with open(os.path.join('$REMOTE_DIR', 'docker-compose.yml'), 'w') as f:
+                f.write(content.strip())
+            "
 
             # Write .env
-            cat > "$REMOTE_DIR/.env" <<ENVEOF
-TELEMETRY_DSN=${TELEMETRY_DSN}
-ENVEOF
+            echo "TELEMETRY_DSN=${TELEMETRY_DSN}" > "$REMOTE_DIR/.env"
 
             # Ensure telemetry database and user (parsed from DSN)
             DSN_USER=$(echo "$TELEMETRY_DSN" | sed -n 's|.*://\([^:]*\):.*|\1|p')

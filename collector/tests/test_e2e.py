@@ -24,23 +24,31 @@ pytestmark = [
 # -- Helpers -----------------------------------------------------------------
 
 
+def _pg_dsn() -> str:
+    """Build a PostgreSQL DSN from environment variables with defaults.
+
+    Local dev: docker compose remaps PG to port 5433, uses telemetry/telemetry.
+    CI:       postgres service container on port 5432, same credentials.
+    """
+    pg_host = os.environ.get("TELEMETRY_PG_HOST", "localhost")
+    pg_port = os.environ.get("TELEMETRY_PG_PORT", "5433")
+    pg_user = os.environ.get("TELEMETRY_PG_USER", "telemetry")
+    pg_pass = os.environ.get("TELEMETRY_PG_PASSWORD", "telemetry")
+    pg_db = os.environ.get("TELEMETRY_PG_DB", "telemetry")
+    return f"postgres://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
+
+
 def _pg_is_available() -> bool:
     """Quick check whether PostgreSQL is reachable.
 
     Skips the test file entirely when PG is not running (local dev
     without ``docker compose up``).
     """
-    pg_host = os.environ.get("TELEMETRY_PG_HOST", "localhost")
-    pg_port = os.environ.get("TELEMETRY_PG_PORT", "5433")
-    # On CI the service container listens on the default PG port (5432)
-    # while the dev compose remaps to 5433 — pick the right one.
     try:
         import asyncpg
         import asyncio
 
-        dsn = (
-            f"postgres://telemetry:telemetry@{pg_host}:{pg_port}/telemetry"
-        )
+        dsn = _pg_dsn()
 
         async def _probe() -> bool:
             try:
@@ -82,10 +90,7 @@ async def pg_storage():
     """
     from app.database import AsyncPGStorage
 
-    pg_host = os.environ.get("TELEMETRY_PG_HOST", "localhost")
-    pg_port = os.environ.get("TELEMETRY_PG_PORT", "5433")
-    dsn = f"postgres://telemetry:telemetry@{pg_host}:{pg_port}/telemetry"
-
+    dsn = _pg_dsn()
     storage = AsyncPGStorage(dsn)
     await storage.connect()
 
