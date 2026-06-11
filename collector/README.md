@@ -28,18 +28,19 @@ POST /v1/event  →  validate with dataclasses  →  rate-limit / dedup  →  ps
 - **asyncio** — the collector is I/O-bound on one table; green threading is enough
 - **pydantic v2** — pydantic-core Rust .so added ~15-20 MB RSS; replaced with stdlib ``dataclasses``
 
-### Why `python:3.12-slim` (not alpine, not latest)
+### Why `python:3-slim` (not alpine, not pinned)
 
 | Base | Image size | libc | psycopg2-binary wheel | RSS |
 |------|-----------|------|----------------------|-----|
-| `python:3.12` (full) | ~1 GB | glibc | ✅ prebuilt | baseline |
-| `python:3.12-slim` | ~123 MB | glibc | ✅ prebuilt | **identical** |
-| `python:3.12-alpine` | ~55 MB | musl | ❌ builds from source | same interpreter, same RSS |
+| `python:3` (full) | ~1 GB | glibc | ✅ prebuilt | baseline |
+| `python:3-slim` | ~130 MB | glibc | ✅ prebuilt | **identical** |
+| `python:3-alpine` | ~55 MB | musl | ❌ builds from source | same interpreter, same RSS |
 
 - **Alpine** has no psycopg2-binary wheel — pip falls back to `gcc + musl-dev + postgresql-dev` at build time, requiring a multi-stage Dockerfile.  musl's malloc is simpler (= possibly *more* RSS for some workloads) and introduces a non-glibc surface for debugging.
-- **Full `python:3.12`** adds 850 MB of Debian build toolchain (gcc, dpkg-dev, headers) that never run at runtime.
+- **Full `python:3`** adds 850 MB of Debian build toolchain (gcc, dpkg-dev, headers) that never run at runtime.
+- **Pinning to `3.12`** would prevent automatically receiving minor Python updates (performance fixes, security patches) on rebuild.  The collector has zero Python-version-specific code — `python:3` tracks the latest 3.x branch safely.
 
-**Conclusion**: slim is the sweet spot for a container that depends on a native-C-extension library.
+**Conclusion**: `python:3-slim` is the sweet spot for a container that depends on a native-C-extension library and has no version pinning requirements.
 
 ## Endpoints
 
