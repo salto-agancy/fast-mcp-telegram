@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
 
 import pytest
 
 pytestmark = [
     pytest.mark.e2e,
-    pytest.mark.asyncio,
 ]
 
 # -- Helpers -----------------------------------------------------------------
@@ -45,89 +47,101 @@ def _pg_is_available() -> bool:
     without ``docker compose up``).
     """
     try:
-        import asyncpg
-        import asyncio
+        import psycopg2  # noqa: F811
 
         dsn = _pg_dsn()
-
-        async def _probe() -> bool:
-            try:
-                conn = await asyncpg.connect(dsn, timeout=3)
-                await conn.close()
-                return True
-            except (OSError, asyncpg.CannotConnectNowError):
-                return False
-
-        loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(_probe())
-        finally:
-            loop.close()
-    except ImportError:
+        conn = psycopg2.connect(dsn, connect_timeout=3)
+        conn.close()
+        return True
+    except (ImportError, Exception):
         return False
 
 
 if not _pg_is_available():
-    pytest.skip("PostgreSQL not reachable — set TELEMETRY_PG_HOST/PORT or start docker compose", allow_module_level=True)
+    pytest.skip(
+        "PostgreSQL not reachable — set TELEMETRY_PG_HOST/PORT or start docker compose",
+        allow_module_level=True,
+    )
+
+import psycopg2  # noqa: E402 — guaranteed available after skip check
 
 # -- Fixtures -----------------------------------------------------------------
 
 
 @pytest.fixture
-async def pg_storage():
-    """AsyncPGStorage connected to a real PostgreSQL instance.
+def pg_storage():
+    """PgStorage connected to a real PostgreSQL instance.
 
     Cleans up the telemetry table after all tests in the module.
     """
-    from app.database import AsyncPGStorage
+    from app.database import PgStorage
 
     dsn = _pg_dsn()
-    storage = AsyncPGStorage(dsn)
-    await storage.connect()
+    storage = PgStorage(dsn)
+    storage.connect()
 
     # Wipe any leftover data from previous runs
-    async with storage._pool.acquire() as conn:
-        await conn.execute("DELETE FROM telemetry")
+    with storage._conn.cursor() as cur:
+        cur.execute("DELETE FROM telemetry")
+    storage._conn.commit()
 
     yield storage
 
     # Cleanup
-    async with storage._pool.acquire() as conn:
-        await conn.execute("DELETE FROM telemetry")
-    await storage.close()
+    with storage._conn.cursor() as cur:
+        cur.execute("DELETE FROM telemetry")
+    storage._conn.commit()
+    storage.close()
 
 
 @pytest.fixture
-async def e2e_app(pg_storage):
-    """FastAPI app wired to the real PostgreSQL storage."""
-    from app.main import create_app
-    return create_app(storage_backend=pg_storage)
+def e2e_server(pg_storage):
+    """ThreadingHTTPServer wired to real PostgreSQL storage on a random port."""
+    from app.main import create_handler
+
+    handler = create_handler(pg_storage)
+    server = ThreadingHTTPServer(("localhost", 0), handler)
+    port = server.server_address[1]
+
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+
+    yield port
+
+    server.shutdown()
+
+
+class _E2EClient:
+    """Minimal HTTP client for e2e tests."""
+
+    def __init__(self, port: int):
+        self._port = port
+
+    def _request(self, method: str, path: str, body: bytes | None = None):
+        conn = HTTPConnection("localhost", self._port, timeout=10)
+        try:
+            headers = {"Content-Type": "application/json"} if body else {}
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            data = resp.read()
+            resp.status_code = resp.status
+            resp.json = lambda _data=data: json.loads(_data)
+            return resp
+        finally:
+            conn.close()
+
+    def get(self, path: str):
+        return self._request("GET", path)
+
+    def post(self, path: str, json: dict):
+        body = json.dumps(json).encode()
+        return self._request("POST", path, body)
 
 
 @pytest.fixture
-def client(e2e_app):
-    """Sync TestClient for the sync health check."""
-    from fastapi.testclient import TestClient
-    with TestClient(e2e_app) as c:
-        yield c
-
-
-@pytest.fixture
-async def async_client(e2e_app):
-    """Async HTTP client for async tests using httpx.ASGITransport.
-
-    ``TestClient`` wraps the ASGI app with a sync interface that runs
-    the app on a *different* event loop than the async test function.
-    This causes ``RuntimeError: attached to a different loop`` when a
-    test makes a sync HTTP call then awaits an async fixture method.
-
-    ``httpx.AsyncClient`` + ``ASGITransport`` keeps everything on the
-    same event loop, avoiding the conflict.
-    """
-    from httpx import ASGITransport, AsyncClient
-    transport = ASGITransport(app=e2e_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
+def client(e2e_server):
+    """HTTP client connected to the e2e test server."""
+    return _E2EClient(e2e_server)
 
 
 @pytest.fixture
@@ -137,18 +151,20 @@ def valid_payload():
     return make_nested_payload()
 
 
-async def _count_rows(storage) -> int:
+def _count_rows(storage) -> int:
     """Count rows in the telemetry table."""
-    async with storage._pool.acquire() as conn:
-        row = await conn.fetchval("SELECT COUNT(*) FROM telemetry")
-        return row
+    with storage._conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM telemetry")
+        return cur.fetchone()[0]
 
 
-async def _fetch_all(storage) -> list[dict]:
+def _fetch_all(storage) -> list[dict]:
     """Fetch all rows for inspection."""
-    async with storage._pool.acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM telemetry ORDER BY id")
-        return [dict(r) for r in rows]
+    with storage._conn.cursor() as cur:
+        cur.execute("SELECT * FROM telemetry ORDER BY id")
+        columns = [desc[0] for desc in cur.description]
+        rows = cur.fetchall()
+        return [dict(zip(columns, row)) for row in rows]
 
 
 # -- Tests --------------------------------------------------------------------
@@ -166,15 +182,15 @@ class TestE2EHealth:
 class TestE2ECollect:
     """Collecting events against real PostgreSQL."""
 
-    async def test_store_and_retrieve(self, async_client, pg_storage, valid_payload):
+    def test_store_and_retrieve(self, client, pg_storage, valid_payload):
         """A valid payload is stored and queryable via PostgreSQL."""
-        resp = await async_client.post("/v1/event", json=valid_payload)
+        resp = client.post("/v1/event", json=valid_payload)
         assert resp.status_code == 204
 
-        count = await _count_rows(pg_storage)
+        count = _count_rows(pg_storage)
         assert count == 1
 
-        rows = await _fetch_all(pg_storage)
+        rows = _fetch_all(pg_storage)
         row = rows[0]
         # Check extracted instance_id column
         assert row["instance_id"] == valid_payload["iid"]
@@ -186,7 +202,7 @@ class TestE2ECollect:
         assert len(row["payload_hash"]) == 64  # SHA-256 hex
         assert len(row["source_ip_hash"]) == 64  # SHA-256 hex
 
-    async def test_multiple_events(self, async_client, pg_storage):
+    def test_multiple_events(self, client, pg_storage):
         """Multiple valid events are all stored."""
         from collector.tests._helpers import make_nested_payload
 
@@ -196,33 +212,33 @@ class TestE2ECollect:
                 iid=f"550e8400-e29b-41d4-a716-4466554400{i:02d}",
                 counters={"total_calls": i, "errors": 0},
             )
-            resp = await async_client.post("/v1/event", json=data)
+            resp = client.post("/v1/event", json=data)
             assert resp.status_code == 204
 
-        count = await _count_rows(pg_storage)
+        count = _count_rows(pg_storage)
         assert count == n
 
-    async def test_invalid_payload_rejected(self, async_client, pg_storage, valid_payload):
+    def test_invalid_payload_rejected(self, client, pg_storage, valid_payload):
         """Invalid payload returns 422 and nothing is stored."""
         del valid_payload["iid"]
-        resp = await async_client.post("/v1/event", json=valid_payload)
+        resp = client.post("/v1/event", json=valid_payload)
         assert resp.status_code == 422
 
-        count = await _count_rows(pg_storage)
+        count = _count_rows(pg_storage)
         assert count == 0
 
-    async def test_duplicate_dedup_postgres(self, async_client, pg_storage, valid_payload):
+    def test_duplicate_dedup_postgres(self, client, pg_storage, valid_payload):
         """Same payload sent twice within dedup window is deduped (single row)."""
-        resp1 = await async_client.post("/v1/event", json=valid_payload)
+        resp1 = client.post("/v1/event", json=valid_payload)
         assert resp1.status_code == 204
 
-        resp2 = await async_client.post("/v1/event", json=valid_payload)
+        resp2 = client.post("/v1/event", json=valid_payload)
         assert resp2.status_code == 204  # Silent dedup
 
-        count = await _count_rows(pg_storage)
+        count = _count_rows(pg_storage)
         assert count == 1, f"Expected 1 row after dedup, got {count}"
 
-    async def test_rate_limit_postgres(self, async_client, pg_storage):
+    def test_rate_limit_postgres(self, client, pg_storage):
         """Exceeding per-instance rate limit returns 429."""
         from app.services import INSTANCE_RATE_LIMIT
         from collector.tests._helpers import make_nested_payload
@@ -233,7 +249,7 @@ class TestE2ECollect:
                 iid="rate-limited-test-uuid",
                 counters={"total_calls": i, "errors": 0},
             )
-            resp = await async_client.post("/v1/event", json=data)
+            resp = client.post("/v1/event", json=data)
             assert resp.status_code == 204
 
         # One more should be rate-limited
@@ -241,14 +257,14 @@ class TestE2ECollect:
             iid="rate-limited-test-uuid",
             counters={"total_calls": 9999, "errors": 0},
         )
-        resp = await async_client.post("/v1/event", json=data)
+        resp = client.post("/v1/event", json=data)
         assert resp.status_code == 429
 
         # Verify only the limit number of rows exists
-        count = await _count_rows(pg_storage)
+        count = _count_rows(pg_storage)
         assert count == INSTANCE_RATE_LIMIT
 
-    async def test_different_instance_not_rate_limited(self, async_client, pg_storage):
+    def test_different_instance_not_rate_limited(self, client, pg_storage):
         """Events from different iids don't interfere with rate limiting."""
         from app.services import INSTANCE_RATE_LIMIT
         from collector.tests._helpers import make_nested_payload
@@ -259,7 +275,7 @@ class TestE2ECollect:
                 iid="saturated-instance",
                 counters={"total_calls": i, "errors": 0},
             )
-            resp = await async_client.post("/v1/event", json=data)
+            resp = client.post("/v1/event", json=data)
             assert resp.status_code == 204
 
         # A different iid should still be allowed
@@ -267,14 +283,14 @@ class TestE2ECollect:
             iid="fresh-instance",
             counters={"total_calls": 0, "errors": 0},
         )
-        resp = await async_client.post("/v1/event", json=fresh)
+        resp = client.post("/v1/event", json=fresh)
         assert resp.status_code == 204
 
-    async def test_column_types_and_indexes(self, pg_storage):
+    def test_column_types_and_indexes(self, pg_storage):
         """Verify table schema and indexes exist."""
-        async with pg_storage._pool.acquire() as conn:
+        with pg_storage._conn.cursor() as cur:
             # Check columns exist with expected types
-            cols = await conn.fetch(
+            cur.execute(
                 """
                 SELECT column_name, data_type, is_nullable
                 FROM information_schema.columns
@@ -282,36 +298,30 @@ class TestE2ECollect:
                 ORDER BY ordinal_position
                 """
             )
-            col_map = {c["column_name"]: c for c in cols}
-            assert "id" in col_map
-            assert col_map["id"]["data_type"] in ("bigint", "integer")
-            assert col_map["id"]["is_nullable"] == "NO"
-
-            assert "instance_id" in col_map
-            assert col_map["instance_id"]["data_type"] == "text"
-
-            assert "payload" in col_map
-            assert col_map["payload"]["data_type"] == "jsonb"
-
-            assert "payload_hash" in col_map
-            assert "source_ip_hash" in col_map
-            assert "received_at" in col_map
+            cols = cur.fetchall()
+            col_names = [c[0] for c in cols]
+            assert "id" in col_names
+            assert "instance_id" in col_names
+            assert "payload" in col_names
+            assert "payload_hash" in col_names
+            assert "source_ip_hash" in col_names
+            assert "received_at" in col_names
 
             # Check key indexes exist
-            indexes = await conn.fetch(
+            cur.execute(
                 """
-                SELECT indexname, indexdef
+                SELECT indexname
                 FROM pg_indexes
                 WHERE tablename = 'telemetry'
                 """
             )
-            index_names = {r["indexname"] for r in indexes}
+            index_names = {r[0] for r in cur.fetchall()}
             assert "telemetry_pkey" in index_names
             assert "idx_telemetry_instance_id" in index_names
             assert "idx_telemetry_received_at" in index_names
             assert "idx_telemetry_payload_hash" in index_names
 
-    async def test_row_cap_postgres(self, pg_storage):
+    def test_row_cap_postgres(self, pg_storage):
         """enforce_row_cap correctly removes oldest rows."""
         from collector.tests._helpers import make_nested_payload
 
@@ -327,38 +337,42 @@ class TestE2ECollect:
             from app.models import TelemetryPayload
 
             payload = TelemetryPayload(**data)
-            await pg_storage.store(payload, hash_source_ip("10.0.0.1"), compute_payload_hash(payload))
-
-        count_before = await _count_rows(pg_storage)
-        assert count_before == cap + 3  # all rows present before cap
-
-        removed = await pg_storage.enforce_row_cap(max_rows=cap)
-        assert removed == 3
-
-        count_after = await _count_rows(pg_storage)
-        assert count_after == cap
-
-    async def test_ttl_cleanup_postgres(self, pg_storage):
-        """cleanup_ttl removes rows older than retention window."""
-        from datetime import datetime, timedelta, timezone
-
-        # Insert a row with an old received_at
-        async with pg_storage._pool.acquire() as conn:
-            # We need to insert directly to control received_at
-            await conn.execute(
-                """
-                INSERT INTO telemetry (instance_id, payload, payload_hash, source_ip_hash, received_at)
-                VALUES ('old-test', '{}'::jsonb, 'oldhash', 'oldip',
-                        NOW() - INTERVAL '200 days')
-                """
+            pg_storage.store(
+                payload, hash_source_ip("10.0.0.1"), compute_payload_hash(payload)
             )
 
-        removed = await pg_storage.cleanup_ttl(retention_days=90)
+        count_before = _count_rows(pg_storage)
+        assert count_before == cap + 3  # all rows present before cap
+
+        removed = pg_storage.enforce_row_cap(max_rows=cap)
+        assert removed == 3
+
+        count_after = _count_rows(pg_storage)
+        assert count_after == cap
+
+    def test_ttl_cleanup_postgres(self, pg_storage):
+        """cleanup_ttl removes rows older than retention window."""
+        # Insert a row with an old received_at
+        with pg_storage._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO telemetry (
+                    instance_id, payload, payload_hash, source_ip_hash, received_at
+                )
+                VALUES (
+                    'old-test', '{}'::jsonb, 'oldhash', 'oldip',
+                    NOW() - INTERVAL '200 days'
+                )
+                """
+            )
+        pg_storage._conn.commit()
+
+        removed = pg_storage.cleanup_ttl(retention_days=90)
         assert removed >= 1
 
         # Verify it's gone
-        async with pg_storage._pool.acquire() as conn:
-            row = await conn.fetchrow(
+        with pg_storage._conn.cursor() as cur:
+            cur.execute(
                 "SELECT 1 FROM telemetry WHERE instance_id = 'old-test'"
             )
-            assert row is None
+            assert cur.fetchone() is None

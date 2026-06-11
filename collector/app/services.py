@@ -22,24 +22,24 @@ RETENTION_DAYS: int = 90  # TTL — purge rows older than this
 class StorageBackend(Protocol):
     """Abstract storage backend that the service layer depends on."""
 
-    async def store(
+    def store(
         self,
         payload: TelemetryPayload,
         source_ip_hash: str,
         payload_hash: str,
     ) -> None: ...
 
-    async def count_recent_events(
+    def count_recent_events(
         self, instance_id: str, window_hours: int = 24
     ) -> int: ...
 
-    async def has_exact_payload(
+    def has_exact_payload(
         self, payload_hash: str, window_seconds: int = DEDUP_WINDOW_SECONDS
     ) -> bool: ...
 
-    async def enforce_row_cap(self, max_rows: int = MAX_ROWS) -> int: ...
+    def enforce_row_cap(self, max_rows: int = MAX_ROWS) -> int: ...
 
-    async def cleanup_ttl(
+    def cleanup_ttl(
         self, retention_days: int = RETENTION_DAYS
     ) -> int: ...
 
@@ -80,7 +80,7 @@ def compute_payload_hash(payload: TelemetryPayload) -> str:
 # --- Core entry point ---
 
 
-async def process_event(
+def process_event(
     data: dict,
     source_ip: str,
     storage: StorageBackend,
@@ -111,7 +111,7 @@ async def process_event(
         raise ValidationError(str(exc)) from exc
 
     # 2. Check per-instance_id rate limit
-    recent = await storage.count_recent_events(
+    recent = storage.count_recent_events(
         payload.iid, window_hours=24
     )
     if recent >= instance_rate_limit:
@@ -122,13 +122,13 @@ async def process_event(
 
     # 3. Check dedup against exact payload in last N seconds
     payload_hash = compute_payload_hash(payload)
-    if await storage.has_exact_payload(payload_hash, window_seconds=dedup_window):
+    if storage.has_exact_payload(payload_hash, window_seconds=dedup_window):
         return  # Silent dedup — already seen this exact payload
 
     # 4. Store (pass the precomputed hash — no recomputation)
     ip_hash = hash_source_ip(source_ip)
-    await storage.store(payload, ip_hash, payload_hash)
+    storage.store(payload, ip_hash, payload_hash)
 
     # 5. Enforce row cap and TTL
-    await storage.enforce_row_cap(max_rows)
-    await storage.cleanup_ttl(RETENTION_DAYS)
+    storage.enforce_row_cap(max_rows)
+    storage.cleanup_ttl(RETENTION_DAYS)

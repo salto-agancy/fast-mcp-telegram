@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import json
 
-import asyncpg
+import psycopg2
+import psycopg2.extras
 
 from app.models import TelemetryPayload
 
@@ -38,41 +39,40 @@ _SQL_INDEXES = [
 ]
 
 
-class AsyncPGStorage:
+class PgStorage:
     """Production PostgreSQL backend for the collector.
 
     Usage:
-        storage = AsyncPGStorage(dsn="postgres://user:pass@host/db")
-        await storage.connect()
-        await storage.store(payload, ip_hash, payload_hash)
-        await storage.close()
+        storage = PgStorage(dsn="postgres://user:pass@host/db")
+        storage.connect()
+        storage.store(payload, ip_hash, payload_hash)
+        storage.close()
     """
 
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
-        self._pool: asyncpg.Pool | None = None
+        self._conn: psycopg2.connection | None = None
 
     # ---- lifecycle ----
 
-    async def connect(self) -> None:
-        """Create connection pool and ensure table exists."""
-        self._pool = await asyncpg.create_pool(
-            self._dsn, min_size=2, max_size=10
-        )
-        async with self._pool.acquire() as conn:
-            await conn.execute(_SQL_CREATE_TABLE)
+    def connect(self) -> None:
+        """Create connection and ensure table exists."""
+        self._conn = psycopg2.connect(self._dsn)
+        with self._conn.cursor() as cur:
+            cur.execute(_SQL_CREATE_TABLE)
             for idx in _SQL_INDEXES:
-                await conn.execute(idx)
+                cur.execute(idx)
+        self._conn.commit()
 
-    async def close(self) -> None:
-        """Release the pool."""
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
+    def close(self) -> None:
+        """Close the connection."""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
 
     # ---- storage interface ----
 
-    async def store(
+    def store(
         self,
         payload: TelemetryPayload,
         source_ip_hash: str,
@@ -84,53 +84,50 @@ class AsyncPGStorage:
         passed in — the storage backend does not recompute it.
         """
         payload_json = json.dumps(payload.model_dump(mode="json"))
-        async with self._pool.acquire() as conn:
-            await conn.execute(
+        with self._conn.cursor() as cur:
+            cur.execute(
                 """
                 INSERT INTO telemetry
                     (instance_id, payload, payload_hash, source_ip_hash)
-                VALUES ($1, $2::jsonb, $3, $4)
+                VALUES (%s, %s::jsonb, %s, %s)
                 """,
-                payload.iid,
-                payload_json,
-                payload_hash,
-                source_ip_hash,
+                (payload.iid, payload_json, payload_hash, source_ip_hash),
             )
+        self._conn.commit()
 
-    async def count_recent_events(
+    def count_recent_events(
         self, instance_id: str, window_hours: int = 24
     ) -> int:
         """Count events for a given instance_id within a time window."""
-        async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
+        with self._conn.cursor() as cur:
+            cur.execute(
                 """
                 SELECT COUNT(*) AS cnt FROM telemetry
-                WHERE instance_id = $1
-                  AND received_at >= NOW() - make_interval(hours => $2)
+                WHERE instance_id = %s
+                  AND received_at >= NOW() - make_interval(hours => %s)
                 """,
-                instance_id,
-                window_hours,
+                (instance_id, window_hours),
             )
-            return row["cnt"] if row else 0
+            row = cur.fetchone()
+            return row[0] if row else 0
 
-    async def has_exact_payload(
+    def has_exact_payload(
         self, payload_hash: str, window_seconds: int = 300
     ) -> bool:
         """Check if an identical payload hash exists within the time window."""
-        async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
+        with self._conn.cursor() as cur:
+            cur.execute(
                 """
                 SELECT 1 FROM telemetry
-                WHERE payload_hash = $1
-                  AND received_at >= NOW() - make_interval(secs => $2)
+                WHERE payload_hash = %s
+                  AND received_at >= NOW() - make_interval(secs => %s)
                 LIMIT 1
                 """,
-                payload_hash,
-                window_seconds,
+                (payload_hash, window_seconds),
             )
-            return row is not None
+            return cur.fetchone() is not None
 
-    async def enforce_row_cap(self, max_rows: int = 10_000_000) -> int:
+    def enforce_row_cap(self, max_rows: int = 10_000_000) -> int:
         """Delete oldest rows when count exceeds max_rows.
 
         Orders by id DESC (newest first) and finds the boundary ID
@@ -140,37 +137,34 @@ class AsyncPGStorage:
 
         Reference: https://dba.stackexchange.com/a/183096
         """
-        async with self._pool.acquire() as conn:
-            result = await conn.execute(
+        with self._conn.cursor() as cur:
+            cur.execute(
                 """
                 WITH boundary AS (
                     SELECT id FROM telemetry
                     ORDER BY id DESC
-                    OFFSET $1 LIMIT 1
+                    OFFSET %s LIMIT 1
                 )
                 DELETE FROM telemetry
                 WHERE id <= (SELECT id FROM boundary)
                   AND EXISTS (SELECT 1 FROM boundary)
                 """,
-                max_rows,
+                (max_rows,),
             )
-            return _parse_delete_count(result)
+            result = cur.rowcount
+        self._conn.commit()
+        return result
 
-    async def cleanup_ttl(self, retention_days: int = 90) -> int:
+    def cleanup_ttl(self, retention_days: int = 90) -> int:
         """Purge rows older than retention_days."""
-        async with self._pool.acquire() as conn:
-            result = await conn.execute(
+        with self._conn.cursor() as cur:
+            cur.execute(
                 """
                 DELETE FROM telemetry
-                WHERE received_at < NOW() - make_interval(days => $1)
+                WHERE received_at < NOW() - make_interval(days => %s)
                 """,
-                retention_days,
+                (retention_days,),
             )
-            return _parse_delete_count(result)
-
-
-def _parse_delete_count(result: str) -> int:
-    """asyncpg returns 'DELETE N' — extract the integer count."""
-    if result.startswith("DELETE "):
-        return int(result.split()[-1])
-    return 0
+            result = cur.rowcount
+        self._conn.commit()
+        return result
