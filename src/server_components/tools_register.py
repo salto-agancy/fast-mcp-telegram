@@ -184,8 +184,7 @@ def mcp_tool_with_restrictions(
             # values that match their signature defaults (likely framework-filled).
             explicit_kwargs: dict[str, Any] = {}
             for name, value in bound.arguments.items():
-                default = _param_defaults.get(name)
-                if default is not None and _matches_default(value, default):
+                if name in _param_defaults and _matches_default(value, _param_defaults[name]):
                     continue  # likely framework-filled default
                 explicit_kwargs[name] = value
 
