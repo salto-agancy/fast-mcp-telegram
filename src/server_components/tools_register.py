@@ -133,6 +133,13 @@ def mcp_tool_with_restrictions(
         # Pre-compute parameter defaults from function signature
         # so _telemetry_wrapper can skip framework-filled defaults
         # and only track params the caller explicitly provided.
+        #
+        # This relies on Pydantic/MCP always calling tools with fully-populated
+        # keyword arguments (all declared params, defaults filled in for missing
+        # ones). Params whose values match their signature defaults are treated
+        # as likely framework-filled and excluded from the param set key.
+        # If the argument-passing mechanism changes (e.g. to positional-only
+        # or partial kwargs), this logic must be revisited.
         _param_defaults = {
             name: param.default
             for name, param in inspect.signature(func).parameters.items()
