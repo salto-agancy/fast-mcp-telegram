@@ -1,4 +1,5 @@
 import functools
+import inspect
 import time
 import traceback
 from typing import Any
@@ -111,6 +112,18 @@ _DESC_INVOKE_MTPROTO = _tool_description(
 )
 
 
+def _matches_default(value: Any, default: Any) -> bool:
+    """Best-effort: is *value* the simple scalar default?
+
+    Only compares well-defined immutable types (None, bool, int, float, str,
+    bytes).  Anything else (lists, dicts, objects) is treated as explicitly
+    provided — conservative but safe.
+    """
+    if isinstance(default, (type(None), bool, int, float, str, bytes)):
+        return value == default
+    return False
+
+
 def mcp_tool_with_restrictions(
     operation_name: str, *, allow_bot_sessions: bool = False
 ):
@@ -129,9 +142,34 @@ def mcp_tool_with_restrictions(
     def decorator(func):
         """Wrap tool call with per-tool timing, parameter-set breakdown, and error traces."""
 
+        # Pre-compute parameter defaults from function signature
+        # so _telemetry_wrapper can skip framework-filled defaults
+        # and only track params the caller explicitly provided.
+        #
+        # This relies on Pydantic/MCP always calling tools with fully-populated
+        # keyword arguments (all declared params, defaults filled in for missing
+        # ones). Params whose values match their signature defaults are treated
+        # as likely framework-filled and excluded from the param set key.
+        # If the argument-passing mechanism changes (e.g. to positional-only
+        # or partial kwargs), this logic must be revisited.
+        _sig = inspect.signature(func)
+        _param_defaults = {
+            name: param.default
+            for name, param in _sig.parameters.items()
+            if param.default is not param.empty
+        }
+
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
-            param_keys = frozenset(kwargs.keys())
+            # Telemetry layer must never break tool execution.
+            # Assume MCP/Pydantic always calls tools with fully-populated keyword args.
+            # Only track params that differ from their signature defaults.
+            param_keys = frozenset(
+                name
+                for name, value in kwargs.items()
+                if name not in _param_defaults
+                or not _matches_default(value, _param_defaults[name])
+            )
             t0 = time.perf_counter()
             error: str | None = None
             try:
