@@ -181,13 +181,14 @@ def mcp_tool_with_restrictions(
             # Encode the assumption that the framework always calls tools
             # with fully-populated keyword arguments only. Positional-only
             # arguments would silently fall out of param tracking, skewing
-            # telemetry. This assert serves as a canary if the call pattern
-            # ever changes. See the docstring comment above for the full
-            # rationale.
-            assert not args, (
-                f"Telemetry assumed kwargs-only calls for {func.__name__}, "
-                f"but got {len(args)} positional arg(s)"
-            )
+            # telemetry. This guard serves as a canary if the call pattern
+            # ever changes. Using an explicit TypeError rather than assert
+            # ensures the check survives python -O optimization.
+            if args:
+                raise TypeError(
+                    f"Telemetry assumes kwargs-only calls for {func.__name__}, "
+                    f"but got {len(args)} positional arg(s)"
+                )
 
             # Restrict to declared signature params, excluding any
             # framework-injected or auxiliary kwargs.
