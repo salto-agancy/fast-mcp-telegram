@@ -1,7 +1,8 @@
-# ADR 0005: Anonymous Feature-Adoption Telemetry
+# ADR 0005: Anonymous Tool Telemetry
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-06-10
+**Last updated:** 2026-06-13
 
 ## Context
 
@@ -11,17 +12,17 @@ fast-mcp-telegram is a Python library installed by users via `pip install` on th
 
 The project ships a growing surface of optional features — ACL, rate limiting, OIDC auth, QR login, Gemini integration, session persistence, MTProto proxy — but decisions about further investment are made blind. Without telemetry every priority call is guesswork: should we invest in ACL v2, rate-limiting improvements, Gemini multi-modal, or something else?
 
-ACL is the concrete question that triggered this ADR — the maintainer needs to know adoption depth to plan ACL v2 — but the underlying data gap spans **all** features. The maintainer needs signals across three axes:
-- **Adoption** — which features are users actually enabling?
-- **Speed** — how responsive are their installations?
-- **Errors** — what is breaking in the field?
+The initial motivation for this ADR was understanding ACL adoption depth to plan ACL v2, but the data gap spans all tool usage — not just which features are enabled, but how fast tools execute, which parameters users pass, and what errors occur in the field. The telemetry system collects signals across three axes:
+- **Speed** — how responsive are tool calls, broken down per tool and per parameter-set?
+- **Errors** — what is breaking, with which tools and parameter combinations, and what are the exception traces?
+- **Adoption** — which features are users actually enabling and how deeply configured?
 
 Previous discussions (2026-05-26) established a telemetry lane in the roadmap, deferred until Trust/ACL phases shipped. As of v0.30.1 ACL is accepted and in use; the maintainer now needs real data to decide the next priority lane.
 
 ### Goals
 
-1. **Feature signals across three axes** — collect data about every optional feature along three dimensions: (a) adoption — which features are enabled (primary v1 deliverable); (b) speed — how responsive the installation feels (per-tool breakdown deferred to v2); (c) errors — aggregate error and flood-wait rates. ACL is the immediate decision driver, but the system must be extensible to all features without per-feature releases.
-2. **Aggregate health signals** — error counts and flood-wait rates (per-tool breakdown deferred to v2).
+1. **Tool-level telemetry across three axes** — collect per-tool data along three dimensions: (a) speed — cumulative duration per tool and per parameter-set; (b) errors — aggregate and per-tool error counts with exception traces; (c) adoption — which optional features are enabled and their configuration depth. The system must be extensible without per-feature releases.
+2. **Aggregate health signals** — error counts and flood-wait rates, with per-tool, per-parameter-set breakdown for diagnostic depth.
 3. **Data-driven roadmap** — replace gut-feel prioritisation with actual usage numbers.
 4. **Privacy-by-design** — collect nothing that could identify a user, a chat, a bot token, or a message. The payload must be inspectable (debug mode) and the code must be auditable.
 
@@ -36,7 +37,7 @@ Previous discussions (2026-05-26) established a telemetry lane in the roadmap, d
 
 ### Scope (v1 vs roadmap)
 
-This ADR defines a **deliberate v1 scope**: feature-adoption flags and aggregate counters only. The full telemetry vision per the [Roadmap](../Roadmap.md) (per-tool error rates, P95 latency, wrong-tool pattern detection, ACL denial tracking) is deferred to future ADRs. The v1 architecture explicitly keeps the collector interface simple so that richer payloads can be added without changing the storage or processing pipeline.
+This ADR defines a **v1 scope** that was later extended: original v1 shipped feature-adoption flags and aggregate counters only; a subsequent iteration (v0.32.0) added per-tool timing, per-parameter-set counters, and error traces directly into v1 without a schema version bump. The collector interface accepts arbitrary keys in `features`, `runtime`, `counters`, and the top-level `tools` dict — no schema change needed.
 
 ### Telemetry Axes — Full Landscape
 
@@ -45,9 +46,9 @@ The telemetry system collects signals along three primary axes. The table below 
 | Axis | What it measures | Status | Rationale |
 |------|-----------------|--------|-----------|
 | **Adoption** | Feature flags enabled/disabled and configuration depth (principal count, read-only peers) | ✅ **v1** | Core question: which features do users enable |
-| **Errors** | Aggregate error count, flood-wait occurrences | ✅ **v1** (aggregate) / 🔄 v2 (per-tool breakdown) | Health signal without per-tool instrumentation in v1 |
-| **Speed** | P95 tool latency, response-time distribution | 🔄 **v2** | Requires per-tool timing instrumentation |
-| **Usage frequency** | Tool-call volume per feature (e.g. how many calls pass through ACL vs not) | 🔄 **v2** | Depends on per-tool counters from speed/error v2 work |
+| **Errors** | Aggregate error count, flood-wait occurrences, per-tool breakdown, exception traces | ✅ **v1** (aggregate + per-tool) | Per-tool breakdown with parameter-set context and last-N traces shipped from v0.32.0 |
+| **Speed** | Per-tool cumulative duration + parameter-set breakdown | ✅ **v1** | Aggregate duration per tool and per (tool, params) group; P95 distribution deferred |
+| **Usage frequency** | Tool-call volume per feature (e.g. how many calls pass through ACL vs not) | ✅ **v1** | Per-tool call counts enable feature-level volume analysis
 | **Session health** | Active sessions, cleanup efficiency | 🟡 **v1** (basic): `runtime.sessions` | Basic coverage; session-duration metrics in v2 |
 | **Configuration depth** | Beyond on/off: how deeply features are customised | 🟡 **v1 (partial)**: `acl_principals`, `acl_read_only` ✅; per-feature detail beyond ACL 🔄 v2 | ACL depth in v1; other features analysed server-side from flat feature map |
 | **Version drift** | Which software versions users run | ✅ **v1**: `ver` in every heartbeat | Trivial to include |
@@ -112,6 +113,41 @@ fast-mcp-telegram
     "total_calls": 142,                          // lifetime-of-process tool invocations
     "errors": 0,                                 // lifetime-of-process tool errors
     "flood_waits": 0                             // lifetime-of-process FloodWait occurrences
+  },
+  "tools": {
+    "get_messages": {
+      "calls": 85,
+      "errors": 2,
+      "duration_ms": 35000.0,
+      "param_sets": {
+        "chat_id,limit,query": {                  // 2 errors, last exception trace stored
+          "calls": 40, "errors": 2, "duration_ms": 18000.0, "traces": [
+            "Traceback (most recent call last):\\n  ..."
+          ]
+        },
+        "chat_id,limit,message_ids": {
+          "calls": 30, "errors": 0, "duration_ms": 12000.0, "traces": []
+        },
+        "chat_id,limit": {
+          "calls": 15, "errors": 0, "duration_ms": 5000.0, "traces": []
+        }
+      }
+    },
+    "send_message": {
+      "calls": 40,
+      "errors": 1,
+      "duration_ms": 22000.0,
+      "param_sets": {
+        "chat_id,message": {
+          "calls": 30, "errors": 0, "duration_ms": 15000.0, "traces": []
+        },
+        "chat_id,message,files": {
+          "calls": 10, "errors": 1, "duration_ms": 7000.0, "traces": [
+            "Traceback (most recent call last):\\n  ..."
+          ]
+        }
+      }
+    }
   }
 }
 ```
@@ -195,34 +231,94 @@ class MetricsStore:
 
     Thread-safe: all mutations and reads go through a ``threading.Lock``
     because ``snapshot()`` is called from a thread-pool executor while
-    the event-loop wields ``record_call()`` / ``record_error()``.
+    the event-loop wields ``record_tool_call()``.
+
+    Tracks per-tool, per-parameter-set statistics: call count, total
+    duration (ms), error count, and last-N error traces.  The heartbeat
+    payload carries a ``tools`` block with this breakdown alongside the
+    flat ``counters`` dict for quick health checks.
     """
+
+    MAX_TRACES_PER_COMBO: int = 5
 
     def __init__(self) -> None:
         self.total_calls: int = 0
         self.errors: int = 0
         self.flood_waits: int = 0
+        self._tools: dict[str, dict] = {}
         self._lock = threading.Lock()
 
-    def record_call(self) -> None:
+    def record_tool_call(
+        self,
+        tool: str,
+        params: frozenset[str],
+        duration_ms: float,
+        *,
+        error: str | None = None,
+    ) -> None:
+        with self._lock:
+            self.total_calls += 1
+            param_key = ",".join(sorted(params))
+            stats = self._tools.setdefault(tool, {
+                "calls": 0, "errors": 0, "duration_ms": 0.0, "param_sets": {},
+            })
+            stats["calls"] += 1
+            stats["duration_ms"] += duration_ms
+            ps = stats["param_sets"].setdefault(param_key, {
+                "calls": 0, "errors": 0, "duration_ms": 0.0, "traces": [],
+            })
+            ps["calls"] += 1
+            ps["duration_ms"] += duration_ms
+            if error is not None:
+                self.errors += 1
+                stats["errors"] += 1
+                ps["errors"] += 1
+                if error:
+                    ps["traces"].append(error)
+                    if len(ps["traces"]) > self.MAX_TRACES_PER_COMBO:
+                        ps["traces"].pop(0)
+
+    def record_call(self) -> None:  # deprecated — prefer record_tool_call()
         with self._lock:
             self.total_calls += 1
 
-    def record_error(self) -> None:
+    def record_error(self) -> None:  # deprecated — prefer record_tool_call()
         with self._lock:
             self.errors += 1
 
+    def record_flood_wait(self) -> None:
+        with self._lock:
+            self.flood_waits += 1
+
     def snapshot(self) -> dict:
         with self._lock:
+            tools_copy: dict[str, dict] = {}
+            for tool_name, stats in self._tools.items():
+                ps_copy: dict[str, dict] = {}
+                for pk, pstats in stats["param_sets"].items():
+                    ps_copy[pk] = {
+                        "calls": pstats["calls"],
+                        "errors": pstats["errors"],
+                        "duration_ms": pstats["duration_ms"],
+                        "traces": list(pstats["traces"]),
+                    }
+                tools_copy[tool_name] = {
+                    "calls": stats["calls"],
+                    "errors": stats["errors"],
+                    "duration_ms": stats["duration_ms"],
+                    "param_sets": ps_copy,
+                }
             return {
                 "total_calls": self.total_calls,
                 "errors": self.errors,
                 "flood_waits": self.flood_waits,
+                "tools": tools_copy,
             }
 ```
 
-- ``record_call()`` / ``record_error()`` / ``record_flood_wait()`` exist as API and **are wired** into every MCP tool call via the ``_telemetry_wrapper`` decorator in ``tools_register.py``. The wrapper calls ``record_call()`` on invocation and ``record_error()`` on exceptions or non-ok results.
-- ``snapshot()`` returns a frozen copy for the telemetry loop.
+- ``record_tool_call()`` replaces the older ``record_call()`` + ``record_error()`` pair in the ``_telemetry_wrapper`` decorator in ``tools_register.py``. It is called with the tool name, a frozenset of parameter names that were explicitly provided (no parameter values — privacy by design), the wall-clock duration in ms, and an optional error trace string.
+- The ``_telemetry_wrapper`` captures timing via ``time.perf_counter()`` and passes ``traceback.format_exc()`` on exceptions or ``""`` for non-ok results.
+- ``snapshot()`` returns both the flat summary counters and the nested ``tools`` breakdown for the heartbeat payload.
 
 ### Collector container (v1)
 
@@ -320,7 +416,6 @@ No user-identifiable data ever reaches this table.
 ### Negative
 
 - Users who do not read release notes or docs may not realise telemetry is on (mitigated by `DO_NOT_TRACK` discoverability in the broader ecosystem and startup log line)
-- Heartbeat-only means no per-tool-call metrics (acceptable for v1)
 - Server must store a local `instance_id` file — adds one file to `~/.config/fast-mcp-telegram/`
 
 ### Risks
@@ -332,7 +427,7 @@ No user-identifiable data ever reaches this table.
 
 ### Scope vs Roadmap (v1)
 
-v1 covers **feature adoption flags + aggregate error counters**. The full telemetry lane in [Roadmap.md](../Roadmap.md) also includes per-tool error rates, P95 tool latency, wrong-tool patterns, and ACL denial breakdowns — all deferred to v2+. This scope choice is deliberate: v1 answers "which features do people use" and nothing more.
+Original v1 shipped **feature adoption flags + aggregate error counters**. v0.32.0 extended v1 with per-tool timing, per-parameter-set error breakdown, and exception traces — all within the existing `v: 1` schema (open dicts accept the new `tools` block without a version bump). Items still deferred to v2+ on the [Roadmap](../Roadmap.md) include P95 latency distributions, wrong-tool pattern detection, and ACL denial breakdowns.
 
 ## References
 

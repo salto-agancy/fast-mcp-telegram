@@ -10,6 +10,7 @@ See ADR 0005 for full design.
 from __future__ import annotations
 
 import asyncio
+import collections
 import contextlib
 import json
 import logging
@@ -62,25 +63,83 @@ class MetricsStore:
     """Lifetime-of-process counters for tool-call activity.
 
     Thread-safe: all mutations and reads go through a ``threading.Lock``
-    because ``counters.snapshot()`` is called from a thread-pool executor
-    while the event-loop wields ``record_call()`` / ``record_error()``.
+    because ``snapshot()`` is called from a thread-pool executor while
+    the event-loop wields ``record_tool_call()``.
+
+    Tracks per-tool, per-parameter-set statistics: call count, total
+    duration (ms), error count, and last-N error traces.  The heartbeat
+    payload carries a ``tools`` block with this breakdown alongside the
+    flat ``counters`` dict for quick health checks.
     """
+
+    # Maximum number of error traces to retain per (tool, param-set) combo.
+    MAX_TRACES_PER_COMBO: int = 5
 
     def __init__(self) -> None:
         self.total_calls: int = 0
         self.errors: int = 0
         self.flood_waits: int = 0
+        self._tools: dict[str, dict] = {}
         self._lock = threading.Lock()
 
-    def record_call(self) -> None:
-        """Increment total_calls by 1 (atomic w.r.t. snapshot)."""
+    def record_tool_call(
+        self,
+        tool: str,
+        params: frozenset[str],
+        duration_ms: float,
+        *,
+        error: str | None = None,
+    ) -> None:
+        """Record one tool invocation with duration and optional error.
+
+        Thread-safe — acquires the internal lock.
+
+        Args:
+            tool: Tool name (e.g. ``"send_message"``, ``"get_messages"``).
+            params: Set of parameter names that were explicitly provided
+                in this call (not parameter *values* — just presence).
+            duration_ms: Wall-clock duration of the call in milliseconds.
+            error:
+                * ``None``  — call succeeded, no error counter incremented.
+                * ``""``    — error counted but no trace available (e.g.
+                  non-ok result from the Telegram API).
+                * ``str``   — error counted and the string is stored as a
+                  trace (e.g. ``traceback.format_exc()``).
+        """
         with self._lock:
             self.total_calls += 1
+            param_key = ",".join(sorted(params))
 
-    def record_error(self) -> None:
-        """Increment errors by 1 (atomic w.r.t. snapshot)."""
-        with self._lock:
-            self.errors += 1
+            stats = self._tools.setdefault(
+                tool,
+                {
+                    "calls": 0,
+                    "errors": 0,
+                    "duration_ms": 0.0,
+                    "param_sets": {},
+                },
+            )
+            stats["calls"] += 1
+            stats["duration_ms"] += duration_ms
+
+            ps = stats["param_sets"].setdefault(
+                param_key,
+                {
+                    "calls": 0,
+                    "errors": 0,
+                    "duration_ms": 0.0,
+                    "traces": collections.deque(maxlen=self.MAX_TRACES_PER_COMBO),
+                },
+            )
+            ps["calls"] += 1
+            ps["duration_ms"] += duration_ms
+
+            if error is not None:
+                self.errors += 1
+                stats["errors"] += 1
+                ps["errors"] += 1
+                if error:  # non-empty string = has trace text
+                    ps["traces"].append(error)
 
     def record_flood_wait(self) -> None:
         """Increment flood_waits by 1 (atomic w.r.t. snapshot)."""
@@ -88,12 +147,34 @@ class MetricsStore:
             self.flood_waits += 1
 
     def snapshot(self) -> dict:
-        """Return a frozen copy of the current counters as a plain dict."""
+        """Return a frozen copy of the current counters + per-tool stats.
+
+        The returned dict has the same structure as the heartbeat payload's
+        ``counters`` and ``tools`` blocks.
+        """
         with self._lock:
+            # Deep-copy tools to avoid mutation after releasing the lock
+            tools_copy: dict[str, dict] = {}
+            for tool_name, stats in self._tools.items():
+                ps_copy: dict[str, dict] = {}
+                for pk, pstats in stats["param_sets"].items():
+                    ps_copy[pk] = {
+                        "calls": pstats["calls"],
+                        "errors": pstats["errors"],
+                        "duration_ms": pstats["duration_ms"],
+                        "traces": list(pstats["traces"]),
+                    }
+                tools_copy[tool_name] = {
+                    "calls": stats["calls"],
+                    "errors": stats["errors"],
+                    "duration_ms": stats["duration_ms"],
+                    "param_sets": ps_copy,
+                }
             return {
                 "total_calls": self.total_calls,
                 "errors": self.errors,
                 "flood_waits": self.flood_waits,
+                "tools": tools_copy,
             }
 
 
@@ -164,9 +245,7 @@ def _collect_runtime() -> dict:
     session_dir = config.session_directory
     session_files = 0
     if session_dir.is_dir():
-        session_files = sum(
-            1 for f in session_dir.iterdir() if f.suffix == ".session"
-        )
+        session_files = sum(1 for f in session_dir.iterdir() if f.suffix == ".session")
 
     # Runtime import avoids circular dependencies at module load time.
     from src.client.connection import get_active_session_count
@@ -182,6 +261,8 @@ def gather_payload() -> dict:
     """Return a self-contained dictionary that can be sent as a heartbeat."""
     from src.server_components.session_acl import principal_count, read_only_count
 
+    snap = metrics.snapshot()
+
     payload = {
         "v": 1,
         "iid": get_instance_id(),
@@ -192,7 +273,12 @@ def gather_payload() -> dict:
         "py": f"{sys.version_info.major}.{sys.version_info.minor}",
         "features": _collect_features(),
         "runtime": _collect_runtime(),
-        "counters": metrics.snapshot(),
+        "counters": {
+            "total_calls": snap["total_calls"],
+            "errors": snap["errors"],
+            "flood_waits": snap["flood_waits"],
+        },
+        "tools": snap["tools"],
     }
 
     # ACL depth is added to the features block, not sourced from config so we

@@ -1,4 +1,6 @@
 import functools
+import time
+import traceback
 from typing import Any
 
 from fastmcp import FastMCP
@@ -109,7 +111,9 @@ _DESC_INVOKE_MTPROTO = _tool_description(
 )
 
 
-def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool = False):
+def mcp_tool_with_restrictions(
+    operation_name: str, *, allow_bot_sessions: bool = False
+):
     """
     Combined decorator for MCP tools: error handling, ACL, auth context, bot restrictions.
 
@@ -123,23 +127,35 @@ def mcp_tool_with_restrictions(operation_name: str, *, allow_bot_sessions: bool 
     """
 
     def decorator(func):
-        """Wrap tool call with telemetry counters (total_calls, errors)."""
+        """Wrap tool call with per-tool timing, parameter-set breakdown, and error traces."""
 
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
-            metrics.record_call()
+            param_keys = frozenset(kwargs.keys())
+            t0 = time.perf_counter()
+            error: str | None = None
             try:
-                result = await func(*args, **kwargs)
-            except Exception:
-                metrics.record_error()
-                raise
-            if isinstance(result, dict) and result.get("ok") is False:
-                metrics.record_error()
-            return result
+                try:
+                    result = await func(*args, **kwargs)
+                except Exception:
+                    error = traceback.format_exc()
+                    raise
+                if isinstance(result, dict) and result.get("ok") is False:
+                    error = ""
+                return result
+            finally:
+                metrics.record_tool_call(
+                    tool=operation_name,
+                    params=param_keys,
+                    duration_ms=(time.perf_counter() - t0) * 1000,
+                    error=error,
+                )
 
         decorated_func = _telemetry_wrapper
         decorated_func = enforce_session_acl(operation_name)(decorated_func)
-        decorated_func = server_errors.with_error_handling(operation_name)(decorated_func)
+        decorated_func = server_errors.with_error_handling(operation_name)(
+            decorated_func
+        )
         decorated_func = server_auth.require_auth(decorated_func)
         if allow_bot_sessions:
             return decorated_func

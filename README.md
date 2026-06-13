@@ -157,7 +157,7 @@ See [Tools Reference](docs/Tools-Reference.md) for detailed documentation with e
 
 ## Telemetry
 
-Anonymous feature-adoption telemetry since v0.30.1 — heartbeat every 6h, no credentials or message content collected. Opt out with `DO_NOT_TRACK=1`. See [ADR 0005](docs/adr/0005-anonymous-feature-adoption-telemetry.md).
+Anonymous tool telemetry since v0.30.1 — heartbeat every 6h, no credentials or message content collected. Opt out with `DO_NOT_TRACK=1`. See [ADR 0005](docs/adr/0005-anonymous-tool-telemetry.md).
 
 ## License
 
