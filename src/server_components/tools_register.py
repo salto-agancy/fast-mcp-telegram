@@ -120,10 +120,19 @@ def _matches_default(value: Any, default: Any) -> bool:
     More complex defaults (lists, dicts, custom objects) skip comparison and
     are treated as explicitly provided, which is conservative but safe.
     """
-    if isinstance(default, (type(None), bool, int, float, str, bytes)):
+    scalar_types = (type(None), bool, int, float, str, bytes)
+
+    if isinstance(default, scalar_types):
         return value == default
+
     if isinstance(default, (tuple, frozenset)):
+        # Only compare if default is a flat collection of scalars.
+        # Collections with complex elements are treated as explicit
+        # to avoid expensive or side-effectful __eq__ calls.
+        if not all(isinstance(el, scalar_types) for el in default):
+            return False
         return isinstance(value, type(default)) and value == default
+
     # Complex type — can't safely compare, treat as explicitly provided
     return False
 
