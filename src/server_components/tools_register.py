@@ -1,4 +1,5 @@
 import functools
+import inspect
 import time
 import traceback
 from typing import Any
@@ -129,9 +130,23 @@ def mcp_tool_with_restrictions(
     def decorator(func):
         """Wrap tool call with per-tool timing, parameter-set breakdown, and error traces."""
 
+        # Pre-compute parameter defaults from function signature
+        # so _telemetry_wrapper can skip framework-filled defaults
+        # and only track params the caller explicitly provided.
+        _param_defaults = {
+            name: param.default
+            for name, param in inspect.signature(func).parameters.items()
+            if param.default is not param.empty
+        }
+
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
-            param_keys = frozenset(kwargs.keys())
+            # Only count params explicitly provided (not framework-filled defaults)
+            param_keys = frozenset(
+                name
+                for name, value in kwargs.items()
+                if name not in _param_defaults or value != _param_defaults[name]
+            )
             t0 = time.perf_counter()
             error: str | None = None
             try:
