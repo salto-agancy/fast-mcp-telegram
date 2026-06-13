@@ -178,6 +178,17 @@ def mcp_tool_with_restrictions(
 
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
+            # Encode the assumption that the framework always calls tools
+            # with fully-populated keyword arguments only. Positional-only
+            # arguments would silently fall out of param tracking, skewing
+            # telemetry. This assert serves as a canary if the call pattern
+            # ever changes. See the docstring comment above for the full
+            # rationale.
+            assert not args, (
+                f"Telemetry assumed kwargs-only calls for {func.__name__}, "
+                f"but got {len(args)} positional arg(s)"
+            )
+
             # Restrict to declared signature params, excluding any
             # framework-injected or auxiliary kwargs.
             sig_kwargs = {
