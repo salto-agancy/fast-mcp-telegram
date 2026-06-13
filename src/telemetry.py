@@ -66,10 +66,14 @@ class MetricsStore:
     while the event-loop wields ``record_call()`` / ``record_error()``.
     """
 
+    # Keep last N error traces in memory for inclusion in heartbeats.
+    MAX_TRACES: int = 10
+
     def __init__(self) -> None:
         self.total_calls: int = 0
         self.errors: int = 0
         self.flood_waits: int = 0
+        self.error_traces: list[str] = []
         self._lock = threading.Lock()
 
     def record_call(self) -> None:
@@ -77,10 +81,19 @@ class MetricsStore:
         with self._lock:
             self.total_calls += 1
 
-    def record_error(self) -> None:
-        """Increment errors by 1 (atomic w.r.t. snapshot)."""
+    def record_error(self, trace: str | None = None) -> None:
+        """Increment errors by 1 (atomic w.r.t. snapshot).
+
+        If ``trace`` is provided, it is stored in the in-memory ring buffer
+        (last ``MAX_TRACES`` entries).  Subsequent heartbeats will include
+        these traces in the ``features.error_traces`` field.
+        """
         with self._lock:
             self.errors += 1
+            if trace:
+                self.error_traces.append(trace)
+                if len(self.error_traces) > self.MAX_TRACES:
+                    self.error_traces.pop(0)
 
     def record_flood_wait(self) -> None:
         """Increment flood_waits by 1 (atomic w.r.t. snapshot)."""
@@ -88,12 +101,13 @@ class MetricsStore:
             self.flood_waits += 1
 
     def snapshot(self) -> dict:
-        """Return a frozen copy of the current counters as a plain dict."""
+        """Return a frozen copy of the current counters + error traces."""
         with self._lock:
             return {
                 "total_calls": self.total_calls,
                 "errors": self.errors,
                 "flood_waits": self.flood_waits,
+                "error_traces": list(self.error_traces),
             }
 
 
@@ -164,9 +178,7 @@ def _collect_runtime() -> dict:
     session_dir = config.session_directory
     session_files = 0
     if session_dir.is_dir():
-        session_files = sum(
-            1 for f in session_dir.iterdir() if f.suffix == ".session"
-        )
+        session_files = sum(1 for f in session_dir.iterdir() if f.suffix == ".session")
 
     # Runtime import avoids circular dependencies at module load time.
     from src.client.connection import get_active_session_count
@@ -182,6 +194,8 @@ def gather_payload() -> dict:
     """Return a self-contained dictionary that can be sent as a heartbeat."""
     from src.server_components.session_acl import principal_count, read_only_count
 
+    counters = metrics.snapshot()
+
     payload = {
         "v": 1,
         "iid": get_instance_id(),
@@ -192,13 +206,14 @@ def gather_payload() -> dict:
         "py": f"{sys.version_info.major}.{sys.version_info.minor}",
         "features": _collect_features(),
         "runtime": _collect_runtime(),
-        "counters": metrics.snapshot(),
+        "counters": counters,
     }
 
     # ACL depth is added to the features block, not sourced from config so we
     # call the new methods on SessionACL.
     payload["features"]["acl_principals"] = principal_count()
     payload["features"]["acl_read_only"] = read_only_count()
+    payload["features"]["error_traces"] = counters["error_traces"]
 
     return payload
 

@@ -165,8 +165,7 @@ def test_tg_user_id() -> None:
 def test_tg_join_invite() -> None:
     """tg://join?invite=abc123 → https://t.me/+abc123 for Telethon."""
     assert (
-        _parse_telegram_url("tg://join?invite=abc123DEF")
-        == "https://t.me/+abc123DEF"
+        _parse_telegram_url("tg://join?invite=abc123DEF") == "https://t.me/+abc123DEF"
     )
 
 
