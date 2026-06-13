@@ -174,36 +174,27 @@ def mcp_tool_with_restrictions(
         async def _telemetry_wrapper(*args, **kwargs):
             # Telemetry layer must never break tool execution. If param-key
             # detection encounters unexpected call patterns (positional args,
-            # unknown kwargs), we log the anomaly and fall back to the full
+            # unexpected kwargs), we log the anomaly and fall back to the full
             # kwargs set rather than crashing the tool call.
-
-            if args:
+            try:
+                bound = _sig.bind(*args, **kwargs)
+            except TypeError:
                 logger.warning(
-                    "Telemetry assumes kwargs-only for %s; got %d positional arg(s)",
+                    "Telemetry param binding failed for %s; "
+                    "falling back to full kwargs set",
                     func.__name__,
-                    len(args),
+                    exc_info=True,
                 )
                 param_keys = frozenset(kwargs.keys())
             else:
-                try:
-                    bound = _sig.bind_partial(**kwargs)
-                except TypeError:
-                    logger.warning(
-                        "Telemetry bind_partial failed for %s (unexpected kwargs); "
-                        "falling back to full kwargs set",
-                        func.__name__,
-                        exc_info=True,
-                    )
-                    param_keys = frozenset(kwargs.keys())
-                else:
-                    # Single pass: collect explicitly-provided kwargs, skipping
-                    # values that match their signature defaults (likely framework-filled).
-                    explicit_kwargs: dict[str, Any] = {}
-                    for name, value in bound.arguments.items():
-                        if name in _param_defaults and _matches_default(value, _param_defaults[name]):
-                            continue  # likely framework-filled default
-                        explicit_kwargs[name] = value
-                    param_keys = frozenset(explicit_kwargs.keys())
+                # Single pass: collect explicitly-provided kwargs, skipping
+                # values that match their signature defaults (likely framework-filled).
+                explicit_kwargs: dict[str, Any] = {}
+                for name, value in bound.arguments.items():
+                    if name in _param_defaults and _matches_default(value, _param_defaults[name]):
+                        continue  # likely framework-filled default
+                    explicit_kwargs[name] = value
+                param_keys = frozenset(explicit_kwargs.keys())
             t0 = time.perf_counter()
             error: str | None = None
             try:
