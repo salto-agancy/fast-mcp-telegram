@@ -126,7 +126,10 @@ def _matches_default(value: Any, default: Any) -> bool:
     are treated as explicitly provided, which is conservative but safe.
     """
     if isinstance(default, _SCALAR_TYPES):
-        return value == default
+        # bool is a subclass of int, so value == default would match
+        # cross-type values (e.g. True == 1). Require exact type match
+        # to prevent misclassifying explicit values as defaults.
+        return type(value) is type(default) and value == default
 
     if isinstance(default, (tuple, frozenset)):
         # Only compare if default is a flat collection of scalars.
@@ -181,35 +184,25 @@ def mcp_tool_with_restrictions(
             and name in _sig_params  # skip catch-all params (no sensible default)
         }
 
-        def _ensure_kwargs_only(func_name: str, args: tuple[Any, ...]) -> None:
-            """Guard against positional args; telemetry assumes kwargs-only calls."""
+        @functools.wraps(func)
+        async def _telemetry_wrapper(*args, **kwargs):
+            # Guard against positional args; telemetry assumes kwargs-only calls.
             if args:
                 raise TypeError(
-                    f"Telemetry assumes kwargs-only calls for {func_name}, "
+                    f"Telemetry assumes kwargs-only calls for {func.__name__}, "
                     f"but got {len(args)} positional arg(s)"
                 )
 
-        def _filter_explicit_kwargs(all_kwargs: dict[str, Any]) -> dict[str, Any]:
-            """Restrict to declared params and drop values matching signature defaults."""
-            sig_kwargs = {
-                name: value
-                for name, value in all_kwargs.items()
-                if name in _sig_params
-            }
-            return {
-                name: value
-                for name, value in sig_kwargs.items()
-                if (
-                    name not in _param_defaults
-                    or not _matches_default(value, _param_defaults[name])
-                )
-            }
+            # Single pass: collect explicitly-provided kwargs, skipping
+            # unknown/catch-all params and values matching signature defaults.
+            explicit_kwargs: dict[str, Any] = {}
+            for name, value in kwargs.items():
+                if name not in _sig_params:
+                    continue  # unknown or catch-all param
+                if name in _param_defaults and _matches_default(value, _param_defaults[name]):
+                    continue  # likely framework-filled default
+                explicit_kwargs[name] = value
 
-        @functools.wraps(func)
-        async def _telemetry_wrapper(*args, **kwargs):
-            _ensure_kwargs_only(func.__name__, args)
-
-            explicit_kwargs = _filter_explicit_kwargs(kwargs)
             param_keys = frozenset(explicit_kwargs.keys())
             t0 = time.perf_counter()
             error: str | None = None
