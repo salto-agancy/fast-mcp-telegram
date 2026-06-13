@@ -118,28 +118,17 @@ _SCALAR_TYPES = (type(None), bool, int, float, str, bytes)
 
 
 def _matches_default(value: Any, default: Any) -> bool:
-    """Check if value matches its signature default, safely handling complex types.
+    """Check if value matches its signature default for simple scalar types.
 
-    Only scalar types (None, bool, int, float, str, bytes) and immutable
-    collections of those (tuple, frozenset) have well-defined scalar equality.
-    More complex defaults (lists, dicts, custom objects) skip comparison and
-    are treated as explicitly provided, which is conservative but safe.
+    Only scalar types (None, bool, int, float, str, bytes) have well-defined
+    scalar equality. Complex defaults (lists, dicts, custom objects) skip
+    comparison and are treated as explicitly provided, which is conservative
+    but safe.
     """
-    if isinstance(default, _SCALAR_TYPES):
-        # bool is a subclass of int, so value == default would match
-        # cross-type values (e.g. True == 1). Require exact type match
-        # to prevent misclassifying explicit values as defaults.
-        return type(value) is type(default) and value == default
-
-    if isinstance(default, (tuple, frozenset)):
-        # Only compare if default is a flat collection of scalars.
-        # Collections with complex elements are treated as explicit
-        # to avoid expensive or side-effectful __eq__ calls.
-        if not all(isinstance(el, _SCALAR_TYPES) for el in default):
-            return False
-        return isinstance(value, type(default)) and value == default
-
-    # Complex type — can't safely compare, treat as explicitly provided
+    if isinstance(default, _SCALAR_TYPES) and isinstance(value, type(default)):
+        # bool is a subclass of int; exact type check prevents True == 1 etc.
+        return value == default
+    # Complex / non-scalar defaults treated as explicitly provided
     return False
 
 
@@ -172,16 +161,10 @@ def mcp_tool_with_restrictions(
         # If the argument-passing mechanism changes (e.g. to positional-only
         # or partial kwargs), this logic must be revisited.
         _sig = inspect.signature(func)
-        _sig_params = frozenset(
-            name
-            for name, p in _sig.parameters.items()
-            if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-        )
         _param_defaults = {
             name: param.default
             for name, param in _sig.parameters.items()
             if param.default is not param.empty
-            and name in _sig_params  # skip catch-all params (no sensible default)
         }
 
         @functools.wraps(func)
@@ -193,13 +176,16 @@ def mcp_tool_with_restrictions(
                     f"but got {len(args)} positional arg(s)"
                 )
 
+            # Use bind_partial to filter kwargs to declared params only
+            # (handles catch-all params like **kwargs transparently).
+            bound = _sig.bind_partial(**kwargs)
+
             # Single pass: collect explicitly-provided kwargs, skipping
-            # unknown/catch-all params and values matching signature defaults.
+            # values that match their signature defaults (likely framework-filled).
             explicit_kwargs: dict[str, Any] = {}
-            for name, value in kwargs.items():
-                if name not in _sig_params:
-                    continue  # unknown or catch-all param
-                if name in _param_defaults and _matches_default(value, _param_defaults[name]):
+            for name, value in bound.arguments.items():
+                default = _param_defaults.get(name)
+                if default is not None and _matches_default(value, default):
                     continue  # likely framework-filled default
                 explicit_kwargs[name] = value
 
