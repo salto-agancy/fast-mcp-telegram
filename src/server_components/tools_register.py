@@ -112,6 +112,22 @@ _DESC_INVOKE_MTPROTO = _tool_description(
 )
 
 
+def _matches_default(value: Any, default: Any) -> bool:
+    """Check if value matches its signature default, safely handling complex types.
+
+    Only scalar types (None, bool, int, float, str, bytes) and immutable
+    collections of those (tuple, frozenset) have well-defined scalar equality.
+    More complex defaults (lists, dicts, custom objects) skip comparison and
+    are treated as explicitly provided, which is conservative but safe.
+    """
+    if isinstance(default, (type(None), bool, int, float, str, bytes)):
+        return value == default
+    if isinstance(default, (tuple, frozenset)):
+        return isinstance(value, type(default)) and value == default
+    # Complex type — can't safely compare, treat as explicitly provided
+    return False
+
+
 def mcp_tool_with_restrictions(
     operation_name: str, *, allow_bot_sessions: bool = False
 ):
@@ -152,7 +168,8 @@ def mcp_tool_with_restrictions(
             param_keys = frozenset(
                 name
                 for name, value in kwargs.items()
-                if name not in _param_defaults or value != _param_defaults[name]
+                if name not in _param_defaults
+                or not _matches_default(value, _param_defaults[name])
             )
             t0 = time.perf_counter()
             error: str | None = None
