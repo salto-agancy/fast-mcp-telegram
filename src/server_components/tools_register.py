@@ -1,6 +1,5 @@
 import functools
 import inspect
-import logging
 import time
 import traceback
 from typing import Any
@@ -113,25 +112,15 @@ _DESC_INVOKE_MTPROTO = _tool_description(
 )
 
 
-# Types whose equality is well-defined for default-value comparison.
-# Defined at module level to avoid recomputation in a hot helper.
-_SCALAR_TYPES = (type(None), bool, int, float, str, bytes)
-
-logger = logging.getLogger(__name__)
-
-
 def _matches_default(value: Any, default: Any) -> bool:
-    """Check if value matches its signature default for simple scalar types.
+    """Best-effort: is *value* the simple scalar default?
 
-    Only scalar types (None, bool, int, float, str, bytes) have well-defined
-    scalar equality. Complex defaults (lists, dicts, custom objects) skip
-    comparison and are treated as explicitly provided, which is conservative
-    but safe.
+    Only compares well-defined immutable types (None, bool, int, float, str,
+    bytes).  Anything else (lists, dicts, objects) is treated as explicitly
+    provided — conservative but safe.
     """
-    if isinstance(default, _SCALAR_TYPES) and isinstance(value, type(default)):
-        # bool is a subclass of int; exact type check prevents True == 1 etc.
+    if isinstance(default, (type(None), bool, int, float, str, bytes)):
         return value == default
-    # Complex / non-scalar defaults treated as explicitly provided
     return False
 
 
@@ -172,29 +161,15 @@ def mcp_tool_with_restrictions(
 
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
-            # Telemetry layer must never break tool execution. If param-key
-            # detection encounters unexpected call patterns (positional args,
-            # unexpected kwargs), we log the anomaly and fall back to the full
-            # kwargs set rather than crashing the tool call.
-            try:
-                bound = _sig.bind(*args, **kwargs)
-            except TypeError:
-                logger.warning(
-                    "Telemetry param binding failed for %s; "
-                    "falling back to full kwargs set",
-                    func.__name__,
-                    exc_info=True,
-                )
-                param_keys = frozenset(kwargs.keys())
-            else:
-                # Single pass: collect explicitly-provided kwargs, skipping
-                # values that match their signature defaults (likely framework-filled).
-                explicit_kwargs: dict[str, Any] = {}
-                for name, value in bound.arguments.items():
-                    if name in _param_defaults and _matches_default(value, _param_defaults[name]):
-                        continue  # likely framework-filled default
-                    explicit_kwargs[name] = value
-                param_keys = frozenset(explicit_kwargs.keys())
+            # Telemetry layer must never break tool execution.
+            # Assume MCP/Pydantic always calls tools with fully-populated keyword args.
+            # Only track params that differ from their signature defaults.
+            param_keys = frozenset(
+                name
+                for name, value in kwargs.items()
+                if name not in _param_defaults
+                or not _matches_default(value, _param_defaults[name])
+            )
             t0 = time.perf_counter()
             error: str | None = None
             try:
