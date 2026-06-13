@@ -143,6 +143,8 @@ When `resolve: true` is set, the bridge automatically resolves:
 - **Channel IDs**: `-1001234567890` → proper input entity
 - **Phone numbers**: `+1234567890` → proper input entity
 - **Special identifiers**: `me` → `inputPeerSelf`
+- **Telegram URLs**: `https://t.me/username` → proper input entity (extracts identifier, strips message IDs)
+- **tg:// scheme URLs**: `tg://resolve?domain=username` → proper input entity (resolves via scheme)
 
 ### Resolution Examples
 
@@ -153,6 +155,10 @@ When `resolve: true` is set, the bridge automatically resolves:
 {"params": {"peer": 123456789}}       # User ID
 {"params": {"peer": "-1001234567890"}} # Channel ID
 {"params": {"peer": "+1234567890"}}   # Phone number
+{"params": {"peer": "https://t.me/durov"}}  # t.me URL → username
+{"params": {"peer": "https://t.me/c/1234567890"}}  # t.me channel URL → -1001234567890
+{"params": {"peer": "tg://resolve?domain=durov"}}  # tg:// scheme → username
+{"params": {"peer": "tg://user?id=123456789"}}     # tg:// user → numeric ID
 ```
 
 ## Automatic TL Object Construction

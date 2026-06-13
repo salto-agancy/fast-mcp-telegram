@@ -13,6 +13,14 @@ All tools that accept a `chat_id` parameter support these formats:
 - `@username` - Username (without @ symbol)
 - `123456789` - Numeric user ID
 - `-1001234567890` - Channel ID (always starts with -100)
+- `https://t.me/username` — t.me URL (resolves to username; message IDs stripped)
+- `https://t.me/c/1234567890` — t.me channel URL (resolves to `-1001234567890`)
+- `https://t.me/+invitehash` — t.me invite link (passed through to Telethon)
+- `tg://resolve?domain=username` — tg:// scheme URL (resolves to username)
+- `tg://user?id=123456` — tg:// user URL (resolves to numeric ID)
+- `tg://join?invite=invitehash` — tg:// join URL (converted to t.me invite link)
+- `tg://openmessage?user_id=123456` — tg:// open message URL (resolves to numeric ID)
+- `tg://privatepost?channel=123456` — tg:// private post URL (resolves to `-100123456`)
 
 ## 1. Discovery
 
