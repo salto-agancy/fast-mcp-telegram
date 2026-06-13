@@ -156,6 +156,7 @@ def mcp_tool_with_restrictions(
         # as likely framework-filled and excluded from the param set key.
         # If the argument-passing mechanism changes (e.g. to positional-only
         # or partial kwargs), this logic must be revisited.
+        _sig_params = frozenset(inspect.signature(func).parameters.keys())
         _param_defaults = {
             name: param.default
             for name, param in inspect.signature(func).parameters.items()
@@ -164,12 +165,17 @@ def mcp_tool_with_restrictions(
 
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
-            # Only count params explicitly provided (not framework-filled defaults)
+            # Only count params explicitly provided (not framework-filled defaults).
+            # Restrict to signature-only params to exclude any framework-injected
+            # or auxiliary kwargs that are not part of the tool declaration.
             param_keys = frozenset(
                 name
                 for name, value in kwargs.items()
-                if name not in _param_defaults
-                or not _matches_default(value, _param_defaults[name])
+                if name in _sig_params
+                and (
+                    name not in _param_defaults
+                    or not _matches_default(value, _param_defaults[name])
+                )
             )
             t0 = time.perf_counter()
             error: str | None = None
