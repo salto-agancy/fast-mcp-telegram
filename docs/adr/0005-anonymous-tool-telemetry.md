@@ -1,7 +1,8 @@
 # ADR 0005: Anonymous Tool Telemetry
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-06-10
+**Last updated:** 2026-06-13
 
 ## Context
 

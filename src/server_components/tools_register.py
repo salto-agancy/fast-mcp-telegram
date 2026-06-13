@@ -127,35 +127,29 @@ def mcp_tool_with_restrictions(
     """
 
     def decorator(func):
-        """Wrap tool call with telemetry counters (total_calls, errors)."""
+        """Wrap tool call with per-tool timing, parameter-set breakdown, and error traces."""
 
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
             param_keys = frozenset(kwargs.keys())
             t0 = time.perf_counter()
+            error: str | None = None
             try:
-                result = await func(*args, **kwargs)
-            except Exception:
-                metrics.record_tool_call(
-                    tool=operation_name,
-                    params=param_keys,
-                    duration_ms=(time.perf_counter() - t0) * 1000,
-                    error=traceback.format_exc(),
-                )
-                raise
-            else:
-                error = (
-                    ""
-                    if isinstance(result, dict) and result.get("ok") is False
-                    else None
-                )
+                try:
+                    result = await func(*args, **kwargs)
+                except Exception:
+                    error = traceback.format_exc()
+                    raise
+                if isinstance(result, dict) and result.get("ok") is False:
+                    error = ""
+                return result
+            finally:
                 metrics.record_tool_call(
                     tool=operation_name,
                     params=param_keys,
                     duration_ms=(time.perf_counter() - t0) * 1000,
                     error=error,
                 )
-            return result
 
         decorated_func = _telemetry_wrapper
         decorated_func = enforce_session_acl(operation_name)(decorated_func)

@@ -10,7 +10,7 @@ type checks.  All errors are collected and reported at once.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 # Maximum allowed heartbeat timestamp drift in seconds.  The collector
@@ -45,6 +45,7 @@ class TelemetryPayload:
     features: dict[str, Any] = field(default_factory=dict)
     runtime: dict[str, int] = field(default_factory=dict)
     counters: dict[str, int] = field(default_factory=dict)
+    tools: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate all field constraints.
@@ -77,8 +78,7 @@ class TelemetryPayload:
                 )
             if self.ts < now - _OLD_WINDOW_SECONDS:
                 errors.append(
-                    f"ts {self.ts} is {now - self.ts}s old "
-                    f"(max {_OLD_WINDOW_SECONDS}s)"
+                    f"ts {self.ts} is {now - self.ts}s old (max {_OLD_WINDOW_SECONDS}s)"
                 )
 
         # --- started_at ---
@@ -127,14 +127,11 @@ class TelemetryPayload:
             for k, val in d.items():
                 if not isinstance(val, int) or isinstance(val, bool):
                     errors.append(
-                        f"{field_name}.{k!r} must be int, "
-                        f"got {type(val).__name__}"
+                        f"{field_name}.{k!r} must be int, got {type(val).__name__}"
                     )
                     break
                 if val < 0:
-                    errors.append(
-                        f"{field_name}.{k!r} must be >= 0, got {val}"
-                    )
+                    errors.append(f"{field_name}.{k!r} must be >= 0, got {val}")
                     break
 
         if errors:
@@ -159,9 +156,7 @@ class TelemetryPayload:
         known = set(cls.__dataclass_fields__)
         extra = set(data) - known
         if extra:
-            raise ValidationError(
-                f"Unexpected fields: {', '.join(sorted(extra))}"
-            )
+            raise ValidationError(f"Unexpected fields: {', '.join(sorted(extra))}")
         try:
             return cls(**data)
         except TypeError as exc:

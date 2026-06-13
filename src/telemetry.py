@@ -141,28 +141,6 @@ class MetricsStore:
                 if error:  # non-empty string = has trace text
                     ps["traces"].append(error)
 
-    def record_call(self) -> None:
-        """Increment total_calls by 1 (atomic w.r.t. snapshot).
-
-        .. deprecated::
-            Prefer ``record_tool_call()`` which also captures per-tool
-            breakdown.  This method is kept for callers that lack tool
-            context and only updates the summary counter.
-        """
-        with self._lock:
-            self.total_calls += 1
-
-    def record_error(self) -> None:
-        """Increment errors by 1 (atomic w.r.t. snapshot).
-
-        .. deprecated::
-            Prefer ``record_tool_call()`` which also captures per-tool
-            breakdown.  This method only updates the summary counter —
-            it does **not** populate per-tool stats or store traces.
-        """
-        with self._lock:
-            self.errors += 1
-
     def record_flood_wait(self) -> None:
         """Increment flood_waits by 1 (atomic w.r.t. snapshot)."""
         with self._lock:
