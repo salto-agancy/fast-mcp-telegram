@@ -141,7 +141,7 @@ def mcp_tool_with_restrictions(
                     error = traceback.format_exc()
                     raise
                 if isinstance(result, dict) and result.get("ok") is False:
-                    error = result.get("error", "")
+                    error = str(result.get("error", ""))
                 return result
             finally:
                 metrics.record_tool_call(
