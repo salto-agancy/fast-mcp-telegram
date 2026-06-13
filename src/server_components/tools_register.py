@@ -112,6 +112,11 @@ _DESC_INVOKE_MTPROTO = _tool_description(
 )
 
 
+# Types whose equality is well-defined for default-value comparison.
+# Defined at module level to avoid recomputation in a hot helper.
+_SCALAR_TYPES = (type(None), bool, int, float, str, bytes)
+
+
 def _matches_default(value: Any, default: Any) -> bool:
     """Check if value matches its signature default, safely handling complex types.
 
@@ -120,16 +125,14 @@ def _matches_default(value: Any, default: Any) -> bool:
     More complex defaults (lists, dicts, custom objects) skip comparison and
     are treated as explicitly provided, which is conservative but safe.
     """
-    scalar_types = (type(None), bool, int, float, str, bytes)
-
-    if isinstance(default, scalar_types):
+    if isinstance(default, _SCALAR_TYPES):
         return value == default
 
     if isinstance(default, (tuple, frozenset)):
         # Only compare if default is a flat collection of scalars.
         # Collections with complex elements are treated as explicit
         # to avoid expensive or side-effectful __eq__ calls.
-        if not all(isinstance(el, scalar_types) for el in default):
+        if not all(isinstance(el, _SCALAR_TYPES) for el in default):
             return False
         return isinstance(value, type(default)) and value == default
 
@@ -165,27 +168,36 @@ def mcp_tool_with_restrictions(
         # as likely framework-filled and excluded from the param set key.
         # If the argument-passing mechanism changes (e.g. to positional-only
         # or partial kwargs), this logic must be revisited.
-        _sig_params = frozenset(inspect.signature(func).parameters.keys())
+        _sig = inspect.signature(func)
+        _sig_params = frozenset(_sig.parameters.keys())
         _param_defaults = {
             name: param.default
-            for name, param in inspect.signature(func).parameters.items()
+            for name, param in _sig.parameters.items()
             if param.default is not param.empty
         }
 
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
-            # Only count params explicitly provided (not framework-filled defaults).
-            # Restrict to signature-only params to exclude any framework-injected
-            # or auxiliary kwargs that are not part of the tool declaration.
-            param_keys = frozenset(
-                name
+            # Restrict to declared signature params, excluding any
+            # framework-injected or auxiliary kwargs.
+            sig_kwargs = {
+                name: value
                 for name, value in kwargs.items()
                 if name in _sig_params
-                and (
+            }
+
+            # Exclude params whose value matches their signature default
+            # (likely framework-filled, not explicitly provided by the caller).
+            explicit_kwargs = {
+                name: value
+                for name, value in sig_kwargs.items()
+                if (
                     name not in _param_defaults
                     or not _matches_default(value, _param_defaults[name])
                 )
-            )
+            }
+
+            param_keys = frozenset(explicit_kwargs.keys())
             t0 = time.perf_counter()
             error: str | None = None
             try:
