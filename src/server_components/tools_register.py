@@ -169,38 +169,34 @@ def mcp_tool_with_restrictions(
         # If the argument-passing mechanism changes (e.g. to positional-only
         # or partial kwargs), this logic must be revisited.
         _sig = inspect.signature(func)
-        _sig_params = frozenset(_sig.parameters.keys())
+        _sig_params = frozenset(
+            name
+            for name, p in _sig.parameters.items()
+            if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        )
         _param_defaults = {
             name: param.default
             for name, param in _sig.parameters.items()
             if param.default is not param.empty
+            and name in _sig_params  # skip catch-all params (no sensible default)
         }
 
-        @functools.wraps(func)
-        async def _telemetry_wrapper(*args, **kwargs):
-            # Encode the assumption that the framework always calls tools
-            # with fully-populated keyword arguments only. Positional-only
-            # arguments would silently fall out of param tracking, skewing
-            # telemetry. This guard serves as a canary if the call pattern
-            # ever changes. Using an explicit TypeError rather than assert
-            # ensures the check survives python -O optimization.
+        def _ensure_kwargs_only(func_name: str, args: tuple[Any, ...]) -> None:
+            """Guard against positional args; telemetry assumes kwargs-only calls."""
             if args:
                 raise TypeError(
-                    f"Telemetry assumes kwargs-only calls for {func.__name__}, "
+                    f"Telemetry assumes kwargs-only calls for {func_name}, "
                     f"but got {len(args)} positional arg(s)"
                 )
 
-            # Restrict to declared signature params, excluding any
-            # framework-injected or auxiliary kwargs.
+        def _filter_explicit_kwargs(all_kwargs: dict[str, Any]) -> dict[str, Any]:
+            """Restrict to declared params and drop values matching signature defaults."""
             sig_kwargs = {
                 name: value
-                for name, value in kwargs.items()
+                for name, value in all_kwargs.items()
                 if name in _sig_params
             }
-
-            # Exclude params whose value matches their signature default
-            # (likely framework-filled, not explicitly provided by the caller).
-            explicit_kwargs = {
+            return {
                 name: value
                 for name, value in sig_kwargs.items()
                 if (
@@ -209,6 +205,11 @@ def mcp_tool_with_restrictions(
                 )
             }
 
+        @functools.wraps(func)
+        async def _telemetry_wrapper(*args, **kwargs):
+            _ensure_kwargs_only(func.__name__, args)
+
+            explicit_kwargs = _filter_explicit_kwargs(kwargs)
             param_keys = frozenset(explicit_kwargs.keys())
             t0 = time.perf_counter()
             error: str | None = None
