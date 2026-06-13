@@ -10,6 +10,7 @@ See ADR 0005 for full design.
 from __future__ import annotations
 
 import asyncio
+import collections
 import contextlib
 import json
 import logging
@@ -127,7 +128,7 @@ class MetricsStore:
                     "calls": 0,
                     "errors": 0,
                     "duration_ms": 0.0,
-                    "traces": [],
+                    "traces": collections.deque(maxlen=self.MAX_TRACES_PER_COMBO),
                 },
             )
             ps["calls"] += 1
@@ -139,8 +140,6 @@ class MetricsStore:
                 ps["errors"] += 1
                 if error:  # non-empty string = has trace text
                     ps["traces"].append(error)
-                    if len(ps["traces"]) > self.MAX_TRACES_PER_COMBO:
-                        ps["traces"].pop(0)
 
     def record_call(self) -> None:
         """Increment total_calls by 1 (atomic w.r.t. snapshot).
