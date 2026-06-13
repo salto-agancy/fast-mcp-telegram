@@ -1,5 +1,6 @@
 import functools
 import inspect
+import logging
 import time
 import traceback
 from typing import Any
@@ -116,6 +117,8 @@ _DESC_INVOKE_MTPROTO = _tool_description(
 # Defined at module level to avoid recomputation in a hot helper.
 _SCALAR_TYPES = (type(None), bool, int, float, str, bytes)
 
+logger = logging.getLogger(__name__)
+
 
 def _matches_default(value: Any, default: Any) -> bool:
     """Check if value matches its signature default for simple scalar types.
@@ -169,26 +172,38 @@ def mcp_tool_with_restrictions(
 
         @functools.wraps(func)
         async def _telemetry_wrapper(*args, **kwargs):
-            # Guard against positional args; telemetry assumes kwargs-only calls.
+            # Telemetry layer must never break tool execution. If param-key
+            # detection encounters unexpected call patterns (positional args,
+            # unknown kwargs), we log the anomaly and fall back to the full
+            # kwargs set rather than crashing the tool call.
+
             if args:
-                raise TypeError(
-                    f"Telemetry assumes kwargs-only calls for {func.__name__}, "
-                    f"but got {len(args)} positional arg(s)"
+                logger.warning(
+                    "Telemetry assumes kwargs-only for %s; got %d positional arg(s)",
+                    func.__name__,
+                    len(args),
                 )
-
-            # Use bind_partial to filter kwargs to declared params only
-            # (handles catch-all params like **kwargs transparently).
-            bound = _sig.bind_partial(**kwargs)
-
-            # Single pass: collect explicitly-provided kwargs, skipping
-            # values that match their signature defaults (likely framework-filled).
-            explicit_kwargs: dict[str, Any] = {}
-            for name, value in bound.arguments.items():
-                if name in _param_defaults and _matches_default(value, _param_defaults[name]):
-                    continue  # likely framework-filled default
-                explicit_kwargs[name] = value
-
-            param_keys = frozenset(explicit_kwargs.keys())
+                param_keys = frozenset(kwargs.keys())
+            else:
+                try:
+                    bound = _sig.bind_partial(**kwargs)
+                except TypeError:
+                    logger.warning(
+                        "Telemetry bind_partial failed for %s (unexpected kwargs); "
+                        "falling back to full kwargs set",
+                        func.__name__,
+                        exc_info=True,
+                    )
+                    param_keys = frozenset(kwargs.keys())
+                else:
+                    # Single pass: collect explicitly-provided kwargs, skipping
+                    # values that match their signature defaults (likely framework-filled).
+                    explicit_kwargs: dict[str, Any] = {}
+                    for name, value in bound.arguments.items():
+                        if name in _param_defaults and _matches_default(value, _param_defaults[name]):
+                            continue  # likely framework-filled default
+                        explicit_kwargs[name] = value
+                    param_keys = frozenset(explicit_kwargs.keys())
             t0 = time.perf_counter()
             error: str | None = None
             try:
