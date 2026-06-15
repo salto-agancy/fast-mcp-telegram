@@ -8,12 +8,12 @@ This page is the **project-maintained index** for market and architecture resear
 
 **North Star:** The best Telegram bridge for AI agents — 8 consolidated tools, MTProto access, zero-friction setup.
 
-**Reality check:** Telemetry shows 96% of users (23/24 instances) run stdio local mode. The product's actual value proposition is: "AI agent can use Telegram as me, locally, with 8 good tools." Multi-user http-auth hosting is a downstream capability, not the core identity.
+**Reality check:** Telemetry (2026-06-11 to 2026-06-15; 24 instances; stored in the anonymous telemetry PostgreSQL DB at fast-mcp-telegram-telemetry.l1979.ru) shows 96% of users (23/24 instances) run stdio local mode. The product's actual value proposition is: "AI agent can use Telegram as me, locally, with 8 good tools." Multi-user http-auth hosting is a downstream capability, not the core identity.
 
 **What this means for positioning:**
 - **Compete on tool quality and agent experience**, not on enterprise multi-tenancy
 - **Distribution matters more than features** — Smithery, PyPI, uvx reach the stdio user base
-- **Reliability over breadth** — 25% error rate on production is the #1 problem to fix
+- **Reliability over breadth** — 25% error rate on production (14 errors in 57 calls, 2026-06-11 to 2026-06-15) is the #1 problem to fix
 - **Enterprise research** (OAuth2, compliance archiving, per-tool-call billing) stays in `docs/research/` as reference material, not as roadmap drivers
 
 ## Verified current capabilities (2026-05-26)

@@ -8,15 +8,17 @@ Last updated: 2026-06-15.
 
 **The best Telegram bridge for AI agents** — 8 consolidated tools, MTProto access, zero-friction setup. Optimize for reliability, agent correctness, and distribution. Multi-user `http-auth` hosting is a downstream capability, not the organizing principle.
 
-> **Why the shift?** Telemetry (ADR 0005) shows 96% of instances (23/24) run stdio local mode. Nobody uses ACL, bot tokens, or MTProto proxy. The actual user base wants a local Telegram MCP tool — not a multi-tenant gateway. The previous North Star ("shared http-auth multi-user hosting") organized the roadmap around a user segment that doesn't exist yet. This version reflects reality: make the tool excellent first, then extend to multi-user when there's evidence of demand.
+> **Why the shift?** Telemetry (ADR 0005) — collected from 24 instances over the 4-day window 2026-06-11 to 2026-06-15, stored in the anonymous telemetry PostgreSQL DB at fast-mcp-telegram-telemetry.l1979.ru — shows 96% of instances (23/24) run stdio local mode. Nobody uses ACL, bot tokens, or MTProto proxy. The actual user base wants a local Telegram MCP tool — not a multi-tenant gateway. The previous North Star ("shared http-auth multi-user hosting") organized the roadmap around a user segment that doesn't exist yet. This version reflects reality: make the tool excellent first, then extend to multi-user when there's evidence of demand.
 
 ## Roadmap lanes
 
 Work is organized in **priority order**. The first three lanes reflect where the actual user base is (96% stdio local). Multi-user trust infrastructure is deferred until there's evidence of demand.
 
+> **Glossary:** A **lane** is a thematic work area (e.g. "Quality & Reliability", "Distribution"). A **priority** (P0–P3) determines sequencing — P0 is worked on first, P3 is deferred. A **branch** is the Git branch where that lane's code lives. Multiple lanes can share a branch (e.g. Quality and Distribution both use `master`). Lanes are priority-ordered, not branch-ordered — the priority, not the branch, determines what gets worked on next.
+
 | Priority | Lane | Branch | Purpose |
 | --- | --- | --- | --- |
-| **P0** | **Quality & Reliability** | `master` | Fix real errors surfaced by telemetry: `get_messages` entity resolution, `search_messages_globally` query failures, reduce 25% error rate on production |
+| **P0** | **Quality & Reliability** | `master` | Fix real errors surfaced by telemetry: `get_messages` entity resolution, `search_messages_globally` query failures, reduce 25% error rate on production (57 calls / 14 errors, 2026-06-11 to 2026-06-15) |
 | **P1** | **Distribution** | `master` | Smithery listing, PyPI/uvx polish, README/Installation quality — get the tool in front of more users |
 | **P2** | **QA / Gategrid** | `feature/evals` | Benchmark tool behavior with [Gategrid](https://github.com/leshchenko1979/gategrid) — **GG** — and enforce regressions via **GG gating** |
 | **P3** | **Trust** | `feature/acl` | Agent guardrails per Bearer token — **deferred** until multi-user http-auth adoption grows. See [ADR 0001](adr/0001-agent-scoped-session-acl.md) |
@@ -107,7 +109,7 @@ flowchart LR
 | 1. Roadmap and research | Done | — | Docs | `master` | This doc, Gemini under [research/](research/) |
 | 2. QR login auth | ✅ **Shipped (v0.30.0)** | — | Auth | `master` | Telethon QR login — scan QR from mobile, no phone/code/2FA. See [ADR 0004](adr/0004-qr-login-auth.md) |
 | 3. Telemetry | ✅ **Shipped** | — | Telemetry | `master` | Anonymous telemetry collection + DB. See [ADR 0005](adr/0005-anonymous-tool-telemetry.md) |
-| 4. Fix top telemetry errors | **Next** | **P0** | Quality | `master` | `get_messages` entity resolution, `search_messages_globally` query failures — 25% error rate on production |
+| 4. Fix top telemetry errors | **Next** | **P0** | Quality | `master` | `get_messages` entity resolution, `search_messages_globally` query failures — 25% error rate on production (57 calls / 14 errors, 2026-06-11 to 2026-06-15) |
 | 5. Smithery URL-based listing | In progress | **P1** | Distribution | `master` | Register tg-mcp.l1979.ru on Smithery as URL-based deployment |
 | 6. GG scaffold | In progress | **P2** | QA | `feature/evals` | Six gate cases, mock baseline, PR workflow |
 | 7. GG depth + live eval | Planned | **P2** | QA | `feature/evals` | Cases driven by telemetry; optional VDS live matrix |
