@@ -2,22 +2,25 @@
 
 Official priorities for fast-mcp-telegram. Capability facts live in [Strategic-Market-Positioning.md](Strategic-Market-Positioning.md). Third-party Gemini research is under [research/](research/).
 
-Last updated: 2026-05-31.
+Last updated: 2026-06-15.
 
 ## North star
 
-**Shared `http-auth` multi-user hosting** — one gateway, many Bearer tokens, one Telegram account per token. Optimize tenant isolation, blast-radius control, stability, and agent correctness.
+**The best Telegram bridge for AI agents** — 8 consolidated tools, MTProto access, zero-friction setup. Optimize for reliability, agent correctness, and distribution. Multi-user `http-auth` hosting is a downstream capability, not the organizing principle.
+
+> **Why the shift?** Telemetry (ADR 0005) shows 96% of instances (23/24) run stdio local mode. Nobody uses ACL, bot tokens, or MTProto proxy. The actual user base wants a local Telegram MCP tool — not a multi-tenant gateway. The previous North Star ("shared http-auth multi-user hosting") organized the roadmap around a user segment that doesn't exist yet. This version reflects reality: make the tool excellent first, then extend to multi-user when there's evidence of demand.
 
 ## Roadmap lanes
 
-Work is organized in parallel **lanes**. Each lane has its own branch until merge-ready.
+Work is organized in **priority order**. The first three lanes reflect where the actual user base is (96% stdio local). Multi-user trust infrastructure is deferred until there's evidence of demand.
 
-| Lane | Branch | Purpose |
-| --- | --- | --- |
-| **Trust** | `feature/acl` | Agent guardrails per Bearer token (lanes/profiles), not account lockdown — see [ADR 0001](adr/0001-agent-scoped-session-acl.md) |
-| **Telemetry** | `feature/telemetry` *(planned)* | Production signals that tell QA where agents and users struggle |
-| **QA / Gategrid** | `feature/evals` | Benchmark tool behavior with [Gategrid](https://github.com/leshchenko1979/gategrid) — **GG** — and enforce regressions via **GG gating** |
-| **Docs / strategy** | `master` | Roadmap, capability index, Gemini research reference |
+| Priority | Lane | Branch | Purpose |
+| --- | --- | --- | --- |
+| **P0** | **Quality & Reliability** | `master` | Fix real errors surfaced by telemetry: `get_messages` entity resolution, `search_messages_globally` query failures, reduce 25% error rate on production |
+| **P1** | **Distribution** | `master` | Smithery listing, PyPI/uvx polish, README/Installation quality — get the tool in front of more users |
+| **P2** | **QA / Gategrid** | `feature/evals` | Benchmark tool behavior with [Gategrid](https://github.com/leshchenko1979/gategrid) — **GG** — and enforce regressions via **GG gating** |
+| **P3** | **Trust** | `feature/acl` | Agent guardrails per Bearer token — **deferred** until multi-user http-auth adoption grows. See [ADR 0001](adr/0001-agent-scoped-session-acl.md) |
+| **Ongoing** | **Telemetry** | `master` *(shipped)* | Production signals that tell QA where agents and users struggle — see [ADR 0005](adr/0005-anonymous-tool-telemetry.md) |
 
 ### QA loop: telemetry → benchmark → gate
 
@@ -57,19 +60,35 @@ flowchart LR
 | **4. Assure** | QA / Gategrid | **GG gating** on PRs: `gategrid gate` against [evals/ci/baselines/main.json](../evals/ci/baselines/main.json) blocks merges when pass rate or like-for-like cells regress. |
 | **5. Ship** | All lanes | Merge when trust, telemetry hooks, and gate are aligned for the change scope. |
 
-**Today:** step 3–4 are scaffolded on `feature/evals`. Step 1–2 are planned on `feature/telemetry` (no implementation on `master` yet).
+**Today:** Steps 1–2 are live in production (telemetry DB collecting signals). Steps 3–4 are scaffolded on `feature/evals`. The next action is using telemetry data to drive P0 quality fixes and P2 case design.
 
 ## Branches
 
 | Branch | Lane | Contents |
 | --- | --- | --- |
-| `master` | Docs / strategy | [Roadmap.md](Roadmap.md), [Strategic-Market-Positioning.md](Strategic-Market-Positioning.md), Gemini [research/](research/) |
-| `feature/acl` | Trust | Session ACL implementation and design docs |
+| `master` | All active work | Roadmap, telemetry, QR login, feature work, Gemini research under [research/](research/) |
 | `feature/evals` | QA / Gategrid | [evals/](../evals/), [gategrid-eval.yml](../.github/workflows/gategrid-eval.yml) |
-| `feature/telemetry` | Telemetry | *Planned* — production observability for QA triage |
-| `feature/oidc-phase1-storage` | OIDC | **POSTPONED** — OIDC + elicitation storage layer. Superseded by QR-login auth. See [ADR 0004](adr/0004-qr-login-auth.md) |
+| `feature/acl` | Trust *(deferred)* | Session ACL implementation and design docs — waiting for multi-user demand signal |
+| `postponed/oidc-elicitation-storage` | OIDC *(superseded)* | Storage layer for OIDC + elicitation. Superseded by QR login. See [ADR 0004](adr/0004-qr-login-auth.md) |
 
-## Decisions (2026-05-26)
+> **Note:** The previous lane model assumed parallel feature branches for Trust, Telemetry, and QA. In practice, telemetry and QR login shipped directly to `master` via PRs. The lane model is now priority-ordered, not branch-ordered.
+
+## Decisions (2026-06-15)
+
+| Topic | Decision |
+| --- | --- |
+| **North Star** | Best Telegram bridge for AI agents — not multi-user hosting. Multi-user is a downstream capability. |
+| **Priority model** | P0 Quality → P1 Distribution → P2 QA → P3 Trust. Lanes are priority-ordered, not branch-ordered. |
+| **ACL** | Shipped but opt-in; deferred as a roadmap priority until multi-user http-auth adoption grows. |
+| **Telemetry** | Shipped on `master` (ADR 0005). Now feeding QA triage with real production data. |
+| **QA model** | Telemetry informs case design; **GG benchmark** validates; **GG gating** enforces on PR |
+| **Evals** | Gategrid harness on `feature/evals`; not merged until gate is stable |
+| **QR Login** | Shipped v0.30.0. Killed OIDC+elicitation complexity. The right auth model for the user base. |
+
+### Previous decisions (2026-05-26, superseded)
+
+<details>
+<summary>Original lane model decisions</summary>
 
 | Topic | Decision |
 | --- | --- |
@@ -79,32 +98,34 @@ flowchart LR
 | Telemetry | Separate lane; must feed QA triage before cases are added blindly |
 | Post-ACL focus | Telemetry spike + eval expansion before rate limits / SQLite |
 
+</details>
+
 ## Current sequence
 
-| Step | Status | Lane | Branch | Deliverable |
-| --- | --- | --- | --- | --- |
-| 1. Roadmap and research | Done | Docs | `master` | This doc, Gemini under [research/](research/) |
-| 2. ACL audit and design | Done | Trust | `feature/acl` | [acl-operator-research.md](research/acl-operator-research.md), [acl-design-brief.md](research/acl-design-brief.md) |
-| 3. ACL MVP | Done | Trust | `feature/acl` | [session_acl.py](../src/server_components/session_acl.py) |
-| 4. Principal identifier forms | Planned | Trust | `feature/acl` | Human-readable `principals:` keys: `@username`, `user_id`, or opaque id — see [Trust lane](#trust-lane--planned-scope) |
-| 5. GG scaffold | In progress | QA | `feature/evals` | Six gate cases, mock baseline, PR workflow |
-| 6. Telemetry for QA | Planned | Telemetry | `feature/telemetry` | Tool/error/latency signals → case backlog |
-| 7. GG depth + live eval | Planned | QA | `feature/evals` | Cases driven by telemetry; optional VDS live matrix |
-| 8. Merge feature branches | Pending | — | — | PRs: `feature/acl`, `feature/telemetry`, `feature/evals` |
-| 9. Smithery URL-based listing | In progress | Infrastructure | — | Register tg-mcp.l1979.ru on Smithery as URL-based deployment |
-| 10. Database session storage | Planned | Infrastructure | — | Replace file-based .session with PostgreSQL/Redis storage |
-| 11. Smithery Hosted migration | Planned | Infrastructure | — | Move from URL-based to Smithery-hosted containers |
-| 12. OIDC self-service Phase 1 | **Postponed** | OIDC | `feature/oidc-phase1-storage` | Storage layer for OIDC + elicitation. Superseded by QR login. See [ADR 0004](adr/0004-qr-login-auth.md) |
-| 13. QR login auth | ✅ **Shipped (v0.30.0)** | Auth | `master` | Telethon QR login — scan QR from mobile, no phone/code/2FA. Deployed at tg-mcp.l1979.ru. See [ADR 0004](adr/0004-qr-login-auth.md) |
+| Step | Status | Priority | Lane | Branch | Deliverable |
+| --- | --- | --- | --- | --- | --- |
+| 1. Roadmap and research | Done | — | Docs | `master` | This doc, Gemini under [research/](research/) |
+| 2. QR login auth | ✅ **Shipped (v0.30.0)** | — | Auth | `master` | Telethon QR login — scan QR from mobile, no phone/code/2FA. See [ADR 0004](adr/0004-qr-login-auth.md) |
+| 3. Telemetry | ✅ **Shipped** | — | Telemetry | `master` | Anonymous telemetry collection + DB. See [ADR 0005](adr/0005-anonymous-tool-telemetry.md) |
+| 4. Fix top telemetry errors | **Next** | **P0** | Quality | `master` | `get_messages` entity resolution, `search_messages_globally` query failures — 25% error rate on production |
+| 5. Smithery URL-based listing | In progress | **P1** | Distribution | `master` | Register tg-mcp.l1979.ru on Smithery as URL-based deployment |
+| 6. GG scaffold | In progress | **P2** | QA | `feature/evals` | Six gate cases, mock baseline, PR workflow |
+| 7. GG depth + live eval | Planned | **P2** | QA | `feature/evals` | Cases driven by telemetry; optional VDS live matrix |
+| 8. Database session storage | Planned | **P1** | Infrastructure | `master` | Replace file-based .session with PostgreSQL/Redis storage |
+| 9. Smithery Hosted migration | Planned | **P1** | Infrastructure | `master` | Move from URL-based to Smithery-hosted containers |
+| 10. ACL audit and design | Done | **P3** | Trust | `feature/acl` | [acl-operator-research.md](research/acl-operator-research.md), [acl-design-brief.md](research/acl-design-brief.md) |
+| 11. ACL MVP | Done (not merged) | **P3** | Trust | `feature/acl` | [session_acl.py](../src/server_components/session_acl.py) — deferred until multi-user demand grows |
+| 12. Principal identifier forms | Planned | **P3** | Trust | `feature/acl` | Human-readable `principals:` keys — deferred |
 
 ## Shipped on `master`
 
 - QR Login Auth (v0.30.0) — Telethon QR login, unified `/setup` page, `@require_auth` decorator. Backward compatible with existing bearer tokens. See [ADR 0004](adr/0004-qr-login-auth.md)
+- Anonymous Telemetry (ADR 0005) — opt-in production signal collection, PostgreSQL storage, per-tool error/latency tracking. See [ADR 0005](adr/0005-anonymous-tool-telemetry.md)
 - [Strategic-Market-Positioning.md](Strategic-Market-Positioning.md) capability index
 - Gemini research under [research/](research/) (third-party reference)
 - Roadmap lane model (this document)
 
-Trust, telemetry, and Gategrid evals merge from their feature branches when each lane is ready.
+Trust and Gategrid evals merge from their feature branches when each lane is ready.
 
 ## Trust lane — planned scope
 
@@ -119,9 +140,11 @@ Operator-facing enhancements beyond ACL enforcement (not implemented):
 
 See [acl-design-brief.md](research/acl-design-brief.md) Phase 1.5 and Phase 3 for related ACL work.
 
-## Telemetry lane — planned scope
+## Telemetry lane — current and planned signals
 
-Candidate signals for QA triage (not implemented):
+Shipped signals (ADR 0005): heartbeat, tool calls with latency/errors, session file counts, RSS memory, platform/version.
+
+Candidate signals for next iteration (QA triage):
 
 | Signal | QA use |
 | --- | --- |
@@ -130,8 +153,6 @@ Candidate signals for QA triage (not implemented):
 | P95 tool latency | Performance regressions; matrix timing budgets |
 | Wrong-tool patterns | Case prompts that require disambiguation |
 | Auth / ACL denials | Security docs and negative-path cases |
-
-Implementation choices (OpenTelemetry, Logfire, structured logs → query) belong on `feature/telemetry`.
 
 ## QA / Gategrid lane — current scope
 
