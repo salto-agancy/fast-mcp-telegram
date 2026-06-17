@@ -20,6 +20,7 @@ from src.utils.entity import (
     build_entity_dict,
     get_entity_by_id,
 )
+from src.utils.json_ids import id_to_str
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,7 @@ def build_send_edit_result(message, chat, status: str) -> dict[str, Any]:
     sender_dict = build_entity_dict(getattr(message, "sender", None))
 
     result = {
-        "message_id": message.id,
+        "message_id": id_to_str(message.id),
         "date": message.date.isoformat(),
         "chat": chat_dict,
         "text": message.text,
@@ -306,9 +307,12 @@ async def get_sender_info(client, message) -> dict[str, Any] | None:
             sender = await get_entity_by_id(message.sender_id)
             if sender:
                 return build_entity_dict(sender)
-            return {"id": message.sender_id, "error": "Sender not found"}
+            return {"id": id_to_str(message.sender_id), "error": "Sender not found"}
         except Exception:
-            return {"id": message.sender_id, "error": "Failed to retrieve sender"}
+            return {
+                "id": id_to_str(message.sender_id),
+                "error": "Failed to retrieve sender",
+            }
     return None
 
 
@@ -516,6 +520,10 @@ def _extract_topic_metadata(message: Any) -> dict[str, Any]:
     forum_topic = bool(getattr(reply_to, "forum_topic", False))
     reply_to_top_id = getattr(reply_to, "reply_to_top_id", None)
     topic_id = reply_to_top_id or (reply_to_msg_id if forum_topic else None)
+    # Raw int here: this is an INTERNAL helper also consumed by the forum/thread
+    # search path (SearchRequest.top_msg_id, GetForumTopicsByIDRequest), which
+    # needs the int. Output stringification happens at the response boundary in
+    # build_message_result.
     return {"topic_id": topic_id} if topic_id is not None else {}
 
 
@@ -533,7 +541,7 @@ async def build_message_result(
     ) or _service_action_placeholder_text(message)
 
     result: dict[str, Any] = {
-        "id": message.id,
+        "id": id_to_str(message.id),
         "date": message.date.isoformat() if getattr(message, "date", None) else None,
         "text": full_text,
         "link": link,
@@ -547,10 +555,12 @@ async def build_message_result(
         getattr(message, "reply_to", None), "reply_to_msg_id", None
     )
     if reply_to_msg_id is not None:
-        result["reply_to_msg_id"] = reply_to_msg_id
+        result["reply_to_msg_id"] = id_to_str(reply_to_msg_id)
 
     # Topic metadata: derived from reply_to.forum_topic (set on forum thread messages).
-    result |= _extract_topic_metadata(message)
+    topic_meta = _extract_topic_metadata(message)
+    if "topic_id" in topic_meta:
+        result["topic_id"] = id_to_str(topic_meta["topic_id"])
 
     if hasattr(message, "media") and message.media:
         media_placeholder = _build_media_placeholder(message)
@@ -1003,7 +1013,9 @@ async def transcribe_voice_messages(
     logger.debug("Found %s voice messages to transcribe", len(voice_messages))
 
     async def transcribe_task(msg_dict: dict[str, Any]) -> None:
-        message_id = msg_dict["id"]
+        # msg_dict["id"] is serialized as a string (JS int64 safety); Telethon
+        # needs the int message id back.
+        message_id = int(msg_dict["id"])
         transcription = await _transcribe_single_voice_message(
             client, chat_entity, message_id
         )

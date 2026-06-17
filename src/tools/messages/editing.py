@@ -9,6 +9,7 @@ from src.client.connection import get_connected_client
 from src.tools.messages.core import _normalize_parse_mode, detect_message_formatting
 from src.utils.entity import get_entity_by_id
 from src.utils.error_handling import log_and_build_error
+from src.utils.json_ids import id_to_str
 from src.utils.logging_utils import log_operation_start, log_operation_success
 from src.utils.message_format import _extract_topic_metadata, build_send_edit_result
 
@@ -67,7 +68,11 @@ async def edit_message_impl(
         )
 
         result = build_send_edit_result(edited_message, chat, "edited")
-        result.update(_extract_topic_metadata(edited_message))
+        topic_meta = _extract_topic_metadata(edited_message)
+        if "topic_id" in topic_meta:
+            # Stringify at the output boundary (int64 JS-safety); the raw int is
+            # kept inside _extract_topic_metadata for internal search callers.
+            result["topic_id"] = id_to_str(topic_meta["topic_id"])
 
         log_operation_success("Message edited", chat_id)
         return result

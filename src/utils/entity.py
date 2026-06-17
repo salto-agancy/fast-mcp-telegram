@@ -15,6 +15,7 @@ from telethon.tl.types import InputMessagesFilterEmpty, PeerChannel, PeerChat, P
 
 from ..client.connection import get_connected_client
 from .chat_search_text import chat_searchable_text_lower
+from .json_ids import id_to_str
 
 logger = logging.getLogger(__name__)
 
@@ -413,9 +414,15 @@ def build_entity_dict(entity) -> dict | None:
         subscribers_count = None
 
     is_forum = bool(getattr(entity, "forum", False))
+    # Explicit chat-type flags from MTProto Channel fields, so callers never have
+    # to infer supergroup-ness from a t.me/c/<id>/ permalink. A megagroup Channel
+    # IS a supergroup; a broadcast Channel is a one-way channel.
+    is_megagroup = bool(getattr(entity, "megagroup", False))
+    is_broadcast = bool(getattr(entity, "broadcast", False))
 
     result = {
-        "id": getattr(entity, "id", None),
+        # 64-bit ids are emitted as strings to survive JS/double JSON parsing.
+        "id": id_to_str(getattr(entity, "id", None)),
         "title": title,
         "type": computed_type,
         "username": username,
@@ -426,8 +433,12 @@ def build_entity_dict(entity) -> dict | None:
         "subscribers_count": subscribers_count,
         # Present only for forum-enabled channels/supergroups
         "is_forum": True if is_forum else None,
+        # Explicit supergroup/channel typing (Channel.megagroup / Channel.broadcast)
+        "megagroup": True if is_megagroup else None,
+        "is_supergroup": True if is_megagroup else None,
+        "is_broadcast": True if is_broadcast else None,
         # Access hash (required for InputPeer construction)
-        "access_hash": getattr(entity, "access_hash", None),
+        "access_hash": id_to_str(getattr(entity, "access_hash", None)),
         # Min flag: since Layer 102, min entities have an access_hash
         # that only works for profile photo downloads, NOT for general API calls
         "min": getattr(entity, "min", None),
@@ -455,7 +466,7 @@ def _forward_peer_id_and_type_label(peer) -> tuple[object | None, str]:
 def _forward_stub_entity_dict(entity_id: object, type_label: str) -> dict:
     """Minimal entity-shaped dict when full resolution is unavailable."""
     return {
-        "id": entity_id,
+        "id": id_to_str(entity_id),
         "title": None,
         "type": type_label,
         "username": None,
