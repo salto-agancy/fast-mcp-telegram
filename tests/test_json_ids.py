@@ -2,7 +2,7 @@
 """Tests for 64-bit id JSON serialization.
 
 Covers:
-- ``stringify_int64`` / ``id_to_str`` / ``sanitize_int64_tree`` helpers
+- ``stringify_int64`` / ``id_to_str`` helpers
 - lossless round-trip of real Telegram int64 ids through json.dumps/loads
 - ``_json_safe`` (invoke_mtproto path) stringifying out-of-range ints in
   nested TL ``to_dict()`` trees
@@ -18,7 +18,6 @@ from src.utils.entity import _ENTITY_DICT_CACHE, _ENTITY_TYPE_CACHE, build_entit
 from src.utils.json_ids import (
     JS_SAFE_MAX,
     id_to_str,
-    sanitize_int64_tree,
     stringify_int64,
 )
 
@@ -84,24 +83,6 @@ class TestRoundTrip:
         value = 5366182128746793135
         lossy = int(float(value))
         assert lossy != value  # demonstrates why we stringify
-
-
-class TestSanitizeTree:
-    def test_nested_tree_stringifies_out_of_range_only(self):
-        tree = {
-            "_": "MessageEntityCustomEmoji",
-            "offset": 0,
-            "length": 5,
-            "document_id": 5366182128746793135,
-            "nested": [{"access_hash": 9007199254740993, "flags": 16}],
-        }
-        out = sanitize_int64_tree(tree)
-        assert out["document_id"] == "5366182128746793135"
-        assert out["nested"][0]["access_hash"] == "9007199254740993"
-        # Small ints stay numeric
-        assert out["offset"] == 0
-        assert out["length"] == 5
-        assert out["nested"][0]["flags"] == 16
 
 
 class TestJsonSafeMtproto:

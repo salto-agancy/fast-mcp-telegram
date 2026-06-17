@@ -72,16 +72,3 @@ def id_to_str(value: Any) -> Any:
     if isinstance(value, int):
         return str(value)
     return value
-
-
-def sanitize_int64_tree(value: Any) -> Any:
-    """Recursively stringify out-of-range ints in an arbitrary JSON-safe tree.
-
-    Applies :func:`stringify_int64` to every scalar, recursing through dicts and
-    lists. Intended for ``invoke_mtproto`` output where id keys are unknown.
-    """
-    if isinstance(value, dict):
-        return {k: sanitize_int64_tree(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [sanitize_int64_tree(v) for v in value]
-    return stringify_int64(value)
