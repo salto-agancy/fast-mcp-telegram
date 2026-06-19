@@ -6,8 +6,8 @@ Covers:
 - lossless round-trip of real Telegram int64 ids through json.dumps/loads
 - ``_json_safe`` (invoke_mtproto path) stringifying out-of-range ints in
   nested TL ``to_dict()`` trees
-- ``build_entity_dict`` emitting id/access_hash as strings and explicit
-  ``is_supergroup``/``megagroup``/``is_broadcast``/``is_forum`` flags
+- ``build_entity_dict`` emitting ``access_hash`` as a string while leaving
+  ``id`` numeric
 """
 
 import json
@@ -113,43 +113,16 @@ class TestBuildEntityDict:
         # A class literally named "Channel" so get_normalized_chat_type resolves it.
         return type("Channel", (), {})(), kwargs
 
-    def test_ids_are_strings(self):
+    def test_access_hash_is_string_id_is_numeric(self):
         entity = SimpleNamespace(
             id=5314748207455037000,
             access_hash=9007199254740993,
             title="Big",
         )
         result = build_entity_dict(entity)
-        assert result["id"] == "5314748207455037000"
+        # id stays numeric (preserves existing wire contract); access_hash is
+        # the only entity field stringified (always far above 2**53).
+        assert result["id"] == 5314748207455037000
+        assert isinstance(result["id"], int)
         assert result["access_hash"] == "9007199254740993"
-        assert isinstance(result["id"], str)
         assert isinstance(result["access_hash"], str)
-
-    def test_megagroup_flags_explicit(self):
-        chan = type("Channel", (), {})()
-        chan.id = 1234567890
-        chan.access_hash = 111
-        chan.title = "Supergroup"
-        chan.megagroup = True
-        chan.broadcast = False
-        chan.forum = True
-        result = build_entity_dict(chan)
-        assert result["is_supergroup"] is True
-        assert result["megagroup"] is True
-        assert result["is_forum"] is True
-        assert "is_broadcast" not in result  # pruned when False
-        # A megagroup normalizes to type "group" — exactly why explicit
-        # is_supergroup/megagroup flags are needed to disambiguate.
-        assert result["type"] == "group"
-
-    def test_broadcast_channel_flags(self):
-        chan = type("Channel", (), {})()
-        chan.id = 222
-        chan.access_hash = 333
-        chan.title = "News"
-        chan.megagroup = False
-        chan.broadcast = True
-        result = build_entity_dict(chan)
-        assert result["is_broadcast"] is True
-        assert "is_supergroup" not in result
-        assert "megagroup" not in result

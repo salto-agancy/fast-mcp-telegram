@@ -576,9 +576,9 @@ class TestGetMessagesDateFiltering:
         # Should return 2 messages (2024 and 2025), not 2023
         assert len(result["messages"]) == 2
         msg_ids = {msg["id"] for msg in result["messages"]}
-        assert "1" not in msg_ids  # Old message should be filtered
-        assert "2" in msg_ids  # Recent message should be included
-        assert "3" in msg_ids  # Future message should be included
+        assert 1 not in msg_ids  # Old message should be filtered
+        assert 2 in msg_ids  # Recent message should be included
+        assert 3 in msg_ids  # Future message should be included
 
     @pytest.mark.asyncio
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
@@ -625,9 +625,9 @@ class TestGetMessagesDateFiltering:
         # Should return 2 messages (2023 and 2024), not 2025
         assert len(result["messages"]) == 2
         msg_ids = {msg["id"] for msg in result["messages"]}
-        assert "3" not in msg_ids  # Future message should be filtered
-        assert "2" in msg_ids  # Recent message should be included
-        assert "1" in msg_ids  # Old message should be included
+        assert 3 not in msg_ids  # Future message should be filtered
+        assert 2 in msg_ids  # Recent message should be included
+        assert 1 in msg_ids  # Old message should be included
 
     @pytest.mark.asyncio
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
@@ -674,7 +674,7 @@ class TestGetMessagesDateFiltering:
         assert "messages" in result
         # Should return only 1 message (2024-06-15)
         assert len(result["messages"]) == 1
-        assert result["messages"][0]["id"] == "2"
+        assert result["messages"][0]["id"] == 2
 
     @pytest.mark.asyncio
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
@@ -737,8 +737,8 @@ class TestGetMessagesDateFiltering:
         # Should STOP at early 2024 (id=3) and NOT process late 2023 (id=2) or 2022 (id=1)
         assert len(result["messages"]) == 3
         msg_ids = {msg["id"] for msg in result["messages"]}
-        assert msg_ids == {"5", "4", "3"}
-        assert "2" not in msg_ids  # Should not have processed these
+        assert msg_ids == {5, 4, 3}
+        assert 2 not in msg_ids  # Should not have processed these
         assert 1 not in msg_ids
 
     @pytest.mark.asyncio
@@ -831,5 +831,5 @@ class TestGetMessagesDateFiltering:
 
         assert "messages" in result
         assert len(result["messages"]) == 1
-        assert result["messages"][0]["id"] == "99"
+        assert result["messages"][0]["id"] == 99
         assert "[Service: PinMessage]" in (result["messages"][0].get("text") or "")

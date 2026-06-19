@@ -481,7 +481,7 @@ class TestBuildMessageResultExcludeChat:
             )
 
         assert "chat" not in result, f"Expected no 'chat' field, got {result.keys()}"
-        assert result["id"] == "123"
+        assert result["id"] == 123
         assert result["text"] == "test message"
 
     @pytest.mark.asyncio
@@ -517,7 +517,7 @@ class TestBuildMessageResultExcludeChat:
             )
 
         assert "chat" in result, f"Expected 'chat' field, got {result.keys()}"
-        assert result["chat"]["id"] == "456"
+        assert result["chat"]["id"] == 456
 
     @pytest.mark.asyncio
     async def test_build_message_result_chat_excluded_by_default(self):

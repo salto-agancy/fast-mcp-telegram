@@ -330,7 +330,7 @@ class TestBuildDialogEntityDict:
         result = build_dialog_entity_dict(dialog, dialog.entity)
 
         assert result is not None
-        assert result["id"] == "1"
+        assert result["id"] == 1
         assert result["first_name"] == "John"
         assert result["last_activity_date"] is not None
         assert "2024-06-15" in result["last_activity_date"]
@@ -856,7 +856,7 @@ async def test_find_chats_by_include_peers_uses_dialog_date_for_flags_entities()
     chats = result.get("chats", [])
 
     # Flags entity should be present with last_activity_date from dialog.date
-    flags_result = [c for c in chats if c["id"] == str(flags_id)]
+    flags_result = [c for c in chats if c["id"] == flags_id]
     assert len(flags_result) == 1, (
         f"Flags entity (id={flags_id}) should be in results. "
         f"Got chats: {chats}"
@@ -878,7 +878,7 @@ async def test_find_chats_by_include_peers_uses_dialog_date_for_flags_entities()
             )
 
     # Include entity should also be present with activity from GetPeerDialogsRequest
-    include_result = [c for c in chats if c["id"] == str(include_id)]
+    include_result = [c for c in chats if c["id"] == include_id]
     assert len(include_result) == 1, (
         f"Include entity (id={include_id}) should be in results. "
         f"Got chats: {chats}"

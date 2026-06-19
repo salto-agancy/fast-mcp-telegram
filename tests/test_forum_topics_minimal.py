@@ -39,7 +39,7 @@ async def test_build_message_result_includes_topic_fields_for_forum_chat():
     ):
         result = await build_message_result(None, message, entity, None)
 
-    assert result["topic_id"] == "51"
+    assert result["topic_id"] == 51
 
 
 @pytest.mark.asyncio
@@ -65,7 +65,7 @@ async def test_build_message_result_topic_fallback_to_message_reply_to_msg_id():
     ):
         result = await build_message_result(None, message, entity, None)
 
-    assert result["topic_id"] == "42"
+    assert result["topic_id"] == 42
 
 
 @pytest.mark.asyncio
@@ -92,7 +92,7 @@ async def test_build_message_result_topic_fallback_to_reply_object_reply_to_msg_
     ):
         result = await build_message_result(None, message, entity, None)
 
-    assert result["topic_id"] == "99"
+    assert result["topic_id"] == 99
 
 
 @pytest.mark.asyncio
@@ -287,7 +287,7 @@ async def test_edit_message_in_forum_includes_topic_id_only():
         )
 
     assert result["status"] == "edited"
-    assert result["topic_id"] == "51"
+    assert result["topic_id"] == 51
     assert "top_msg_id" not in result
     client.edit_message.assert_awaited_once()
 
@@ -905,7 +905,7 @@ async def test_send_message_impl_channel_post_comment_redirects_to_discussion():
     assert entity is discussion_entity
     assert reply_to_msg_id == 999
     assert result["status"] == "sent"
-    assert result["chat"]["id"] == str(discussion_entity.id)
+    assert result["chat"]["id"] == discussion_entity.id
 
 
 def test_extract_send_message_params_marks_reply_target_as_reply():

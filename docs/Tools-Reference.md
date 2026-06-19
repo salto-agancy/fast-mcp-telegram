@@ -120,25 +120,22 @@ get_chat_info(
 Also includes, when applicable:
 - `members_count` for groups (regular groups and megagroups)
 - `subscribers_count` for channels (broadcast)
-- `is_supergroup: true` / `megagroup: true` for megagroup supergroups (a megagroup is
-  reported with `type: "group"`, so these flags disambiguate it explicitly — no need to
-  infer supergroup-ness from a `t.me/c/<id>/` permalink)
-- `is_broadcast: true` for one-way broadcast channels
 - `is_forum: true` for forum-enabled supergroups
-- `topics`: list of `{"topic_id": string, "title": string}` entries (forum chats only)
+- `topics`: list of `{"topic_id": number, "title": string}` entries (forum chats only)
 - `topics_has_more: true` when there are more topics than `topics_limit`
 
 Counts are fetched via Telethon full-info requests and reflect current values.
 
-> **64-bit ids are strings.** All Telegram 64-bit identifiers in tool output —
-> `id`, `access_hash`, `message_id`, `reply_to_msg_id`, `topic_id`, and `document_id`
-> (including inside nested `chat`/`sender` objects and `invoke_mtproto` results) — are
-> serialized as JSON **strings**, not numbers. This prevents precision loss above
-> 2⁵³ when responses are parsed by double-based JSON consumers (browsers, JS, Claude
-> Web): e.g. a custom-emoji `document_id` `5366182128746793135` would otherwise be
-> read back as `5366182128746793000`. For `invoke_mtproto`, only out-of-range ints are
-> stringified; small values (offsets, flags, lengths) stay numeric. Pass ids back as
-> strings or numbers — input is accepted either way.
+> **Large 64-bit ids are strings where precision would otherwise be lost.** To
+> survive double-based JSON consumers (browsers, JS, Claude Web), where any integer
+> above 2⁵³ loses its low digits (e.g. a custom-emoji `document_id`
+> `5366182128746793135` would be read back as `5366182128746793000`), two id surfaces
+> are serialized as JSON **strings**: `access_hash` in entity objects (it always
+> exceeds 2⁵³ and must round-trip verbatim to rebuild `InputPeer`), and any
+> out-of-range integer in `invoke_mtproto` results (including `document_id`) — small
+> values like offsets, flags and lengths stay numeric. All other id fields (`id`,
+> `message_id`, `reply_to_msg_id`, `topic_id`) remain numbers. Ids are accepted as
+> either strings or numbers on input.
 
 **Examples:**
 ```json

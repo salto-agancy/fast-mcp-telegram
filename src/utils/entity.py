@@ -414,15 +414,9 @@ def build_entity_dict(entity) -> dict | None:
         subscribers_count = None
 
     is_forum = bool(getattr(entity, "forum", False))
-    # Explicit chat-type flags from MTProto Channel fields, so callers never have
-    # to infer supergroup-ness from a t.me/c/<id>/ permalink. A megagroup Channel
-    # IS a supergroup; a broadcast Channel is a one-way channel.
-    is_megagroup = bool(getattr(entity, "megagroup", False))
-    is_broadcast = bool(getattr(entity, "broadcast", False))
 
     result = {
-        # 64-bit ids are emitted as strings to survive JS/double JSON parsing.
-        "id": id_to_str(getattr(entity, "id", None)),
+        "id": getattr(entity, "id", None),
         "title": title,
         "type": computed_type,
         "username": username,
@@ -433,11 +427,8 @@ def build_entity_dict(entity) -> dict | None:
         "subscribers_count": subscribers_count,
         # Present only for forum-enabled channels/supergroups
         "is_forum": True if is_forum else None,
-        # Explicit supergroup/channel typing (Channel.megagroup / Channel.broadcast)
-        "megagroup": True if is_megagroup else None,
-        "is_supergroup": True if is_megagroup else None,
-        "is_broadcast": True if is_broadcast else None,
-        # Access hash (required for InputPeer construction)
+        # Access hash is a 64-bit id that always exceeds 2**53, so it is emitted
+        # as a string to survive JS/double JSON parsing (lossless round-trip).
         "access_hash": id_to_str(getattr(entity, "access_hash", None)),
         # Min flag: since Layer 102, min entities have an access_hash
         # that only works for profile photo downloads, NOT for general API calls
@@ -466,7 +457,7 @@ def _forward_peer_id_and_type_label(peer) -> tuple[object | None, str]:
 def _forward_stub_entity_dict(entity_id: object, type_label: str) -> dict:
     """Minimal entity-shaped dict when full resolution is unavailable."""
     return {
-        "id": id_to_str(entity_id),
+        "id": entity_id,
         "title": None,
         "type": type_label,
         "username": None,
