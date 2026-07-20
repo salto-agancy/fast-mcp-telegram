@@ -272,9 +272,9 @@ async def _connect_client_and_verify_or_cleanup(
             if inspect.isawaitable(result):
                 await result
         else:
-            await asyncio.wait_for(client.connect(), timeout=20)
+            await client.connect()
 
-        await asyncio.wait_for(verify_authorized_connection(client), timeout=20)
+        await verify_authorized_connection(client)
 
         if bot_api_token:
             logger.info("Bot API token authentication succeeded!")
@@ -347,9 +347,6 @@ async def _build_telegram_client_for_token(
         "entity_cache_limit": _cfg.entity_cache_limit,
         "app_version": _get_app_version(),
         "device_model": _get_device_model(),
-        "connection_retries": 3,
-        "retry_delay": 1,
-        "timeout": 10,
     }
     client_kwargs |= build_mtproto_client_args(_cfg.mtproto_proxy, logger.info)
     client = TelegramClient(**client_kwargs)
@@ -465,8 +462,8 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
             logger.warning(
                 f"Client disconnected for token {token[:8]}..., attempting to reconnect..."
             )
-            await asyncio.wait_for(client.connect(), timeout=20)
-            await asyncio.wait_for(verify_authorized_connection(client), timeout=20)
+            await client.connect()
+            await verify_authorized_connection(client)
             logger.info(f"Successfully reconnected client for token {token[:8]}...")
 
             # Reset failure count on successful connection

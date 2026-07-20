@@ -1,8 +1,5 @@
-import asyncio
 import functools
 import inspect
-import json
-import os
 import time
 import traceback
 from typing import Any
@@ -57,7 +54,6 @@ from src.tools.messages import (
     send_message_to_phone_impl,
     send_rich_message_impl,
 )
-from src.tools.external import get_yandex_disk_content_impl
 from src.tools.mtproto import invoke_mtproto_impl
 from src.tools.search import search_messages_impl
 
@@ -91,14 +87,6 @@ _DESC_GET_MEDIA_CONTENT = _tool_description(
     "URL. Non-image files return a short text note plus their download URL; voice / "
     "round video return a note pointing at get_messages field `transcription`. "
     "Limits: max 6 images per call; originals over 5 MB are skipped with a note. "
-)
-
-_DESC_GET_YADISK = _tool_description(
-    "Open a public Yandex.Disk link (folder or file) sent in Telegram and return "
-    "its images INLINE as native image content (base64), recursing into subfolders. "
-    "Non-image files return a short note plus a preview/download URL. Use when a chat "
-    "message contains a disk.yandex / yadi.sk link and the user wants to see what is "
-    "in it. Max 12 images per call. "
 )
 
 _DESC_SEND_MESSAGE = _tool_description(
@@ -159,29 +147,6 @@ def _matches_default(value: Any, default: Any) -> bool:
     return False
 
 
-# --- Per-tool wall-clock budgets, seconds (improvement #322 server watchdog) ---
-# None = no timeout: long media/download tools must never be cut.
-# Runtime override without code edits: env TOOL_TIMEOUTS_JSON='{"tool": seconds|null}'.
-DEFAULT_TOOL_TIMEOUT = 90.0
-TOOL_TIMEOUTS: dict[str, float | None] = {
-    "find_chats": 60.0,
-    "get_media_content": None,
-    "get_yandex_disk_content": None,
-    "invoke_mtproto": 120.0,
-}
-try:
-    TOOL_TIMEOUTS.update(
-        {
-            k: (None if v is None else float(v))
-            for k, v in json.loads(
-                os.environ.get("TOOL_TIMEOUTS_JSON", "") or "{}"
-            ).items()
-        }
-    )
-except Exception:
-    pass
-
-
 def mcp_tool_with_restrictions(
     operation_name: str, *, allow_bot_sessions: bool = False
 ):
@@ -230,22 +195,9 @@ def mcp_tool_with_restrictions(
             )
             t0 = time.perf_counter()
             error: str | None = None
-            _budget = TOOL_TIMEOUTS.get(operation_name, DEFAULT_TOOL_TIMEOUT)
             try:
                 try:
-                    if _budget is None:
-                        result = await func(*args, **kwargs)
-                    else:
-                        result = await asyncio.wait_for(
-                            func(*args, **kwargs), timeout=_budget
-                        )
-                except asyncio.TimeoutError:
-                    error = f"TOOL_TIMEOUT after {_budget}s"
-                    raise RuntimeError(
-                        f"TOOL_TIMEOUT: {operation_name} exceeded server budget "
-                        f"{_budget:.0f}s. Do not blind-retry or wait: вызови скилл "
-                        f"fix-telegram-mcp (симптом TOOL_TIMEOUT)."
-                    ) from None
+                    result = await func(*args, **kwargs)
                 except Exception:
                     error = traceback.format_exc()
                     raise
@@ -366,26 +318,6 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> list[Any]:
         """Return image bytes inline for given messages (full doc URL in tool description)."""
         return await get_media_content_impl(chat_id, message_ids)
-
-    @mcp.tool(
-        description=_DESC_GET_YADISK,
-        # Returns native content blocks (text + inline images), not a structured
-        # object — disable output-schema inference (see get_media_content).
-        output_schema=None,
-        annotations=ToolAnnotations(
-            title="Get Yandex.Disk content inline",
-            readOnlyHint=True,
-            idempotentHint=True,
-            openWorldHint=True,
-        ),
-    )
-    @mcp_tool_with_restrictions("get_yandex_disk_content")
-    async def get_yandex_disk_content(
-        public_url: str,
-        path: str | None = None,
-    ) -> list[Any]:
-        """Open a public Yandex.Disk link and inline its images (full doc URL in tool description)."""
-        return await get_yandex_disk_content_impl(public_url, path)
 
     @mcp.tool(
         description=_DESC_SEND_MESSAGE,

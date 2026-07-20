@@ -1,8 +1,5 @@
-import asyncio
 import functools
 import inspect
-import json
-import os
 import time
 import traceback
 from typing import Any
@@ -159,29 +156,6 @@ def _matches_default(value: Any, default: Any) -> bool:
     return False
 
 
-# --- Per-tool wall-clock budgets, seconds (improvement #322 server watchdog) ---
-# None = no timeout: long media/download tools must never be cut.
-# Runtime override without code edits: env TOOL_TIMEOUTS_JSON='{"tool": seconds|null}'.
-DEFAULT_TOOL_TIMEOUT = 90.0
-TOOL_TIMEOUTS: dict[str, float | None] = {
-    "find_chats": 60.0,
-    "get_media_content": None,
-    "get_yandex_disk_content": None,
-    "invoke_mtproto": 120.0,
-}
-try:
-    TOOL_TIMEOUTS.update(
-        {
-            k: (None if v is None else float(v))
-            for k, v in json.loads(
-                os.environ.get("TOOL_TIMEOUTS_JSON", "") or "{}"
-            ).items()
-        }
-    )
-except Exception:
-    pass
-
-
 def mcp_tool_with_restrictions(
     operation_name: str, *, allow_bot_sessions: bool = False
 ):
@@ -230,22 +204,9 @@ def mcp_tool_with_restrictions(
             )
             t0 = time.perf_counter()
             error: str | None = None
-            _budget = TOOL_TIMEOUTS.get(operation_name, DEFAULT_TOOL_TIMEOUT)
             try:
                 try:
-                    if _budget is None:
-                        result = await func(*args, **kwargs)
-                    else:
-                        result = await asyncio.wait_for(
-                            func(*args, **kwargs), timeout=_budget
-                        )
-                except asyncio.TimeoutError:
-                    error = f"TOOL_TIMEOUT after {_budget}s"
-                    raise RuntimeError(
-                        f"TOOL_TIMEOUT: {operation_name} exceeded server budget "
-                        f"{_budget:.0f}s. Do not blind-retry or wait: вызови скилл "
-                        f"fix-telegram-mcp (симптом TOOL_TIMEOUT)."
-                    ) from None
+                    result = await func(*args, **kwargs)
                 except Exception:
                     error = traceback.format_exc()
                     raise
