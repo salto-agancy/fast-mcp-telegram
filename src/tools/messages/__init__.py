@@ -14,8 +14,10 @@ from src.client.connection import get_connected_client
 from src.tools.messages.core import _normalize_parse_mode, detect_message_formatting
 from src.tools.messages.editing import edit_message_impl
 from src.tools.messages.file_handling import _calculate_file_count
+from src.tools.messages.media_content import get_media_content_impl
 from src.tools.messages.phone import send_message_to_phone_impl
 from src.tools.messages.reading import read_messages_by_ids
+from src.tools.messages.rich import send_rich_message_impl
 from src.tools.messages.security import _validate_file_paths
 from src.tools.messages.sending import (
     _extract_send_message_params,
@@ -39,8 +41,10 @@ __all__ = [
     # Functions commonly patched in tests
     "get_connected_client",
     "get_entity_by_id",
+    "get_media_content_impl",
     "get_post_discussion_info",
     "read_messages_by_ids",
     "send_message_impl",
     "send_message_to_phone_impl",
+    "send_rich_message_impl",
 ]

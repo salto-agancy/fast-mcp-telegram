@@ -32,10 +32,13 @@ _WRITE_OPERATIONS = frozenset(
         "send_message",
         "edit_message",
         "send_message_to_phone",
+        "send_rich_message",
     }
 )
 _LIST_RESULT_OPERATIONS = frozenset({"find_chats", "search_messages_globally"})
-_EMPTY_LANE_CHAT_SCOPED_OPERATIONS = frozenset({"get_messages", "get_chat_info"})
+_EMPTY_LANE_CHAT_SCOPED_OPERATIONS = frozenset(
+    {"get_messages", "get_media_content", "get_chat_info"}
+)
 _EMPTY_LANE_PRE_DENY_OPERATIONS = (
     _LIST_RESULT_OPERATIONS
     | _EMPTY_LANE_CHAT_SCOPED_OPERATIONS
@@ -78,7 +81,13 @@ _INVALID_MTPROTO_JSON_DENY_MSG = (
 INVALID_MTPROTO_JSON_DENY_MSG = _INVALID_MTPROTO_JSON_DENY_MSG
 _MTPROTO_PEER_ID_KEYS = frozenset({"user_id", "chat_id", "channel_id", "peer_id", "id"})
 _CHAT_SCOPED_OPERATIONS = frozenset(
-    {"get_messages", "get_chat_info", "send_message", "edit_message"}
+    {
+        "get_messages",
+        "get_media_content",
+        "get_chat_info",
+        "send_message",
+        "edit_message",
+    }
 )
 
 _acl_cache: dict[str, Any] | None = None
@@ -700,6 +709,7 @@ def check_pre_tool_access(
     chat_id = kwargs.get("chat_id")
     if chat_id is not None and operation_name in _WRITE_OPERATIONS | {
         "get_messages",
+        "get_media_content",
         "get_chat_info",
     }:
         if not _is_chat_allowed(chat_id, rule):
