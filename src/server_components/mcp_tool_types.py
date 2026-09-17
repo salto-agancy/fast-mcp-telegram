@@ -19,7 +19,8 @@ ChatId = Annotated[
     str,
     Field(
         description=(
-            "Target chat: numeric id (e.g. -100…), username without @, or 'me' for Saved Messages."
+            "Target chat: numeric id (e.g. -100…), a username with or without the leading @ "
+            "(resolved server-side, no lookup call needed), or 'me' for Saved Messages."
         )
     ),
 ]

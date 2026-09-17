@@ -79,8 +79,11 @@ _DESC_SEARCH_GLOBAL = _tool_description(
 )
 
 _DESC_GET_MESSAGES = _tool_description(
-    "Read or search messages in one chat: browse latest, search text, fetch by ids, "
+    "Read chat history: the conversation, dialog, or DM with one person, group, or channel. "
+    "Browse the latest messages, search text inside the chat, fetch by ids, "
     "or load replies to a message (comments, forum topics, threads). "
+    "Accepts a @username directly as chat_id, so a known handle needs no lookup step. "
+    "Filter a time window with min_date and max_date (e.g. what was written this morning). "
     "Do not combine message_ids with query or reply_to_id. "
     "Success: messages, has_more, optional total_count and discussion fields. "
 )
